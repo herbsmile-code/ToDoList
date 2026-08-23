@@ -636,31 +636,34 @@
         throw new Error('파일 데이터를 찾을 수 없습니다.');
       }
 
+      const fileName = file.name || 'download.xlsx';
       const blob = dataURLtoBlob(file.data);
-      if (!blob) {
-        // Direct anchor fallback
+
+      if (blob) {
+        const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = file.data;
-        a.download = file.name || 'download.xlsx';
+        a.style.display = 'none';
+        a.href = blobUrl;
+        a.download = fileName;
+        a.target = '_blank';
+        a.rel = 'noopener';
         document.body.appendChild(a);
         a.click();
-        setTimeout(() => a.remove(), 2000);
+
+        setTimeout(() => {
+          if (document.body.contains(a)) document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        }, 6000);
         return true;
       }
 
-      const blobUrl = URL.createObjectURL(blob);
+      // Direct fallback
       const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = blobUrl;
-      a.download = file.name || 'download.xlsx';
+      a.href = file.data;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
-
-      setTimeout(() => {
-        if (document.body.contains(a)) document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }, 5000);
-
+      setTimeout(() => a.remove(), 2000);
       return true;
     }
   }
