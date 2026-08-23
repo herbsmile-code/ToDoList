@@ -1422,15 +1422,17 @@ body::after {
    Bottom Nav Bar, Horizontal Category Pills, Bottom Sheets
    ========================================================================== */
 
-/* Mobile Horizontal Category Pills (Sticky under header on mobile) */
+/* Mobile Horizontal Category Pills */
 .mobile-category-bar {
   display: none;
-  gap: 0.5rem;
+  gap: 0.45rem;
   overflow-x: auto;
-  padding: 0.25rem 0.25rem 0.75rem 0.25rem;
+  padding: 0.25rem 0.1rem 0.65rem 0.1rem;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   margin-bottom: 0.5rem;
+  width: 100%;
+  max-width: 100%;
 }
 .mobile-category-bar::-webkit-scrollbar {
   display: none;
@@ -1439,12 +1441,12 @@ body::after {
 .mobile-cat-pill {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.9rem;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--text-muted);
   white-space: nowrap;
@@ -1452,13 +1454,14 @@ body::after {
   box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
   user-select: none;
+  flex-shrink: 0;
 }
 
 .mobile-cat-pill.active {
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
-  box-shadow: 0 4px 14px var(--primary-glow);
+  box-shadow: 0 3px 12px var(--primary-glow);
   transform: scale(1.02);
 }
 
@@ -1469,7 +1472,8 @@ body::after {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 68px;
+  width: 100%;
+  height: 64px;
   background: var(--bg-card);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -1478,7 +1482,7 @@ body::after {
   z-index: 100;
   justify-content: space-around;
   align-items: center;
-  padding: 0 0.5rem;
+  padding: 0 0.25rem;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
@@ -1491,17 +1495,17 @@ body::after {
   background: transparent;
   border: none;
   color: var(--text-dim);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 700;
   cursor: pointer;
-  padding: 6px 12px;
+  padding: 4px 8px;
   border-radius: 12px;
   transition: all 0.2s ease;
   user-select: none;
 }
 
 .mobile-nav-btn .nav-icon {
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   transition: transform 0.2s ease;
 }
 
@@ -1515,10 +1519,10 @@ body::after {
 
 /* Floating Add Button for Mobile */
 .mobile-fab-btn {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--accent-pink));
+  background: linear-gradient(135deg, #ff8fa3, var(--primary));
   color: #fff;
   border: none;
   box-shadow: 0 6px 18px var(--primary-glow);
@@ -1528,20 +1532,35 @@ body::after {
   font-size: 1.6rem;
   font-weight: 300;
   cursor: pointer;
-  transform: translateY(-12px);
+  transform: translateY(-10px);
   transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .mobile-fab-btn:active {
-  transform: translateY(-10px) scale(0.92);
+  transform: translateY(-8px) scale(0.92);
 }
 
 /* Responsive Media Queries */
 @media (max-width: 992px) {
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  #app-container {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
   .main-wrapper {
     grid-template-columns: 1fr;
-    padding: 1rem 0.85rem;
-    padding-bottom: 90px;
+    width: 100%;
+    max-width: 100vw;
+    padding: 0.85rem 0.75rem 85px 0.75rem;
+    box-sizing: border-box;
+    overflow-x: hidden;
   }
 
   .sidebar {
@@ -1556,35 +1575,128 @@ body::after {
     display: flex;
   }
 
-  .kanban-board {
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-  }
-
-  .files-grid {
-    grid-template-columns: 1fr;
+  .content-area {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .dashboard-header {
+    width: 100%;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 0.85rem;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .view-heading h1 {
+    font-size: 1.45rem;
+    word-break: keep-all;
+  }
+
+  .view-heading p {
+    font-size: 0.82rem;
+    word-break: keep-all;
   }
 
   .toolbar {
     width: 100%;
-    flex-wrap: wrap;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
   }
 
   .segmented-control {
+    grid-column: 1 / -1;
+    width: 100%;
+    display: flex;
+  }
+
+  .segmented-btn {
     flex: 1;
+    justify-content: center;
   }
 
   .select-dropdown {
-    flex: 1;
-    min-width: 110px;
+    width: 100%;
+    font-size: 0.8rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .quick-add-card {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    box-sizing: border-box;
+  }
+
+  .quick-add-input {
+    font-size: 0.92rem;
+    min-width: 0;
+  }
+
+  .quick-add-btn {
+    padding: 0.45rem 0.9rem;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+
+  .tasks-container {
+    width: 100%;
+  }
+
+  .task-card {
+    width: 100%;
+    padding: 0.85rem 0.9rem;
+    gap: 0.65rem;
+    box-sizing: border-box;
+  }
+
+  .task-body {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .task-title {
+    font-size: 0.95rem;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+  .task-desc {
+    font-size: 0.82rem;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+  .task-meta-row {
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .badge {
+    font-size: 0.72rem;
+    padding: 2px 7px;
+  }
+
+  .task-actions {
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .task-action-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 0.85rem;
+  }
+
+  .kanban-board {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  .files-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .modal-overlay {
@@ -1593,11 +1705,13 @@ body::after {
   }
 
   .modal-card {
+    width: 100%;
     max-width: 100%;
-    border-radius: 28px 28px 0 0;
-    max-height: 85vh;
-    padding: 1.5rem 1.25rem;
+    border-radius: 26px 26px 0 0;
+    max-height: 88vh;
+    padding: 1.35rem 1.15rem;
     padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
     transform: translateY(100%);
   }
 
@@ -1608,12 +1722,21 @@ body::after {
 
 @media (max-width: 640px) {
   .app-header {
-    padding: 0 0.85rem;
-    height: 60px;
+    padding: 0 0.75rem;
+    height: 56px;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+  }
+
+  .brand-icon {
+    width: 34px;
+    height: 34px;
+    font-size: 1.05rem;
   }
 
   .brand-name {
-    font-size: 1.15rem;
+    font-size: 1.12rem;
   }
 
   .brand-tagline {
@@ -1624,8 +1747,18 @@ body::after {
     display: none;
   }
 
+  .header-actions {
+    gap: 0.4rem;
+  }
+
   .header-actions .btn-icon:not(#btn-theme-toggle) {
     display: none;
+  }
+
+  #btn-theme-toggle {
+    width: 34px;
+    height: 34px;
+    font-size: 0.95rem;
   }
 
   #btn-open-task-modal {
@@ -1633,27 +1766,14 @@ body::after {
   }
 
   #btn-cloud-status {
-    padding: 0.35rem 0.65rem;
-    font-size: 0.75rem;
-  }
-
-  .task-card {
-    padding: 0.95rem;
-    gap: 0.75rem;
-  }
-
-  .task-title {
-    font-size: 0.96rem;
-  }
-
-  .task-meta-row {
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.74rem;
   }
 
   .form-row {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
+    gap: 0.65rem;
   }
 }
+
 

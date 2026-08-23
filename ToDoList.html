@@ -469,58 +469,59 @@
 
   <!-- Modal: Cloud Sync (Firebase) Settings & Login -->
   <div id="cloud-modal" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal-card" style="max-width: 480px;">
+    <div class="modal-card" style="max-width: 460px;">
       <div class="modal-header">
         <h3 class="modal-title">☁️ 실시간 클라우드 동기화</h3>
         <button class="modal-close-btn" data-close-modal>✕</button>
       </div>
-      <div style="display: flex; flex-direction: column; gap: 1.15rem; font-size: 0.9rem;">
-        <div style="background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.2); padding: 1rem; border-radius: var(--radius-md);">
-          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.25rem;">✨ 집·회사·스마트폰 어디서든 실시간 연동!</div>
-          <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.45;">
-            로그인하시면 모든 기기에서 내가 작성한 할 일과 엑셀 파일이 1초 만에 똑같이 실시간 동기화됩니다.
+      <div style="display: flex; flex-direction: column; gap: 1rem; font-size: 0.9rem;">
+        <div style="background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.2); padding: 0.85rem 1rem; border-radius: var(--radius-md);">
+          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">✨ 스마트폰·회사·집 실시간 연동!</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+            나만의 비밀 키만 입력하면 모든 기기에서 내 할 일과 엑셀 파일이 1초 만에 똑같이 실시간 동기화됩니다.
           </p>
         </div>
 
-        <!-- Auth Active State -->
-        <div id="firebase-auth-section" style="display: none; padding: 1rem; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+        <!-- Sync Active Banner -->
+        <div id="sync-active-banner" style="display: none; padding: 0.85rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md);">
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <div>
-              <div style="font-weight: 700;" id="user-display-name">로그인 상태</div>
-              <div style="font-size: 0.8rem; color: #10b981; font-weight: 600;" id="user-display-email">실시간 동기화 활성화됨 🟢</div>
+              <div style="font-weight: 700; color: #10b981; font-size: 0.85rem;">🟢 실시간 동기화 활성화됨</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted);" id="current-sync-key-display">키: jy1234</div>
             </div>
-            <button type="button" id="btn-firebase-logout" class="btn" style="padding: 5px 12px; font-size: 0.78rem; background: rgba(0,0,0,0.06);">로그아웃</button>
+            <button type="button" id="btn-disconnect-sync" class="btn" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(0,0,0,0.06);">동기화 해제</button>
           </div>
         </div>
 
-        <!-- Login Options -->
-        <div id="firebase-login-buttons" style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <button type="button" id="btn-google-login" class="btn btn-primary" style="width: 100%; padding: 0.85rem 1rem; font-size: 0.92rem;">
-            <span>🌐</span>
-            <span>Google 계정으로 원클릭 로그인</span>
-          </button>
-
-          <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-dim); font-size: 0.78rem; justify-content: center;">
-            <span style="flex: 1; height: 1px; background: var(--border-subtle);"></span>
-            <span>또는 간편 이메일/비밀번호 로그인</span>
-            <span style="flex: 1; height: 1px; background: var(--border-subtle);"></span>
-          </div>
-
-          <!-- Email/Pass simple login form for seamless mobile access -->
-          <form id="email-login-form" style="display: flex; flex-direction: column; gap: 0.6rem;">
-            <input type="email" id="email-login-id" class="form-input" placeholder="이메일 주소 (예: jy@todolist.com)" required style="padding: 0.65rem 0.85rem; font-size: 0.88rem;">
-            <input type="password" id="email-login-pw" class="form-input" placeholder="비밀번호 (6자리 이상)" required style="padding: 0.65rem 0.85rem; font-size: 0.88rem;">
-            <button type="submit" class="btn" style="background: var(--primary-light); color: var(--primary); font-weight: 700; padding: 0.7rem;">
-              🔑 이메일로 로그인 / 자동 가입
+        <!-- Method 1: Easy Secret Sync Key (100% Reliable, Zero Error) -->
+        <form id="sync-key-form" style="display: flex; flex-direction: column; gap: 0.6rem;">
+          <label class="form-label" for="sync-key-input" style="font-size: 0.82rem;">🔑 나만의 동기화 비밀 키 (닉네임/비번)</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="sync-key-input" class="form-input" placeholder="예: jy1234 (나만의 단어 입력)" required style="padding: 0.65rem 0.85rem; font-size: 0.9rem;">
+            <button type="submit" class="btn btn-primary" style="white-space: nowrap; padding: 0 1.1rem; font-size: 0.85rem;">
+              연결 💖
             </button>
-          </form>
+          </div>
+          <span style="font-size: 0.74rem; color: var(--text-dim);">* 스마트폰과 회사 PC에 똑같은 키를 입력하면 즉시 동기화됩니다.</span>
+        </form>
+
+        <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-dim); font-size: 0.75rem; justify-content: center; margin-top: 0.25rem;">
+          <span style="flex: 1; height: 1px; background: var(--border-subtle);"></span>
+          <span>또는 Google 계정 연동</span>
+          <span style="flex: 1; height: 1px; background: var(--border-subtle);"></span>
         </div>
+
+        <!-- Google Login Option -->
+        <button type="button" id="btn-google-login" class="btn" style="width: 100%; background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.7rem; font-size: 0.85rem; color: var(--text-main);">
+          <span>🌐</span>
+          <span>Google 계정으로 로그인</span>
+        </button>
 
         <details style="border-top: 1px solid var(--border-subtle); padding-top: 0.5rem;">
-          <summary style="cursor: pointer; font-size: 0.76rem; color: var(--text-dim);">Firebase 설정 코드 보기</summary>
+          <summary style="cursor: pointer; font-size: 0.74rem; color: var(--text-dim);">Firebase 고급 설정</summary>
           <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-            <textarea id="firebase-config-input" class="form-textarea" style="font-family: monospace; font-size: 0.75rem; min-height: 60px;"></textarea>
-            <button type="button" id="btn-save-firebase-config" class="btn" style="font-size: 0.75rem; padding: 4px;">설정 다시 저장</button>
+            <textarea id="firebase-config-input" class="form-textarea" style="font-family: monospace; font-size: 0.72rem; min-height: 50px;"></textarea>
+            <button type="button" id="btn-save-firebase-config" class="btn" style="font-size: 0.74rem; padding: 3px;">설정 저장</button>
           </div>
         </details>
       </div>
