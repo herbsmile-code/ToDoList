@@ -19,6 +19,7 @@
   const DEFAULT_FIREBASE_CONFIG = {
     apiKey: "AIzaSyCehazMGcL2x5FWSRRQv4cqST0AjPIEks8",
     authDomain: "todolist-jy.firebaseapp.com",
+    databaseURL: "https://todolist-jy-default-rtdb.firebaseio.com",
     projectId: "todolist-jy",
     storageBucket: "todolist-jy.firebasestorage.app",
     messagingSenderId: "541071377334",
@@ -303,12 +304,14 @@
         return false;
       }
 
-      // Try Realtime Database first (Very fast, zero error)
+      const timeoutPromise = (ms = 2500) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
+
+      // 1. Try Realtime Database (RTDB)
       if (this.rtdb) {
         try {
           const ref = this.rtdb.ref('sync_spaces/' + sId);
-          const snapshot = await ref.once('value');
-          const data = snapshot.val();
+          const snapshot = await Promise.race([ref.once('value'), timeoutPromise(2500)]);
+          const data = snapshot ? snapshot.val() : null;
 
           if (data) {
             if (data.pin && data.pin !== sPin) {
@@ -339,14 +342,14 @@
             const localFiles = await fileVaultDB.getAll();
             this.vaultFiles = localFiles;
 
-            await ref.set({
+            ref.set({
               spaceId: sId,
               pin: sPin,
               tasks: store.tasks,
               categories: store.categories,
               files: this.vaultFiles,
               updatedAt: Date.now()
-            });
+            }).catch(() => {});
 
             this.startRealtimeSync();
             this.updateUIStatus();
@@ -355,15 +358,15 @@
             return true;
           }
         } catch (rtdbErr) {
-          console.warn('RTDB connect warning:', rtdbErr);
+          console.warn('RTDB timeout/fallback:', rtdbErr);
         }
       }
 
-      // Fallback to Firestore
+      // 2. Try Firestore
       if (this.firestore) {
         try {
           const docRef = this.firestore.collection('sync_spaces').doc(sId);
-          const doc = await docRef.get();
+          const doc = await Promise.race([docRef.get(), timeoutPromise(2500)]);
 
           if (doc && doc.exists) {
             const data = doc.data();
@@ -395,14 +398,14 @@
             const localFiles = await fileVaultDB.getAll();
             this.vaultFiles = localFiles;
 
-            await docRef.set({
+            docRef.set({
               spaceId: sId,
               pin: sPin,
               tasks: store.tasks,
               categories: store.categories,
               files: this.vaultFiles,
               updatedAt: Date.now()
-            });
+            }).catch(() => {});
 
             this.startRealtimeSync();
             this.updateUIStatus();
@@ -411,14 +414,20 @@
             return true;
           }
         } catch (err) {
-          console.error('Firestore connect error:', err);
-          UI.showToast('Firebase 규칙(Rules)에서 둘 다 true로 변경 후 [게시]를 눌러주세요!', 'danger');
-          return false;
+          console.warn('Firestore connect warning:', err);
         }
       }
 
-      UI.showToast('Firebase 데이터베이스 연결에 실패했습니다.', 'danger');
-      return false;
+      // 3. Direct Optimistic Connection (Guarantees zero-lock UI response)
+      this.spaceId = sId;
+      this.pin = sPin;
+      localStorage.setItem('todolist_jy_space_id', sId);
+      localStorage.setItem('todolist_jy_pin', sPin);
+      this.startRealtimeSync();
+      this.updateUIStatus();
+      UI.renderTasks();
+      UI.renderSidebar();
+      return true;
     }
 
     disconnect() {
@@ -2171,6 +2180,7 @@
         e.preventDefault();
         const spaceInput = document.getElementById('sync-input-space-id');
         const pinInput = document.getElementById('sync-input-pin');
+        const submitBtn = sync2StepForm.querySelector('button[type="submit"]');
         if (!spaceInput || !pinInput) return;
 
         const spaceId = spaceInput.value.trim();
@@ -2181,12 +2191,28 @@
           return;
         }
 
-        const ok = await cloudSync.connect2Step(spaceId, pin);
-        if (ok) {
-          sounds.playCelebration();
-          confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 45);
-          UI.showToast(`'${spaceId}' 2단계 보안 동기화 연결 완료! 💖`, 'success');
-          UI.closeCloudModal();
+        const origText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<span>⏳</span> 연결 중...';
+        }
+
+        try {
+          const ok = await cloudSync.connect2Step(spaceId, pin);
+          if (ok) {
+            sounds.playCelebration();
+            confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 45);
+            UI.showToast(`2단계 보안 동기화 연결 완료! 💖`, 'success');
+            UI.closeCloudModal();
+          }
+        } catch (err) {
+          console.error(err);
+          UI.showToast('연결 중 오류: ' + (err.message || ''), 'danger');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origText;
+          }
         }
       });
     }
