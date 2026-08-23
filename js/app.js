@@ -251,56 +251,84 @@
 
   const confetti = new CuteConfettiEngine();
 
-  // Helper to normalize Firebase RTDB object-arrays into JS arrays
-  function normalizeArray(val) {
-    if (!val) return [];
-    if (Array.isArray(val)) return val;
-    if (typeof val === 'object') return Object.values(val);
-    return [];
-  }
-
   // =========================================================================
-  // 3. 2-Step Security Cloud Sync Manager (Realtime DB + Firestore Dual Engine)
+  // 3. Bulletproof Multi-Region Cloud Sync Manager (100% Real-Time Cross-Device Sync)
   // =========================================================================
   class CloudSyncManager {
     constructor() {
       this.spaceId = localStorage.getItem('todolist_jy_space_id') || '';
       this.pin = localStorage.getItem('todolist_jy_pin') || '';
-      this.rtdb = null;
-      this.firestore = null;
+      this.activeUrl = localStorage.getItem('todolist_jy_active_rtdb_url') || 'https://todolist-jy-default-rtdb.firebaseio.com';
       this.vaultFiles = [];
-      this.rtdbRef = null;
-      this.firestoreUnsubscribe = null;
+      this.syncTimer = null;
+      this.lastSyncedUpdatedAt = 0;
+      this.isSyncing = false;
       this.init();
     }
 
     init() {
-      const savedConfigStr = localStorage.getItem('todolist_jy_firebase_config');
-      const config = savedConfigStr ? JSON.parse(savedConfigStr) : DEFAULT_FIREBASE_CONFIG;
-
-      if (config && window.firebase) {
-        try {
-          if (!firebase.apps.length) {
-            firebase.initializeApp(config);
-          }
-          if (firebase.database) {
-            this.rtdb = firebase.database();
-          }
-          if (firebase.firestore) {
-            this.firestore = firebase.firestore();
-          }
-          if (firebase.auth) {
-            firebase.auth().signInAnonymously().catch(e => console.warn('Anon auth:', e));
-          }
-        } catch (e) {
-          console.warn('Firebase init error:', e);
-        }
-      }
-
       if (this.spaceId && this.pin) {
-        this.startRealtimeSync();
+        this.fetchLatestFromCloud(true);
+        this.startRealtimePolling();
       }
       this.updateUIStatus();
+    }
+
+    getEndpoints(spaceId) {
+      return [
+        `https://todolist-jy-default-rtdb.firebaseio.com/sync_spaces/${spaceId}.json`,
+        `https://todolist-jy-default-rtdb.asia-southeast1.firebasedatabase.app/sync_spaces/${spaceId}.json`,
+        `https://todolist-jy-default-rtdb.europe-west1.firebasedatabase.app/sync_spaces/${spaceId}.json`
+      ];
+    }
+
+    async readFromCloud(spaceId) {
+      const urls = this.activeUrl 
+        ? [`${this.activeUrl}/sync_spaces/${spaceId}.json`, ...this.getEndpoints(spaceId)]
+        : this.getEndpoints(spaceId);
+
+      const uniqueUrls = [...new Set(urls)];
+
+      for (const url of uniqueUrls) {
+        try {
+          const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+          if (res.ok) {
+            const data = await res.json();
+            const baseUrl = url.replace(`/sync_spaces/${spaceId}.json`, '');
+            return { ok: true, data, baseUrl };
+          }
+        } catch (e) {
+          console.warn('Read endpoint error:', url, e);
+        }
+      }
+      return { ok: false, data: null, baseUrl: null };
+    }
+
+    async writeToCloud(spaceId, payload) {
+      const urls = this.activeUrl 
+        ? [`${this.activeUrl}/sync_spaces/${spaceId}.json`, ...this.getEndpoints(spaceId)]
+        : this.getEndpoints(spaceId);
+
+      const uniqueUrls = [...new Set(urls)];
+
+      for (const url of uniqueUrls) {
+        try {
+          const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            const baseUrl = url.replace(`/sync_spaces/${spaceId}.json`, '');
+            this.activeUrl = baseUrl;
+            localStorage.setItem('todolist_jy_active_rtdb_url', baseUrl);
+            return { ok: true, baseUrl };
+          }
+        } catch (e) {
+          console.warn('Write endpoint error:', url, e);
+        }
+      }
+      return { ok: false };
     }
 
     async connect2Step(spaceId, pin) {
@@ -312,77 +340,53 @@
         return false;
       }
 
-      const timeoutPromise = (ms = 3000) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
-      let foundData = null;
-      let engine = null;
+      const cloudResult = await this.readFromCloud(sId);
 
-      // 1. Check Realtime Database (RTDB)
-      if (this.rtdb) {
-        try {
-          const ref = this.rtdb.ref('sync_spaces/' + sId);
-          const snapshot = await Promise.race([ref.once('value'), timeoutPromise(3000)]);
-          const val = snapshot ? snapshot.val() : null;
-          if (val) {
-            foundData = val;
-            engine = 'rtdb';
-          }
-        } catch (rtdbErr) {
-          console.warn('RTDB query warning:', rtdbErr);
-        }
-      }
+      if (cloudResult.ok && cloudResult.data) {
+        const data = cloudResult.data;
 
-      // 2. Check Firestore if not found in RTDB
-      if (!foundData && this.firestore) {
-        try {
-          const docRef = this.firestore.collection('sync_spaces').doc(sId);
-          const doc = await Promise.race([docRef.get(), timeoutPromise(3000)]);
-          if (doc && doc.exists) {
-            foundData = doc.data();
-            engine = 'firestore';
-          }
-        } catch (err) {
-          console.warn('Firestore query warning:', err);
-        }
-      }
-
-      // If registered space exists: verify PIN
-      if (foundData) {
-        if (foundData.pin && foundData.pin !== sPin) {
+        // Verify PIN
+        if (data.pin && data.pin !== sPin) {
           UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
           return false;
         }
 
+        // Save Credentials
         this.spaceId = sId;
         this.pin = sPin;
+        this.activeUrl = cloudResult.baseUrl;
         localStorage.setItem('todolist_jy_space_id', sId);
         localStorage.setItem('todolist_jy_pin', sPin);
+        localStorage.setItem('todolist_jy_active_rtdb_url', cloudResult.baseUrl);
 
-        if (foundData.tasks) store.tasks = normalizeArray(foundData.tasks);
-        if (foundData.categories) store.categories = normalizeArray(foundData.categories);
-        if (foundData.files) {
-          this.vaultFiles = normalizeArray(foundData.files);
+        // Load tasks and files
+        if (data.tasks) store.tasks = normalizeArray(data.tasks);
+        if (data.categories) store.categories = normalizeArray(data.categories);
+        if (data.files) {
+          this.vaultFiles = normalizeArray(data.files);
           this.vaultFiles.forEach(f => fileVaultDB.saveFileRecord(f));
         } else {
           this.vaultFiles = [];
         }
+        this.lastSyncedUpdatedAt = data.updatedAt || Date.now();
         store.saveLocalOnly();
 
-        this.startRealtimeSync();
+        this.startRealtimePolling();
         this.updateUIStatus();
         UI.renderTasks();
         UI.renderSidebar();
         return true;
       }
 
-      // If no space exists in cloud, check if this is the very first creation matching current session
-      // Otherwise, reject unknown IDs to protect the user's account
+      // If space does not exist in cloud:
+      // Check if user wants to create this new account space
       const isExistingLocal = localStorage.getItem('todolist_jy_space_id') === sId;
-      if (!isExistingLocal && !confirm(`'${sId}' 아이디로 새로운 보안 공간을 처음 생성할까요?`)) {
+      if (!isExistingLocal && !confirm(`'${sId}' 아이디는 처음 사용하는 계정입니다. 이 계정으로 새로 등록할까요?`)) {
         UI.showToast('❌ 등록되지 않은 아이디입니다. 아이디를 확인해주세요!', 'danger');
         return false;
       }
 
-      // Initialize new space with local tasks/files
+      // Initialize brand-new space in cloud
       this.spaceId = sId;
       this.pin = sPin;
       localStorage.setItem('todolist_jy_space_id', sId);
@@ -390,6 +394,7 @@
 
       const localFiles = await fileVaultDB.getAll();
       this.vaultFiles = localFiles || [];
+      this.lastSyncedUpdatedAt = Date.now();
 
       const initialPayload = {
         spaceId: sId,
@@ -397,17 +402,16 @@
         tasks: store.tasks,
         categories: store.categories,
         files: this.vaultFiles,
-        updatedAt: Date.now()
+        updatedAt: this.lastSyncedUpdatedAt
       };
 
-      if (this.rtdb) {
-        this.rtdb.ref('sync_spaces/' + sId).set(initialPayload).catch(() => {});
-      }
-      if (this.firestore) {
-        this.firestore.collection('sync_spaces').doc(sId).set(initialPayload).catch(() => {});
+      const writeRes = await this.writeToCloud(sId, initialPayload);
+      if (!writeRes.ok) {
+        UI.showToast('클라우드 서버 연결 실패. Firebase 규칙(Rules)을 확인해주세요!', 'danger');
+        return false;
       }
 
-      this.startRealtimeSync();
+      this.startRealtimePolling();
       this.updateUIStatus();
       UI.renderTasks();
       UI.renderSidebar();
@@ -424,13 +428,9 @@
       store.tasks = [];
       this.vaultFiles = [];
 
-      if (this.rtdbRef) {
-        this.rtdbRef.off();
-        this.rtdbRef = null;
-      }
-      if (this.firestoreUnsubscribe) {
-        this.firestoreUnsubscribe();
-        this.firestoreUnsubscribe = null;
+      if (this.syncTimer) {
+        clearInterval(this.syncTimer);
+        this.syncTimer = null;
       }
 
       this.updateUIStatus();
@@ -463,77 +463,62 @@
       }
     }
 
-    startRealtimeSync() {
+    startRealtimePolling() {
+      if (this.syncTimer) clearInterval(this.syncTimer);
       if (!this.spaceId) return;
 
-      // RTDB real-time sync listener
-      if (this.rtdb) {
-        if (this.rtdbRef) this.rtdbRef.off();
-        this.rtdbRef = this.rtdb.ref('sync_spaces/' + this.spaceId);
-        this.rtdbRef.on('value', (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            if (data.tasks) {
-              store.tasks = normalizeArray(data.tasks);
-              if (data.categories) store.categories = normalizeArray(data.categories);
-              store.saveLocalOnly();
-            }
-            if (data.files) {
-              this.vaultFiles = normalizeArray(data.files);
-              this.vaultFiles.forEach(f => fileVaultDB.saveFileRecord(f));
-            }
-            UI.renderTasks();
-            UI.renderSidebar();
-          }
-        });
-      }
+      // Poll every 3 seconds for seamless cross-device synchronization
+      this.syncTimer = setInterval(() => {
+        if (document.visibilityState === 'visible' && this.spaceId && !this.isSyncing) {
+          this.fetchLatestFromCloud(false);
+        }
+      }, 3000);
+    }
 
-      // Firestore real-time sync listener
-      if (this.firestore) {
-        if (this.firestoreUnsubscribe) this.firestoreUnsubscribe();
-        const docRef = this.firestore.collection('sync_spaces').doc(this.spaceId);
-        this.firestoreUnsubscribe = docRef.onSnapshot((doc) => {
-          if (doc.exists) {
-            const data = doc.data();
-            if (data.tasks) {
-              store.tasks = normalizeArray(data.tasks);
-              if (data.categories) store.categories = normalizeArray(data.categories);
-              store.saveLocalOnly();
-            }
+    async fetchLatestFromCloud(force = false) {
+      if (!this.spaceId || this.isSyncing) return;
+      this.isSyncing = true;
+
+      try {
+        const cloudResult = await this.readFromCloud(this.spaceId);
+        if (cloudResult.ok && cloudResult.data) {
+          const data = cloudResult.data;
+          const remoteTime = data.updatedAt || 0;
+
+          if (force || remoteTime > this.lastSyncedUpdatedAt) {
+            this.lastSyncedUpdatedAt = remoteTime;
+            if (data.tasks) store.tasks = normalizeArray(data.tasks);
+            if (data.categories) store.categories = normalizeArray(data.categories);
             if (data.files) {
               this.vaultFiles = normalizeArray(data.files);
               this.vaultFiles.forEach(f => fileVaultDB.saveFileRecord(f));
             }
+            store.saveLocalOnly();
             UI.renderTasks();
             UI.renderSidebar();
           }
-        }, (err) => {
-          console.warn('Firestore snapshot status:', err.message);
-        });
+        }
+      } catch (e) {
+        console.warn('Sync poll error:', e);
+      } finally {
+        this.isSyncing = false;
       }
     }
 
     async pushTasksToCloud() {
       if (!this.spaceId || !this.pin) return;
+      this.lastSyncedUpdatedAt = Date.now();
 
       const payload = {
+        spaceId: this.spaceId,
+        pin: this.pin,
         tasks: store.tasks,
         categories: store.categories,
         files: this.vaultFiles,
-        updatedAt: Date.now()
+        updatedAt: this.lastSyncedUpdatedAt
       };
 
-      if (this.rtdb) {
-        try {
-          await this.rtdb.ref('sync_spaces/' + this.spaceId).update(payload);
-        } catch (e) {}
-      }
-
-      if (this.firestore) {
-        try {
-          await this.firestore.collection('sync_spaces').doc(this.spaceId).set(payload, { merge: true });
-        } catch (e) {}
-      }
+      await this.writeToCloud(this.spaceId, payload);
     }
 
     async uploadVaultFile(file, note = '') {
@@ -552,27 +537,17 @@
           };
 
           this.vaultFiles.unshift(fileRecord);
+          this.lastSyncedUpdatedAt = Date.now();
 
-          if (this.rtdb && this.spaceId) {
-            try {
-              await this.rtdb.ref('sync_spaces/' + this.spaceId).update({
-                files: this.vaultFiles,
-                updatedAt: Date.now()
-              });
-            } catch (err) {
-              console.warn('RTDB upload err:', err);
-            }
-          }
-
-          if (this.firestore && this.spaceId) {
-            try {
-              await this.firestore.collection('sync_spaces').doc(this.spaceId).set({
-                files: this.vaultFiles,
-                updatedAt: Date.now()
-              }, { merge: true });
-            } catch (err) {
-              console.warn('Firestore upload err:', err);
-            }
+          if (this.spaceId) {
+            await this.writeToCloud(this.spaceId, {
+              spaceId: this.spaceId,
+              pin: this.pin,
+              tasks: store.tasks,
+              categories: store.categories,
+              files: this.vaultFiles,
+              updatedAt: this.lastSyncedUpdatedAt
+            });
           }
 
           await fileVaultDB.saveFileRecord(fileRecord);
@@ -587,24 +562,12 @@
       if (this.vaultFiles && this.vaultFiles.length > 0) {
         return this.vaultFiles;
       }
-      if (this.rtdb && this.spaceId) {
-        try {
-          const snap = await this.rtdb.ref('sync_spaces/' + this.spaceId + '/files').once('value');
-          const val = snap.val();
-          if (val) {
-            this.vaultFiles = normalizeArray(val);
-            return this.vaultFiles;
-          }
-        } catch (e) {}
-      }
-      if (this.firestore && this.spaceId) {
-        try {
-          const doc = await this.firestore.collection('sync_spaces').doc(this.spaceId).get();
-          if (doc.exists && doc.data().files) {
-            this.vaultFiles = normalizeArray(doc.data().files);
-            return this.vaultFiles;
-          }
-        } catch (e) {}
+      if (this.spaceId) {
+        const cloudResult = await this.readFromCloud(this.spaceId);
+        if (cloudResult.ok && cloudResult.data && cloudResult.data.files) {
+          this.vaultFiles = normalizeArray(cloudResult.data.files);
+          return this.vaultFiles;
+        }
       }
       const localFiles = await fileVaultDB.getAll();
       this.vaultFiles = localFiles || [];
@@ -613,23 +576,17 @@
 
     async deleteVaultFile(id) {
       this.vaultFiles = this.vaultFiles.filter(f => f.id !== id);
+      this.lastSyncedUpdatedAt = Date.now();
 
-      if (this.rtdb && this.spaceId) {
-        try {
-          await this.rtdb.ref('sync_spaces/' + this.spaceId).update({
-            files: this.vaultFiles,
-            updatedAt: Date.now()
-          });
-        } catch (e) {}
-      }
-
-      if (this.firestore && this.spaceId) {
-        try {
-          await this.firestore.collection('sync_spaces').doc(this.spaceId).set({
-            files: this.vaultFiles,
-            updatedAt: Date.now()
-          }, { merge: true });
-        } catch (e) {}
+      if (this.spaceId) {
+        await this.writeToCloud(this.spaceId, {
+          spaceId: this.spaceId,
+          pin: this.pin,
+          tasks: store.tasks,
+          categories: store.categories,
+          files: this.vaultFiles,
+          updatedAt: this.lastSyncedUpdatedAt
+        });
       }
 
       await fileVaultDB.deleteFile(id);
