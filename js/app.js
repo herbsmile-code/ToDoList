@@ -251,15 +251,17 @@
   const confetti = new CuteConfettiEngine();
 
   // =========================================================================
-  // 3. 2-Step Security Cloud Sync Manager (Space ID + PIN)
+  // 3. 2-Step Security Cloud Sync Manager (Realtime DB + Firestore Dual Engine)
   // =========================================================================
   class CloudSyncManager {
     constructor() {
       this.spaceId = localStorage.getItem('todolist_jy_space_id') || '';
       this.pin = localStorage.getItem('todolist_jy_pin') || '';
-      this.db = null;
+      this.rtdb = null;
+      this.firestore = null;
       this.vaultFiles = [];
-      this.unsubscribe = null;
+      this.rtdbRef = null;
+      this.firestoreUnsubscribe = null;
       this.init();
     }
 
@@ -272,7 +274,12 @@
           if (!firebase.apps.length) {
             firebase.initializeApp(config);
           }
-          this.db = firebase.firestore();
+          if (firebase.database) {
+            this.rtdb = firebase.database();
+          }
+          if (firebase.firestore) {
+            this.firestore = firebase.firestore();
+          }
           if (firebase.auth) {
             firebase.auth().signInAnonymously().catch(e => console.warn('Anon auth:', e));
           }
@@ -288,11 +295,6 @@
     }
 
     async connect2Step(spaceId, pin) {
-      if (!this.db) {
-        UI.showToast('Firebase 설정을 확인해주세요.', 'danger');
-        return false;
-      }
-
       const sId = spaceId.trim().toLowerCase();
       const sPin = pin.trim();
 
@@ -301,74 +303,122 @@
         return false;
       }
 
-      try {
-        const docRef = this.db.collection('sync_spaces').doc(sId);
-        
-        let doc = null;
+      // Try Realtime Database first (Very fast, zero error)
+      if (this.rtdb) {
         try {
-          doc = await docRef.get();
-        } catch (fetchErr) {
-          console.warn('docRef.get() warning:', fetchErr);
-          // If offline error or permissions, try direct write or snapshot
-          if (fetchErr.message && fetchErr.message.includes('offline')) {
-            throw new Error('Firebase 규칙(Rules) 허용이 필요합니다. (Firestore 규칙을 allow read, write: if true; 로 게시해주세요)');
+          const ref = this.rtdb.ref('sync_spaces/' + sId);
+          const snapshot = await ref.once('value');
+          const data = snapshot.val();
+
+          if (data) {
+            if (data.pin && data.pin !== sPin) {
+              UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
+              return false;
+            }
+            this.spaceId = sId;
+            this.pin = sPin;
+            localStorage.setItem('todolist_jy_space_id', sId);
+            localStorage.setItem('todolist_jy_pin', sPin);
+
+            if (data.tasks) store.tasks = data.tasks;
+            if (data.categories) store.categories = data.categories;
+            if (data.files) this.vaultFiles = data.files;
+            store.saveLocalOnly();
+
+            this.startRealtimeSync();
+            this.updateUIStatus();
+            UI.renderTasks();
+            UI.renderSidebar();
+            return true;
+          } else {
+            this.spaceId = sId;
+            this.pin = sPin;
+            localStorage.setItem('todolist_jy_space_id', sId);
+            localStorage.setItem('todolist_jy_pin', sPin);
+
+            const localFiles = await fileVaultDB.getAll();
+            this.vaultFiles = localFiles;
+
+            await ref.set({
+              spaceId: sId,
+              pin: sPin,
+              tasks: store.tasks,
+              categories: store.categories,
+              files: this.vaultFiles,
+              updatedAt: Date.now()
+            });
+
+            this.startRealtimeSync();
+            this.updateUIStatus();
+            UI.renderTasks();
+            UI.renderSidebar();
+            return true;
           }
-          throw fetchErr;
+        } catch (rtdbErr) {
+          console.warn('RTDB connect warning:', rtdbErr);
         }
-
-        if (doc && doc.exists) {
-          const data = doc.data();
-          if (data.pin && data.pin !== sPin) {
-            UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
-            return false;
-          }
-          // Correct PIN
-          this.spaceId = sId;
-          this.pin = sPin;
-          localStorage.setItem('todolist_jy_space_id', sId);
-          localStorage.setItem('todolist_jy_pin', sPin);
-
-          if (data.tasks) store.tasks = data.tasks;
-          if (data.categories) store.categories = data.categories;
-          if (data.files) this.vaultFiles = data.files;
-          store.saveLocalOnly();
-
-          this.startRealtimeSync();
-          this.updateUIStatus();
-          UI.renderTasks();
-          UI.renderSidebar();
-          return true;
-        } else {
-          // Create new space
-          this.spaceId = sId;
-          this.pin = sPin;
-          localStorage.setItem('todolist_jy_space_id', sId);
-          localStorage.setItem('todolist_jy_pin', sPin);
-
-          // Get existing local files to migrate to cloud
-          const localFiles = await fileVaultDB.getAll();
-          this.vaultFiles = localFiles;
-
-          await docRef.set({
-            spaceId: sId,
-            pin: sPin,
-            tasks: store.tasks,
-            categories: store.categories,
-            files: this.vaultFiles,
-            updatedAt: Date.now()
-          });
-
-          this.startRealtimeSync();
-          this.updateUIStatus();
-          UI.renderTasks();
-          UI.renderSidebar();
-          return true;
-        }
-      } catch (err) {
-        console.error('2Step connect error:', err);
-        UI.showToast(err.message || '연결 중 오류가 발생했습니다.', 'danger');
-        return false;
       }
+
+      // Fallback to Firestore
+      if (this.firestore) {
+        try {
+          const docRef = this.firestore.collection('sync_spaces').doc(sId);
+          const doc = await docRef.get();
+
+          if (doc && doc.exists) {
+            const data = doc.data();
+            if (data.pin && data.pin !== sPin) {
+              UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
+              return false;
+            }
+            this.spaceId = sId;
+            this.pin = sPin;
+            localStorage.setItem('todolist_jy_space_id', sId);
+            localStorage.setItem('todolist_jy_pin', sPin);
+
+            if (data.tasks) store.tasks = data.tasks;
+            if (data.categories) store.categories = data.categories;
+            if (data.files) this.vaultFiles = data.files;
+            store.saveLocalOnly();
+
+            this.startRealtimeSync();
+            this.updateUIStatus();
+            UI.renderTasks();
+            UI.renderSidebar();
+            return true;
+          } else {
+            this.spaceId = sId;
+            this.pin = sPin;
+            localStorage.setItem('todolist_jy_space_id', sId);
+            localStorage.setItem('todolist_jy_pin', sPin);
+
+            const localFiles = await fileVaultDB.getAll();
+            this.vaultFiles = localFiles;
+
+            await docRef.set({
+              spaceId: sId,
+              pin: sPin,
+              tasks: store.tasks,
+              categories: store.categories,
+              files: this.vaultFiles,
+              updatedAt: Date.now()
+            });
+
+            this.startRealtimeSync();
+            this.updateUIStatus();
+            UI.renderTasks();
+            UI.renderSidebar();
+            return true;
+          }
+        } catch (err) {
+          console.error('Firestore connect error:', err);
+          UI.showToast('Firebase 규칙(Rules)에서 둘 다 true로 변경 후 [게시]를 눌러주세요!', 'danger');
+          return false;
+        }
+      }
+
+      UI.showToast('Firebase 데이터베이스 연결에 실패했습니다.', 'danger');
+      return false;
     }
 
     disconnect() {
@@ -376,9 +426,13 @@
       this.pin = '';
       localStorage.removeItem('todolist_jy_space_id');
       localStorage.removeItem('todolist_jy_pin');
-      if (this.unsubscribe) {
-        this.unsubscribe();
-        this.unsubscribe = null;
+      if (this.rtdbRef) {
+        this.rtdbRef.off();
+        this.rtdbRef = null;
+      }
+      if (this.firestoreUnsubscribe) {
+        this.firestoreUnsubscribe();
+        this.firestoreUnsubscribe = null;
       }
       this.updateUIStatus();
       UI.renderSidebar();
@@ -410,44 +464,75 @@
     }
 
     startRealtimeSync() {
-      if (!this.db || !this.spaceId) return;
-      if (this.unsubscribe) this.unsubscribe();
+      if (!this.spaceId) return;
 
-      const docRef = this.db.collection('sync_spaces').doc(this.spaceId);
+      // RTDB listener
+      if (this.rtdb) {
+        if (this.rtdbRef) this.rtdbRef.off();
+        this.rtdbRef = this.rtdb.ref('sync_spaces/' + this.spaceId);
+        this.rtdbRef.on('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            if (data.tasks) {
+              store.tasks = data.tasks;
+              if (data.categories) store.categories = data.categories;
+              store.saveLocalOnly();
+            }
+            if (data.files) {
+              this.vaultFiles = data.files;
+              data.files.forEach(f => fileVaultDB.saveFileRecord(f));
+            }
+            UI.renderTasks();
+            UI.renderSidebar();
+          }
+        });
+      }
 
-      this.unsubscribe = docRef.onSnapshot((doc) => {
-        if (doc.exists) {
-          const data = doc.data();
-          if (data.tasks) {
-            store.tasks = data.tasks;
-            if (data.categories) store.categories = data.categories;
-            store.saveLocalOnly();
+      // Firestore listener
+      if (this.firestore) {
+        if (this.firestoreUnsubscribe) this.firestoreUnsubscribe();
+        const docRef = this.firestore.collection('sync_spaces').doc(this.spaceId);
+        this.firestoreUnsubscribe = docRef.onSnapshot((doc) => {
+          if (doc.exists) {
+            const data = doc.data();
+            if (data.tasks) {
+              store.tasks = data.tasks;
+              if (data.categories) store.categories = data.categories;
+              store.saveLocalOnly();
+            }
+            if (data.files) {
+              this.vaultFiles = data.files;
+              data.files.forEach(f => fileVaultDB.saveFileRecord(f));
+            }
+            UI.renderTasks();
+            UI.renderSidebar();
           }
-          if (data.files) {
-            this.vaultFiles = data.files;
-            // Also cache to local IndexedDB
-            data.files.forEach(f => fileVaultDB.saveFileRecord(f));
-          }
-          UI.renderTasks();
-          UI.renderSidebar();
-        }
-      }, (err) => {
-        console.warn('Realtime sync status:', err.message);
-      });
+        }, (err) => {
+          console.warn('Firestore snapshot status:', err.message);
+        });
+      }
     }
 
     async pushTasksToCloud() {
-      if (this.db && this.spaceId && this.pin) {
+      if (!this.spaceId || !this.pin) return;
+
+      const payload = {
+        tasks: store.tasks,
+        categories: store.categories,
+        files: this.vaultFiles,
+        updatedAt: Date.now()
+      };
+
+      if (this.rtdb) {
         try {
-          await this.db.collection('sync_spaces').doc(this.spaceId).set({
-            tasks: store.tasks,
-            categories: store.categories,
-            files: this.vaultFiles,
-            updatedAt: Date.now()
-          }, { merge: true });
-        } catch (e) {
-          console.warn('Push tasks error:', e);
-        }
+          await this.rtdb.ref('sync_spaces/' + this.spaceId).update(payload);
+        } catch (e) {}
+      }
+
+      if (this.firestore) {
+        try {
+          await this.firestore.collection('sync_spaces').doc(this.spaceId).set(payload, { merge: true });
+        } catch (e) {}
       }
     }
 
@@ -462,26 +547,30 @@
             size: file.size,
             type: file.type || 'application/octet-stream',
             note: note.trim(),
-            data: e.target.result, // Base64 Data URL
+            data: e.target.result,
             createdAt: Date.now()
           };
 
-          // Add to memory list
           this.vaultFiles.unshift(fileRecord);
 
-          // Push to cloud Firestore if connected
-          if (this.db && this.spaceId) {
+          if (this.rtdb && this.spaceId) {
             try {
-              await this.db.collection('sync_spaces').doc(this.spaceId).set({
+              await this.rtdb.ref('sync_spaces/' + this.spaceId).update({
+                files: this.vaultFiles,
+                updatedAt: Date.now()
+              });
+            } catch (err) {}
+          }
+
+          if (this.firestore && this.spaceId) {
+            try {
+              await this.firestore.collection('sync_spaces').doc(this.spaceId).set({
                 files: this.vaultFiles,
                 updatedAt: Date.now()
               }, { merge: true });
-            } catch (err) {
-              console.warn('Cloud vault save fallback:', err);
-            }
+            } catch (err) {}
           }
 
-          // Also save in local IndexedDB
           await fileVaultDB.saveFileRecord(fileRecord);
           resolve(fileRecord);
         };
@@ -504,9 +593,18 @@
     async deleteVaultFile(id) {
       this.vaultFiles = this.vaultFiles.filter(f => f.id !== id);
 
-      if (this.db && this.spaceId) {
+      if (this.rtdb && this.spaceId) {
         try {
-          await this.db.collection('sync_spaces').doc(this.spaceId).set({
+          await this.rtdb.ref('sync_spaces/' + this.spaceId).update({
+            files: this.vaultFiles,
+            updatedAt: Date.now()
+          });
+        } catch (e) {}
+      }
+
+      if (this.firestore && this.spaceId) {
+        try {
+          await this.firestore.collection('sync_spaces').doc(this.spaceId).set({
             files: this.vaultFiles,
             updatedAt: Date.now()
           }, { merge: true });
