@@ -35,6 +35,24 @@
     return [];
   }
 
+  // Helper to convert Base64 Data URL to binary Blob for mobile & cross-browser downloads
+  function dataURLtoBlob(dataUrl) {
+    try {
+      const parts = dataUrl.split(';base64,');
+      const contentType = (parts[0].match(/:(.*?);/) || [])[1] || 'application/octet-stream';
+      const raw = window.atob(parts[1]);
+      const rawLength = raw.length;
+      const uInt8Array = new Uint8Array(rawLength);
+      for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+      }
+      return new Blob([uInt8Array], { type: contentType });
+    } catch (e) {
+      console.warn('dataURLtoBlob error:', e);
+      return null;
+    }
+  }
+
   // =========================================================================
   // 1. Cute Web Audio Sound Engine
   // =========================================================================
@@ -431,8 +449,16 @@
       this.pin = '';
       localStorage.removeItem('todolist_jy_space_id');
       localStorage.removeItem('todolist_jy_pin');
+      localStorage.removeItem('todolist_jy_active_rtdb_url');
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(STREAK_KEY);
+      sessionStorage.clear();
+
+      const sInput = document.getElementById('sync-input-space-id');
+      const pInput = document.getElementById('sync-input-pin');
+      if (sInput) sInput.value = '';
+      if (pInput) pInput.value = '';
+
       store.tasks = [];
       this.vaultFiles = [];
 
@@ -444,7 +470,7 @@
       this.updateUIStatus();
       UI.renderTasks();
       UI.renderSidebar();
-      UI.showToast('동기화가 해제되었으며 모든 내용이 안전하게 숨겨졌습니다. 🔒', 'info');
+      UI.showToast('동기화가 해제되었으며 모든 로그인 기록과 데이터가 완전히 삭제되었습니다. 🔒', 'info');
     }
 
     updateUIStatus() {
@@ -606,16 +632,36 @@
       if (!file) {
         file = await fileVaultDB.getFile(id);
       }
-      if (file && file.data) {
+      if (!file || !file.data) {
+        throw new Error('파일 데이터를 찾을 수 없습니다.');
+      }
+
+      const blob = dataURLtoBlob(file.data);
+      if (!blob) {
+        // Direct anchor fallback
         const a = document.createElement('a');
         a.href = file.data;
-        a.download = file.name;
+        a.download = file.name || 'download.xlsx';
         document.body.appendChild(a);
         a.click();
-        a.remove();
+        setTimeout(() => a.remove(), 2000);
         return true;
       }
-      return false;
+
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = blobUrl;
+      a.download = file.name || 'download.xlsx';
+      document.body.appendChild(a);
+      a.click();
+
+      setTimeout(() => {
+        if (document.body.contains(a)) document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }, 5000);
+
+      return true;
     }
   }
 
@@ -1492,6 +1538,12 @@
     openCloudModal() {
       const modal = document.getElementById('cloud-modal');
       if (!modal) return;
+      if (!cloudSync.spaceId) {
+        const sInput = document.getElementById('sync-input-space-id');
+        const pInput = document.getElementById('sync-input-pin');
+        if (sInput) sInput.value = '';
+        if (pInput) pInput.value = '';
+      }
       cloudSync.updateUIStatus();
       const configInput = document.getElementById('firebase-config-input');
       if (configInput) {
