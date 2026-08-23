@@ -13,6 +13,19 @@
   'use strict';
 
   // =========================================================================
+  // 0. Default Firebase Configuration (Auto-Configured for Todolist JY)
+  // =========================================================================
+  const DEFAULT_FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCehazMGcL2x5FWSRRQv4cqST0AjPIEks8",
+    authDomain: "todolist-jy.firebaseapp.com",
+    projectId: "todolist-jy",
+    storageBucket: "todolist-jy.firebasestorage.app",
+    messagingSenderId: "541071377334",
+    appId: "1:541071377334:web:61b52c04d09a4536617717",
+    measurementId: "G-F84W7VLNWC"
+  };
+
+  // =========================================================================
   // 1. Cute Web Audio Sound Engine
   // =========================================================================
   class CuteSoundEngine {
@@ -251,10 +264,11 @@
     }
 
     init() {
-      const configStr = localStorage.getItem('todolist_jy_firebase_config');
-      if (configStr && window.firebase) {
+      const savedConfigStr = localStorage.getItem('todolist_jy_firebase_config');
+      const config = savedConfigStr ? JSON.parse(savedConfigStr) : DEFAULT_FIREBASE_CONFIG;
+
+      if (config && window.firebase) {
         try {
-          const config = JSON.parse(configStr);
           if (!firebase.apps.length) {
             firebase.initializeApp(config);
           }
@@ -268,6 +282,8 @@
             this.updateUIStatus();
             if (user) {
               this.startRealtimeSync();
+              UI.renderTasks();
+              UI.renderSidebar();
             }
           });
         } catch (e) {
@@ -297,16 +313,16 @@
 
       if (this.currentUser) {
         if (icon) icon.textContent = '🟢';
-        if (text) text.textContent = '실시간 동기화 중';
+        if (text) text.textContent = (this.currentUser.displayName || this.currentUser.email || '동기화 중');
         if (btn) btn.style.color = '#10b981';
         if (authSec) authSec.style.display = 'block';
         if (loginSec) loginSec.style.display = 'none';
-        if (nameEl) nameEl.textContent = this.currentUser.displayName || '내 계정';
-        if (emailEl) emailEl.textContent = this.currentUser.email || '';
+        if (nameEl) nameEl.textContent = this.currentUser.displayName || '내 클라우드 계정';
+        if (emailEl) emailEl.textContent = this.currentUser.email || '실시간 동기화 활성화됨';
       } else {
-        if (icon) icon.textContent = '🟡';
-        if (text) text.textContent = '로그인 필요';
-        if (btn) btn.style.color = '#f59e0b';
+        if (icon) icon.textContent = '☁️';
+        if (text) text.textContent = '로그인하고 어디서든 동기화';
+        if (btn) btn.style.color = 'var(--primary)';
         if (authSec) authSec.style.display = 'none';
         if (loginSec) loginSec.style.display = 'flex';
       }
@@ -316,7 +332,6 @@
       if (!this.db || !this.currentUser) return;
       const userDocRef = this.db.collection('users').doc(this.currentUser.uid);
 
-      // Listen for remote updates
       this.unsubscribeTasks = userDocRef.onSnapshot((doc) => {
         if (doc.exists) {
           const data = doc.data();
@@ -327,13 +342,14 @@
             UI.renderTasks();
           }
         } else {
-          // Push initial local tasks to cloud
           userDocRef.set({
             tasks: store.tasks,
             categories: store.categories,
             updatedAt: Date.now()
           });
         }
+      }, (err) => {
+        console.warn('Firestore sync note:', err.message);
       });
     }
 
@@ -346,81 +362,84 @@
             updatedAt: Date.now()
           }, { merge: true });
         } catch (e) {
-          console.error('Push to cloud error:', e);
+          console.warn('Push to cloud error:', e);
         }
       }
     }
 
     async uploadVaultFile(file, note = '') {
       if (this.storage && this.currentUser) {
-        // Upload to Cloud Storage
-        const fileId = 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-        const storageRef = this.storage.ref(`users/${this.currentUser.uid}/vault/${fileId}_${file.name}`);
-        const snapshot = await storageRef.put(file);
-        const downloadUrl = await snapshot.ref.getDownloadURL();
+        try {
+          const fileId = 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+          const storageRef = this.storage.ref(`users/${this.currentUser.uid}/vault/${fileId}_${file.name}`);
+          const snapshot = await storageRef.put(file);
+          const downloadUrl = await snapshot.ref.getDownloadURL();
 
-        const fileRecord = {
-          id: fileId,
-          name: file.name,
-          size: file.size,
-          type: file.type || 'application/octet-stream',
-          note: note.trim(),
-          downloadUrl,
-          createdAt: Date.now()
-        };
+          const fileRecord = {
+            id: fileId,
+            name: file.name,
+            size: file.size,
+            type: file.type || 'application/octet-stream',
+            note: note.trim(),
+            downloadUrl,
+            createdAt: Date.now()
+          };
 
-        // Save metadata to Firestore
-        await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(fileId).set(fileRecord);
-        return fileRecord;
+          await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(fileId).set(fileRecord);
+          return fileRecord;
+        } catch (err) {
+          console.warn('Cloud storage fallback to local DB:', err);
+          return await fileVaultDB.saveFile(file, note);
+        }
       } else {
-        // Fallback to local IndexedDB
         return await fileVaultDB.saveFile(file, note);
       }
     }
 
     async getAllVaultFiles() {
       if (this.db && this.currentUser) {
-        const snap = await this.db.collection('users').doc(this.currentUser.uid).collection('vault').orderBy('createdAt', 'desc').get();
-        const files = [];
-        snap.forEach(d => files.push(d.data()));
-        return files;
-      } else {
-        return await fileVaultDB.getAll();
+        try {
+          const snap = await this.db.collection('users').doc(this.currentUser.uid).collection('vault').orderBy('createdAt', 'desc').get();
+          const files = [];
+          snap.forEach(d => files.push(d.data()));
+          if (files.length > 0) return files;
+        } catch (e) {}
       }
+      return await fileVaultDB.getAll();
     }
 
     async deleteVaultFile(id) {
       if (this.db && this.currentUser) {
-        await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(id).delete();
-        return true;
-      } else {
-        return await fileVaultDB.deleteFile(id);
+        try {
+          await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(id).delete();
+        } catch (e) {}
       }
+      return await fileVaultDB.deleteFile(id);
     }
 
     async downloadVaultFile(id) {
       if (this.db && this.currentUser) {
-        const doc = await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(id).get();
-        if (doc.exists) {
-          const f = doc.data();
-          const a = document.createElement('a');
-          a.href = f.downloadUrl;
-          a.target = '_blank';
-          a.download = f.name;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          return true;
-        }
-        return false;
-      } else {
-        return await fileVaultDB.downloadFile(id);
+        try {
+          const doc = await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(id).get();
+          if (doc.exists && doc.data().downloadUrl) {
+            const f = doc.data();
+            const a = document.createElement('a');
+            a.href = f.downloadUrl;
+            a.target = '_blank';
+            a.download = f.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            return true;
+          }
+        } catch (e) {}
       }
+      return await fileVaultDB.downloadFile(id);
     }
   }
 
   // =========================================================================
-  // 4. IndexedDB File Vault (Local Fallback)
+  // 4. IndexedDB File Vault (Local Storage)
   // =========================================================================
   class FileVaultDB {
     constructor() {
@@ -567,7 +586,7 @@
       dueTime: '15:00',
       pinned: true,
       subtasks: [
-        { id: 's3', title: '상단 [☁️ 동기화 설정] 눌러서 집/회사 실시간 연동하기', completed: false },
+        { id: 's3', title: '상단 [☁️ 동기화] 눌러서 Google 로그인으로 집/회사 연동하기', completed: false },
         { id: 's4', title: '좌측 [📁 파일 보관함]에 엑셀/메모장 올려보기', completed: false }
       ],
       createdAt: Date.now() - 3600000 * 3
@@ -1243,7 +1262,7 @@
       if (!modal) return;
       const configInput = document.getElementById('firebase-config-input');
       if (configInput) {
-        configInput.value = localStorage.getItem('todolist_jy_firebase_config') || '';
+        configInput.value = localStorage.getItem('todolist_jy_firebase_config') || JSON.stringify(DEFAULT_FIREBASE_CONFIG, null, 2);
       }
       modal.classList.add('active');
     },
@@ -1897,7 +1916,7 @@
         const val = configInput.value.trim();
         if (!val) {
           localStorage.removeItem('todolist_jy_firebase_config');
-          UI.showToast('클라우드 설정이 제거되었습니다.', 'info');
+          UI.showToast('기본 Firebase 설정으로 복원되었습니다.', 'info');
           location.reload();
           return;
         }
@@ -1916,18 +1935,22 @@
     if (btnGoogleLogin) {
       btnGoogleLogin.addEventListener('click', async () => {
         if (!cloudSync.auth) {
-          UI.showToast('먼저 Firebase 설정 코드를 입력해주세요!', 'danger');
+          UI.showToast('Firebase 연결을 확인해주세요!', 'danger');
           return;
         }
         try {
           const provider = new firebase.auth.GoogleAuthProvider();
           await cloudSync.auth.signInWithPopup(provider);
           sounds.playCelebration();
-          UI.showToast('구글 로그인 완료! 실시간 클라우드 동기화가 시작됩니다 💖', 'success');
+          UI.showToast('Google 로그인 완료! 실시간 클라우드 동기화가 활성화되었습니다 💖', 'success');
           UI.closeCloudModal();
         } catch (e) {
           console.error(e);
-          UI.showToast('로그인 실패: ' + e.message, 'danger');
+          if (e.code === 'auth/configuration-not-found' || e.code === 'auth/operation-not-allowed') {
+            UI.showToast('Firebase 콘솔에서 Authentication -> Google 로그인을 사용 설정(활성화)해 주세요!', 'warning');
+          } else {
+            UI.showToast('로그인 알림: ' + e.message, 'info');
+          }
         }
       });
     }
