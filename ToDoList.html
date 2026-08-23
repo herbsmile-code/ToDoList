@@ -176,6 +176,19 @@
       <!-- Center Main Content Area -->
       <main class="content-area">
         
+        <!-- SECTION 0: Locked Privacy Screen (Shown when not synced / logged out) -->
+        <div id="locked-privacy-screen" class="locked-privacy-screen" style="display: none;">
+          <div class="locked-icon-bubble">🔐</div>
+          <h2 class="locked-title">Todolist JY 프라이버시 보호 중 🌸</h2>
+          <p class="locked-desc">
+            개인정보 및 보안을 위해 내용이 안전하게 잠겨 있습니다.<br>
+            2단계 보안 로그인 시 내 모든 할 일과 파일이 나타납니다.
+          </p>
+          <button type="button" id="btn-locked-login" class="locked-btn-login">
+            🔐 2단계 보안 로그인하기 ✨
+          </button>
+        </div>
+
         <!-- Mobile Horizontal Scrollable Category Pills -->
         <div class="mobile-category-bar" id="mobile-category-bar">
           <button type="button" class="mobile-cat-pill active" data-filter="all">🌸 전체</button>

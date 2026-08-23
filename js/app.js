@@ -435,6 +435,11 @@
       this.pin = '';
       localStorage.removeItem('todolist_jy_space_id');
       localStorage.removeItem('todolist_jy_pin');
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STREAK_KEY);
+      store.tasks = [];
+      this.vaultFiles = [];
+
       if (this.rtdbRef) {
         this.rtdbRef.off();
         this.rtdbRef = null;
@@ -443,9 +448,11 @@
         this.firestoreUnsubscribe();
         this.firestoreUnsubscribe = null;
       }
+
       this.updateUIStatus();
+      UI.renderTasks();
       UI.renderSidebar();
-      UI.showToast('2단계 동기화가 해제되었습니다.', 'info');
+      UI.showToast('동기화가 해제되었으며 모든 내용이 안전하게 숨겨졌습니다. 🔒', 'info');
     }
 
     updateUIStatus() {
@@ -813,6 +820,11 @@
     }
 
     load() {
+      const isLogged = !!(localStorage.getItem('todolist_jy_space_id') && localStorage.getItem('todolist_jy_pin'));
+      if (!isLogged) {
+        this.tasks = [];
+        return;
+      }
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
@@ -821,15 +833,11 @@
           if (parsed.categories && parsed.categories.length) {
             this.categories = parsed.categories;
           }
-        } else {
-          this.tasks = [...INITIAL_DEMO_TASKS];
-          this.saveLocalOnly();
         }
-
         const streakRaw = localStorage.getItem(STREAK_KEY);
         if (streakRaw) this.streak = JSON.parse(streakRaw);
       } catch (e) {
-        this.tasks = [...INITIAL_DEMO_TASKS];
+        this.tasks = [];
       }
     }
 
@@ -1117,6 +1125,35 @@
     },
 
     async renderSidebar() {
+      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
+
+      if (!isLogged) {
+        const counts = { all: 0, today: 0, upcoming: 0, overdue: 0, pinned: 0, completed: 0, vault: 0 };
+        Object.keys(counts).forEach(k => {
+          const el = document.getElementById(`nav-count-${k}`);
+          if (el) el.textContent = '🔒';
+        });
+
+        const catContainer = document.getElementById('category-nav-list');
+        if (catContainer) {
+          catContainer.innerHTML = `<li style="padding: 0.85rem 0.5rem; font-size: 0.82rem; color: var(--text-dim); text-align: center;">🔐 로그인 시 표시됩니다</li>`;
+        }
+
+        const mobileBar = document.getElementById('mobile-category-bar');
+        if (mobileBar) mobileBar.style.display = 'none';
+
+        const rateEl = document.getElementById('stats-rate');
+        const ringBar = document.getElementById('progress-ring-bar');
+        const subtextEl = document.getElementById('stats-subtext');
+        const streakEl = document.getElementById('streak-count');
+
+        if (rateEl) rateEl.textContent = `0%`;
+        if (subtextEl) subtextEl.textContent = `로그인 필요 🔒`;
+        if (streakEl) streakEl.textContent = `보안 잠금 중`;
+        if (ringBar) ringBar.style.strokeDashoffset = 2 * Math.PI * 31;
+        return;
+      }
+
       const stats = store.getStats();
       const counts = {
         all: store.tasks.length,
@@ -1174,6 +1211,7 @@
           pillsHTML += `<button type="button" class="mobile-cat-pill ${isAct}" data-filter="${cat.id}">${cat.name}</button>`;
         });
         mobileBar.innerHTML = pillsHTML;
+        mobileBar.style.display = 'flex';
       }
 
       const rateEl = document.getElementById('stats-rate');
@@ -1259,6 +1297,21 @@
       const listContainer = document.getElementById('tasks-list-container');
       const kanbanContainer = document.getElementById('kanban-board-container');
       const emptyState = document.getElementById('empty-state');
+      const lockedScreen = document.getElementById('locked-privacy-screen');
+      const mobileBar = document.getElementById('mobile-category-bar');
+
+      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
+
+      if (!isLogged) {
+        if (lockedScreen) lockedScreen.style.display = 'flex';
+        if (tasksView) tasksView.style.display = 'none';
+        if (filesView) filesView.style.display = 'none';
+        if (mobileBar) mobileBar.style.display = 'none';
+        this.renderSidebar();
+        return;
+      }
+
+      if (lockedScreen) lockedScreen.style.display = 'none';
 
       // Update Mobile Nav Active States
       document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
@@ -1688,6 +1741,9 @@
     // Modals
     const openTaskBtn = document.getElementById('btn-open-task-modal');
     if (openTaskBtn) openTaskBtn.addEventListener('click', () => UI.openTaskModal());
+
+    const lockedLoginBtn = document.getElementById('btn-locked-login');
+    if (lockedLoginBtn) lockedLoginBtn.addEventListener('click', () => UI.openCloudModal());
 
     document.querySelectorAll('[data-close-modal]').forEach(b => {
       b.addEventListener('click', () => {
