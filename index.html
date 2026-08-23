@@ -1,18 +1,17 @@
 <!DOCTYPE html>
-<html lang="ko" data-theme="dark">
+<html lang="ko" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="ZenTask - 심플하고 세련된 프리미엄 모던 To-Do List 웹 애플리케이션. 칸반 보드, 생산성 통계, 단축키, 다크모드 지원.">
-  <meta name="keywords" content="할일관리, ToDoList, 투두리스트, 칸반보드, 생산성, 일정관리">
-  <title>ZenTask | 프리미엄 스마트 할 일 관리</title>
+  <meta name="description" content="ZenTask - 감성 가득한 아이폰 스타일의 프리미엄 To-Do List 웹 애플리케이션">
+  <title>ZenTask 🌸 | 오늘의 반짝이는 할 일</title>
   
   <!-- CSS Stylesheets -->
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/animations.css">
 </head>
 <body>
-  <!-- Canvas for Celebration Particle Effects -->
+  <!-- Canvas for Cute Confetti & Heart Particles -->
   <canvas id="confetti-canvas"></canvas>
 
   <div id="app-container">
@@ -20,15 +19,18 @@
     <header class="app-header">
       <div class="header-left">
         <a href="#" class="brand" title="ZenTask Home">
-          <div class="brand-icon">✓</div>
-          <span class="brand-name">ZenTask</span>
+          <div class="brand-icon">💖</div>
+          <div>
+            <span class="brand-name">ZenTask</span>
+            <span class="brand-tagline">daily planner</span>
+          </div>
         </a>
       </div>
 
       <div class="header-center">
         <div class="search-box">
           <span class="search-icon">🔍</span>
-          <input type="text" id="search-input" class="search-input" placeholder="할 일, 메모, 태그 검색... (단축키: /)" aria-label="검색창">
+          <input type="text" id="search-input" class="search-input" placeholder="오늘 할 일, 메모 검색... (단축키: /)" aria-label="검색창">
           <span class="search-badge">/</span>
         </div>
       </div>
@@ -37,13 +39,13 @@
         <button id="btn-sound-toggle" class="btn-icon" title="효과음 켜기/끄기" aria-label="사운드 토글">
           <span class="icon">🔊</span>
         </button>
-        <button id="btn-theme-toggle" class="btn-icon" title="다크/라이트 테마 전환 (단축키: T)" aria-label="테마 전환">
-          <span id="theme-toggle-icon" class="icon">🌙</span>
+        <button id="btn-theme-toggle" class="btn-icon" title="테마 전환 (단축키: T)" aria-label="테마 전환">
+          <span id="theme-toggle-icon" class="icon">🌸</span>
         </button>
-        <button id="btn-shortcuts-modal" class="btn-icon" title="단축키 가이드 (단축키: ?)" aria-label="단축키 안내">
+        <button id="btn-shortcuts-modal" class="btn-icon" title="단축키 안내 (단축키: ?)" aria-label="단축키">
           <span class="icon">⌨️</span>
         </button>
-        <button id="btn-settings-modal" class="btn-icon" title="데이터 백업 및 설정" aria-label="설정">
+        <button id="btn-settings-modal" class="btn-icon" title="백업 및 설정" aria-label="설정">
           <span class="icon">⚙️</span>
         </button>
         <button id="btn-open-task-modal" class="btn btn-primary" title="새로운 할 일 등록 (단축키: N)">
@@ -59,7 +61,7 @@
       <aside class="sidebar">
         <!-- Main Navigation Filters -->
         <div class="sidebar-card">
-          <div class="sidebar-title">메인 필터</div>
+          <div class="sidebar-title">메인 메뉴 📌</div>
           <ul class="nav-list" id="main-nav-list">
             <li class="nav-item active" data-filter="all" id="nav-filter-all">
               <div class="nav-item-left">
@@ -91,15 +93,15 @@
             </li>
             <li class="nav-item" data-filter="pinned" id="nav-filter-pinned">
               <div class="nav-item-left">
-                <span>📌</span>
+                <span>💖</span>
                 <span>중요 표시</span>
               </div>
               <span class="nav-count" id="nav-count-pinned">0</span>
             </li>
             <li class="nav-item" data-filter="completed" id="nav-filter-completed">
               <div class="nav-item-left">
-                <span>✅</span>
-                <span>완료됨</span>
+                <span>✨</span>
+                <span>완료된 목록</span>
               </div>
               <span class="nav-count" id="nav-count-completed">0</span>
             </li>
@@ -108,7 +110,7 @@
 
         <!-- Category Tag Filters -->
         <div class="sidebar-card">
-          <div class="sidebar-title">카테고리</div>
+          <div class="sidebar-title">카테고리 태그 🏷️</div>
           <ul class="nav-list" id="category-nav-list">
             <!-- Dynamically populated categories -->
           </ul>
@@ -116,17 +118,17 @@
 
         <!-- Productivity Summary & Stats -->
         <div class="sidebar-card stats-card">
-          <div class="sidebar-title">오늘의 생산성 달성도</div>
+          <div class="sidebar-title">오늘의 달성도 🌷</div>
           <div class="stats-ring-container">
-            <svg class="progress-ring-svg" viewBox="0 0 76 76">
+            <svg class="progress-ring-svg" viewBox="0 0 78 78">
               <defs>
                 <linearGradient id="gradient-progress" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#6366f1" />
-                  <stop offset="100%" stop-color="#ec4899" />
+                  <stop offset="0%" stop-color="#ff8fa3" />
+                  <stop offset="100%" stop-color="#b197fc" />
                 </linearGradient>
               </defs>
-              <circle class="progress-ring-bg" cx="38" cy="38" r="30" />
-              <circle class="progress-ring-bar" id="progress-ring-bar" cx="38" cy="38" r="30" />
+              <circle class="progress-ring-bg" cx="39" cy="39" r="31" />
+              <circle class="progress-ring-bar" id="progress-ring-bar" cx="39" cy="39" r="31" />
             </svg>
             <div class="stats-info">
               <div class="stats-percent" id="stats-rate">0%</div>
@@ -148,18 +150,18 @@
         <!-- Top Title & Toolbar -->
         <div class="dashboard-header">
           <div class="view-heading">
-            <h1 id="view-title">모든 할 일</h1>
-            <p>오늘의 계획을 달성하고 생산성을 높여보세요.</p>
+            <h1 id="view-title">모든 할 일 🌸</h1>
+            <p>오늘도 기분 좋고 생산적인 하루를 시작해 보세요!</p>
           </div>
 
           <div class="toolbar">
-            <!-- View Mode Switcher -->
-            <div class="view-toggle-group" role="group" aria-label="보기 모드">
-              <button id="btn-view-list" class="view-btn active" title="리스트 뷰 (단축키: 1)">
+            <!-- iOS Segmented Control -->
+            <div class="segmented-control" role="group" aria-label="보기 모드">
+              <button id="btn-view-list" class="segmented-btn active" title="목록 뷰 (단축키: 1)">
                 <span>📋</span>
-                <span>리스트</span>
+                <span>목록</span>
               </button>
-              <button id="btn-view-kanban" class="view-btn" title="칸반 보드 뷰 (단축키: 2)">
+              <button id="btn-view-kanban" class="segmented-btn" title="칸반 보드 뷰 (단축키: 2)">
                 <span>📊</span>
                 <span>칸반</span>
               </button>
@@ -167,7 +169,7 @@
 
             <!-- Priority Filter -->
             <select id="priority-filter-select" class="select-dropdown" aria-label="우선순위 필터">
-              <option value="all">모든 우선순위</option>
+              <option value="all">우선순위 전체</option>
               <option value="urgent">긴급 🔥</option>
               <option value="high">높음 🔴</option>
               <option value="medium">중간 🟡</option>
@@ -185,10 +187,10 @@
         </div>
 
         <!-- Quick Add Task Bar -->
-        <form id="quick-add-form" class="quick-add-card">
-          <span style="font-size: 1.2rem; color: var(--primary);">⚡</span>
-          <input type="text" id="quick-add-input" class="quick-add-input" placeholder="새로운 할 일을 빠르게 입력 후 Enter를 누르세요..." autocomplete="off">
-          <button type="submit" class="btn btn-primary" style="padding: 0.45rem 0.9rem; font-size: 0.8rem;">
+        <form id="quick-add-form" class="quick-add-card" onsubmit="return false;">
+          <span class="quick-add-icon">✨</span>
+          <input type="text" id="quick-add-input" class="quick-add-input" placeholder="새로운 할 일을 입력하고 Enter를 누르세요..." autocomplete="off">
+          <button type="button" id="quick-add-submit-btn" class="quick-add-btn">
             추가
           </button>
         </form>
@@ -204,7 +206,7 @@
           <div class="kanban-column" data-status="todo">
             <div class="kanban-column-header">
               <div class="kanban-column-title">
-                <span style="color: var(--status-todo);">⏳</span>
+                <span>⏳</span>
                 <span>할 일 (To Do)</span>
               </div>
               <span class="kanban-column-badge" id="badge-count-todo">0</span>
@@ -216,7 +218,7 @@
           <div class="kanban-column" data-status="in-progress">
             <div class="kanban-column-header">
               <div class="kanban-column-title">
-                <span style="color: var(--status-inprogress);">🚀</span>
+                <span>🎀</span>
                 <span>진행 중 (In Progress)</span>
               </div>
               <span class="kanban-column-badge" id="badge-count-inprogress">0</span>
@@ -228,7 +230,7 @@
           <div class="kanban-column" data-status="completed">
             <div class="kanban-column-header">
               <div class="kanban-column-title">
-                <span style="color: var(--status-completed);">✨</span>
+                <span>💖</span>
                 <span>완료됨 (Done)</span>
               </div>
               <span class="kanban-column-badge" id="badge-count-completed">0</span>
@@ -237,11 +239,11 @@
           </div>
         </div>
 
-        <!-- Empty State (When no tasks match) -->
+        <!-- Empty State -->
         <div id="empty-state" class="empty-state" style="display: none;">
-          <div class="empty-state-icon">🎉</div>
-          <h3>해당하는 할 일이 없습니다!</h3>
-          <p>모든 할 일을 마쳤거나 검색 결과가 없습니다. 새로운 작업을 추가해 보세요.</p>
+          <div class="empty-state-icon">🌷</div>
+          <h3>해당하는 할 일이 없어요!</h3>
+          <p>모든 할 일을 마쳤거나 검색 결과가 없어요. 새로운 할 일을 추가해 보세요 ✨</p>
           <button class="btn btn-primary" onclick="document.getElementById('btn-open-task-modal').click()">
             + 새 할 일 등록하기
           </button>
@@ -254,19 +256,19 @@
   <div id="task-modal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 class="modal-title" id="modal-title">새로운 할 일 등록</h3>
+        <h3 class="modal-title" id="modal-title">새로운 할 일 등록 💖</h3>
         <button class="modal-close-btn" data-close-modal title="닫기 (Esc)">✕</button>
       </div>
 
       <form id="task-form">
         <div class="form-group">
           <label class="form-label" for="task-input-title">제목 *</label>
-          <input type="text" id="task-input-title" class="form-input" placeholder="어떤 작업을 진행할까요?" required>
+          <input type="text" id="task-input-title" class="form-input" placeholder="어떤 일을 시작해볼까요?" required>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="task-input-desc">상세 메모</label>
-          <textarea id="task-input-desc" class="form-textarea" placeholder="필요한 메모, 링크, 체크포인트를 자유롭게 작성하세요..."></textarea>
+          <textarea id="task-input-desc" class="form-textarea" placeholder="메모나 링크, 준비물을 적어보세요..."></textarea>
         </div>
 
         <div class="form-row">
@@ -314,7 +316,7 @@
             <label class="form-label" style="margin-bottom: 0.5rem;">상단 고정 여부</label>
             <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
               <input type="checkbox" id="task-input-pinned" class="task-checkbox">
-              <span>중요 작업으로 상단에 고정</span>
+              <span>중요 작업으로 상단 고정 📌</span>
             </label>
           </div>
         </div>
@@ -323,18 +325,16 @@
         <div class="form-group">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
             <label class="form-label">체크리스트 (하위 항목)</label>
-            <button type="button" id="btn-add-subtask" class="btn btn-ghost" style="padding: 2px 8px; font-size: 0.75rem;">
+            <button type="button" id="btn-add-subtask" class="btn" style="background: var(--primary-light); color: var(--primary); padding: 3px 10px; font-size: 0.78rem;">
               + 항목 추가
             </button>
           </div>
-          <div class="checklist-builder" id="modal-subtasks-list">
-            <!-- Dynamic Subtasks rows -->
-          </div>
+          <div class="checklist-builder" id="modal-subtasks-list"></div>
         </div>
 
         <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" data-close-modal>취소</button>
-          <button type="submit" class="btn btn-primary" id="btn-save-task">저장하기</button>
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-modal>취소</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-task">저장하기 💖</button>
         </div>
       </form>
     </div>
@@ -342,7 +342,7 @@
 
   <!-- Modal: Keyboard Shortcuts Guide -->
   <div id="shortcuts-modal" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal-card" style="max-width: 480px;">
+    <div class="modal-card" style="max-width: 440px;">
       <div class="modal-header">
         <h3 class="modal-title">⌨️ 단축키 안내</h3>
         <button class="modal-close-btn" data-close-modal>✕</button>
@@ -350,42 +350,38 @@
       <div style="display: flex; flex-direction: column; gap: 0.85rem; font-size: 0.9rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
           <span>새로운 할 일 등록</span>
-          <kbd style="padding: 3px 8px; background: var(--bg-tertiary); border-radius: 4px; font-family: monospace;">N</kbd>
+          <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">N</kbd>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>통합 검색창 포커스</span>
-          <kbd style="padding: 3px 8px; background: var(--bg-tertiary); border-radius: 4px; font-family: monospace;">/</kbd>
+          <span>검색창 포커스</span>
+          <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">/</kbd>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>다크 / 라이트 테마 전환</span>
-          <kbd style="padding: 3px 8px; background: var(--bg-tertiary); border-radius: 4px; font-family: monospace;">T</kbd>
+          <span>테마 전환 (체리블라썸 / 라벤더)</span>
+          <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">T</kbd>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>리스트 뷰 전환</span>
-          <kbd style="padding: 3px 8px; background: var(--bg-tertiary); border-radius: 4px; font-family: monospace;">1</kbd>
+          <span>목록 뷰</span>
+          <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">1</kbd>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>칸반 보드 뷰 전환</span>
-          <kbd style="padding: 3px 8px; background: var(--bg-tertiary); border-radius: 4px; font-family: monospace;">2</kbd>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>모달 닫기 / 포커스 해제</span>
-          <kbd style="padding: 3px 8px; background: var(--bg-tertiary); border-radius: 4px; font-family: monospace;">Esc</kbd>
+          <span>칸반 보드 뷰</span>
+          <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">2</kbd>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span>단축키 가이드 열기</span>
-          <kbd style="padding: 3px 8px; background: var(--bg-tertiary); border-radius: 4px; font-family: monospace;">?</kbd>
+          <span>모달 닫기</span>
+          <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">Esc</kbd>
         </div>
       </div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-primary" data-close-modal>확인</button>
+        <button type="button" class="btn btn-primary" data-close-modal>확인 ✨</button>
       </div>
     </div>
   </div>
 
   <!-- Modal: Settings & Data Management -->
   <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal-card" style="max-width: 500px;">
+    <div class="modal-card" style="max-width: 480px;">
       <div class="modal-header">
         <h3 class="modal-title">⚙️ 데이터 관리 & 설정</h3>
         <button class="modal-close-btn" data-close-modal>✕</button>
@@ -393,25 +389,25 @@
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div>
           <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">데이터 백업 (내보내기)</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">모든 할 일 및 카테고리 데이터를 JSON 파일로 다운로드합니다.</p>
-          <button type="button" id="btn-export-data" class="btn btn-ghost" style="width: 100%;">
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">작성한 모든 할 일 데이터를 JSON 파일로 다운로드합니다.</p>
+          <button type="button" id="btn-export-data" class="btn" style="width: 100%; background: var(--primary-light); color: var(--primary);">
             💾 JSON 데이터 다운로드
           </button>
         </div>
 
         <div>
           <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">데이터 복원 (가져오기)</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">이전에 백업한 JSON 파일을 업로드하여 데이터를 복원합니다.</p>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">백업한 JSON 파일을 업로드하여 복원합니다.</p>
           <input type="file" id="import-file-input" accept=".json" style="display: none;">
-          <button type="button" class="btn btn-ghost" style="width: 100%;" onclick="document.getElementById('import-file-input').click()">
+          <button type="button" class="btn" style="width: 100%; background: rgba(0,0,0,0.05); color: var(--text-main);" onclick="document.getElementById('import-file-input').click()">
             📂 백업 파일 불러오기
           </button>
         </div>
 
         <div style="padding-top: 1rem; border-top: 1px solid var(--border-subtle);">
-          <h4 style="font-size: 0.95rem; color: var(--priority-urgent); margin-bottom: 0.35rem;">초기화</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">기본 샘플 데이터로 복원합니다. 기존 데이터는 삭제됩니다.</p>
-          <button type="button" id="btn-reset-demo" class="btn btn-ghost" style="width: 100%; border-color: rgba(239, 68, 68, 0.4); color: var(--priority-urgent);">
+          <h4 style="font-size: 0.95rem; color: var(--p-urgent); margin-bottom: 0.35rem;">초기화</h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">예쁜 기본 샘플 데이터로 복원합니다.</p>
+          <button type="button" id="btn-reset-demo" class="btn" style="width: 100%; background: var(--p-urgent-bg); color: var(--p-urgent);">
             🔄 데모 데이터로 초기화
           </button>
         </div>
@@ -425,7 +421,7 @@
   <!-- Dynamic Toast Container -->
   <div id="toast-container" aria-live="polite"></div>
 
-  <!-- Application Logic Scripts -->
-  <script type="module" src="js/app.js"></script>
+  <!-- Standalone Application Logic Script (Zero CORS issues on file:// protocol) -->
+  <script src="js/app.js"></script>
 </body>
 </html>
