@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="ToDoList JY - 아이폰 스타일의 아기자기하고 깔끔한 프리미엄 To-Do List">
-  <title>ToDoList JY 🌸 | 오늘의 반짝이는 할 일</title>
+  <meta name="description" content="Todolist JY - 아이폰 스타일의 아기자기하고 깔끔한 프리미엄 To-Do List 및 파일 보관함">
+  <title>Todolist JY 🌸 | 오늘의 반짝이는 할 일</title>
   
   <!-- CSS Stylesheets -->
   <link rel="stylesheet" href="css/style.css">
@@ -18,10 +18,10 @@
     <!-- Top Navigation Header -->
     <header class="app-header">
       <div class="header-left">
-        <a href="#" class="brand" title="ToDoList JY Home">
+        <a href="#" class="brand" title="Todolist JY - 클릭 시 모든 할 일로 이동">
           <div class="brand-icon">💖</div>
           <div>
-            <span class="brand-name">ToDoList JY</span>
+            <span class="brand-name">Todolist JY</span>
             <span class="brand-tagline">daily planner</span>
           </div>
         </a>
@@ -108,7 +108,7 @@
           </ul>
         </div>
 
-        <!-- Category Tag Filters (Draggable) -->
+        <!-- Category Tag Filters & File Vault -->
         <div class="sidebar-card">
           <div class="sidebar-title">
             <span>카테고리 태그 🏷️</span>
@@ -116,6 +116,17 @@
           </div>
           <ul class="nav-list" id="category-nav-list">
             <!-- Dynamically populated draggable categories -->
+          </ul>
+          
+          <!-- File Vault Menu Item (At Bottom of Categories) -->
+          <ul class="nav-list" style="margin-top: 0.5rem;">
+            <li class="nav-item vault-nav-item" data-filter="vault" id="nav-filter-vault" title="엑셀, 메모장 등 파일 보관소">
+              <div class="nav-item-left">
+                <span>📁</span>
+                <span>파일 보관함</span>
+              </div>
+              <span class="nav-count" id="nav-count-vault">0</span>
+            </li>
           </ul>
         </div>
 
@@ -150,107 +161,152 @@
 
       <!-- Center Main Content -->
       <main class="content-area">
-        <!-- Top Title & Toolbar -->
-        <div class="dashboard-header">
-          <div class="view-heading">
-            <h1 id="view-title">모든 할 일 🌸</h1>
-            <p>오늘도 기분 좋고 생산적인 하루를 시작해 보세요!</p>
-          </div>
-
-          <div class="toolbar">
-            <!-- iOS Segmented Control -->
-            <div class="segmented-control" role="group" aria-label="보기 모드">
-              <button id="btn-view-list" class="segmented-btn active" title="목록 뷰 (단축키: 1)">
-                <span>📋</span>
-                <span>목록</span>
-              </button>
-              <button id="btn-view-kanban" class="segmented-btn" title="칸반 보드 뷰 (단축키: 2)">
-                <span>📊</span>
-                <span>칸반</span>
-              </button>
+        
+        <!-- SECTION A: Normal Tasks View -->
+        <div id="tasks-view-container" style="display: flex; flex-direction: column; gap: 1.35rem;">
+          <!-- Top Title & Toolbar -->
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1 id="view-title">모든 할 일 🌸</h1>
+              <p>오늘도 기분 좋고 생산적인 하루를 시작해 보세요!</p>
             </div>
 
-            <!-- Priority Filter -->
-            <select id="priority-filter-select" class="select-dropdown" aria-label="우선순위 필터">
-              <option value="all">우선순위 전체</option>
-              <option value="urgent">긴급 🔥</option>
-              <option value="high">높음 🔴</option>
-              <option value="medium">중간 🟡</option>
-              <option value="low">낮음 🟢</option>
-            </select>
-
-            <!-- Sorting Dropdown -->
-            <select id="sort-select" class="select-dropdown" aria-label="정렬 기준">
-              <option value="dueDate">마감일순</option>
-              <option value="priority">우선순위순</option>
-              <option value="createdAt">최신 등록순</option>
-              <option value="title">가나다순</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Quick Add Task Bar -->
-        <form id="quick-add-form" class="quick-add-card" onsubmit="return false;">
-          <span class="quick-add-icon">✨</span>
-          <input type="text" id="quick-add-input" class="quick-add-input" placeholder="새로운 할 일을 입력하고 Enter를 누르세요..." autocomplete="off">
-          <button type="button" id="quick-add-submit-btn" class="quick-add-btn">
-            추가
-          </button>
-        </form>
-
-        <!-- Tasks List View Container -->
-        <div id="tasks-list-container" class="tasks-container">
-          <!-- Dynamically populated task cards -->
-        </div>
-
-        <!-- Kanban Board View Container (Initially Hidden) -->
-        <div id="kanban-board-container" class="kanban-board" style="display: none;">
-          <!-- Column 1: To Do -->
-          <div class="kanban-column" data-status="todo">
-            <div class="kanban-column-header">
-              <div class="kanban-column-title">
-                <span>⏳</span>
-                <span>할 일 (To Do)</span>
+            <div class="toolbar">
+              <!-- iOS Segmented Control -->
+              <div class="segmented-control" role="group" aria-label="보기 모드">
+                <button id="btn-view-list" class="segmented-btn active" title="목록 뷰 (단축키: 1)">
+                  <span>📋</span>
+                  <span>목록</span>
+                </button>
+                <button id="btn-view-kanban" class="segmented-btn" title="칸반 보드 뷰 (단축키: 2)">
+                  <span>📊</span>
+                  <span>칸반</span>
+                </button>
               </div>
-              <span class="kanban-column-badge" id="badge-count-todo">0</span>
+
+              <!-- Priority Filter -->
+              <select id="priority-filter-select" class="select-dropdown" aria-label="우선순위 필터">
+                <option value="all">우선순위 전체</option>
+                <option value="urgent">긴급 🔥</option>
+                <option value="high">높음 🔴</option>
+                <option value="medium">중간 🟡</option>
+                <option value="low">낮음 🟢</option>
+              </select>
+
+              <!-- Sorting Dropdown -->
+              <select id="sort-select" class="select-dropdown" aria-label="정렬 기준">
+                <option value="dueDate">마감일순</option>
+                <option value="priority">우선순위순</option>
+                <option value="createdAt">최신 등록순</option>
+                <option value="title">가나다순</option>
+              </select>
             </div>
-            <div class="kanban-tasks-list" id="kanban-col-todo"></div>
           </div>
 
-          <!-- Column 2: In Progress -->
-          <div class="kanban-column" data-status="in-progress">
-            <div class="kanban-column-header">
-              <div class="kanban-column-title">
-                <span>🎀</span>
-                <span>진행 중 (In Progress)</span>
-              </div>
-              <span class="kanban-column-badge" id="badge-count-inprogress">0</span>
-            </div>
-            <div class="kanban-tasks-list" id="kanban-col-inprogress"></div>
+          <!-- Quick Add Task Bar -->
+          <form id="quick-add-form" class="quick-add-card" onsubmit="return false;">
+            <span class="quick-add-icon">✨</span>
+            <input type="text" id="quick-add-input" class="quick-add-input" placeholder="새로운 할 일을 입력하고 Enter를 누르세요..." autocomplete="off">
+            <button type="button" id="quick-add-submit-btn" class="quick-add-btn">
+              추가
+            </button>
+          </form>
+
+          <!-- Tasks List View Container -->
+          <div id="tasks-list-container" class="tasks-container">
+            <!-- Dynamically populated task cards -->
           </div>
 
-          <!-- Column 3: Completed -->
-          <div class="kanban-column" data-status="completed">
-            <div class="kanban-column-header">
-              <div class="kanban-column-title">
-                <span>💖</span>
-                <span>완료됨 (Done)</span>
+          <!-- Kanban Board View Container (Initially Hidden) -->
+          <div id="kanban-board-container" class="kanban-board" style="display: none;">
+            <!-- Column 1: To Do -->
+            <div class="kanban-column" data-status="todo">
+              <div class="kanban-column-header">
+                <div class="kanban-column-title">
+                  <span>⏳</span>
+                  <span>할 일 (To Do)</span>
+                </div>
+                <span class="kanban-column-badge" id="badge-count-todo">0</span>
               </div>
-              <span class="kanban-column-badge" id="badge-count-completed">0</span>
+              <div class="kanban-tasks-list" id="kanban-col-todo"></div>
             </div>
-            <div class="kanban-tasks-list" id="kanban-col-completed"></div>
+
+            <!-- Column 2: In Progress -->
+            <div class="kanban-column" data-status="in-progress">
+              <div class="kanban-column-header">
+                <div class="kanban-column-title">
+                  <span>🎀</span>
+                  <span>진행 중 (In Progress)</span>
+                </div>
+                <span class="kanban-column-badge" id="badge-count-inprogress">0</span>
+              </div>
+              <div class="kanban-tasks-list" id="kanban-col-inprogress"></div>
+            </div>
+
+            <!-- Column 3: Completed -->
+            <div class="kanban-column" data-status="completed">
+              <div class="kanban-column-header">
+                <div class="kanban-column-title">
+                  <span>💖</span>
+                  <span>완료됨 (Done)</span>
+                </div>
+                <span class="kanban-column-badge" id="badge-count-completed">0</span>
+              </div>
+              <div class="kanban-tasks-list" id="kanban-col-completed"></div>
+            </div>
+          </div>
+
+          <!-- Tasks Empty State -->
+          <div id="empty-state" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">🌷</div>
+            <h3>해당하는 할 일이 없어요!</h3>
+            <p>모든 할 일을 마쳤거나 검색 결과가 없어요. 새로운 할 일을 추가해 보세요 ✨</p>
+            <button class="btn btn-primary" onclick="document.getElementById('btn-open-task-modal').click()">
+              + 새 할 일 등록하기
+            </button>
           </div>
         </div>
 
-        <!-- Empty State -->
-        <div id="empty-state" class="empty-state" style="display: none;">
-          <div class="empty-state-icon">🌷</div>
-          <h3>해당하는 할 일이 없어요!</h3>
-          <p>모든 할 일을 마쳤거나 검색 결과가 없어요. 새로운 할 일을 추가해 보세요 ✨</p>
-          <button class="btn btn-primary" onclick="document.getElementById('btn-open-task-modal').click()">
-            + 새 할 일 등록하기
-          </button>
+        <!-- SECTION B: File Vault (파일 보관함) View -->
+        <div id="files-view-container" style="display: none; flex-direction: column; gap: 1.5rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>📁 파일 보관함 (File Vault)</h1>
+              <p>엑셀 시트, 메모장, 문서 등 소중한 파일을 안전하게 보관하고 언제든 다운로드하세요 ✨</p>
+            </div>
+            <button type="button" id="btn-open-file-upload" class="btn btn-primary">
+              <span>+</span>
+              <span>파일 업로드</span>
+            </button>
+          </div>
+
+          <!-- Cute Dropzone -->
+          <div class="file-upload-card" id="vault-dropzone">
+            <input type="file" id="vault-file-hidden-input" style="display: none;">
+            <div class="file-upload-icon">📂</div>
+            <div class="file-upload-title">이곳을 클릭하거나 파일을 끌어다 놓으세요</div>
+            <div class="file-upload-desc">엑셀(.xlsx, .csv), 메모장(.txt), PDF, 이미지 등 모든 파일 지원 (브라우저 안전 보관)</div>
+            <button type="button" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.1rem;" onclick="event.stopPropagation(); document.getElementById('vault-file-hidden-input').click()">
+              내 컴퓨터에서 파일 찾기
+            </button>
+          </div>
+
+          <!-- Stored Files Grid -->
+          <div class="files-grid" id="files-grid-container">
+            <!-- Dynamically rendered stored file cards -->
+          </div>
+
+          <!-- Vault Empty State -->
+          <div id="vault-empty-state" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">📂</div>
+            <h3>보관된 파일이 아직 없어요</h3>
+            <p>자주 확인하는 엑셀 파일이나 메모장 텍스트 파일을 등록해 두면 언제든 다시 다운로드할 수 있어요 ✨</p>
+            <button class="btn btn-primary" onclick="document.getElementById('vault-file-hidden-input').click()">
+              + 첫 파일 보관하기
+            </button>
+          </div>
         </div>
+
       </main>
     </div>
   </div>
@@ -338,6 +394,33 @@
         <div class="modal-actions">
           <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-modal>취소</button>
           <button type="submit" class="btn btn-primary" id="btn-save-task">저장하기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Upload File to Vault -->
+  <div id="upload-file-modal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title">📁 파일 보관소에 업로드</h3>
+        <button class="modal-close-btn" data-close-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="file-upload-form">
+        <div class="form-group">
+          <label class="form-label" for="modal-vault-file-input">보관할 파일 선택 *</label>
+          <input type="file" id="modal-vault-file-input" class="form-input" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="modal-vault-file-note">간단한 메모 / 설명</label>
+          <textarea id="modal-vault-file-note" class="form-textarea" placeholder="예: 2026년 가계부 정리 시트, 아이디어 메모 등..." style="min-height: 70px;"></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-modal>취소</button>
+          <button type="submit" class="btn btn-primary">보관하기 💾</button>
         </div>
       </form>
     </div>

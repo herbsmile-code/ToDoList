@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ToDoList JY - iOS Pastel & Cute Design System
+   Todolist JY - iOS Pastel & Cute Design System
    Apple-inspired Aesthetic, Rounded Glassmorphism, Lovely Pastel Colors
    ========================================================================== */
 
@@ -184,6 +184,8 @@ body::after {
   align-items: center;
   gap: 0.65rem;
   text-decoration: none;
+  cursor: pointer;
+  user-select: none;
 }
 
 .brand-icon {
@@ -489,6 +491,15 @@ body::after {
 .category-drag-item.drag-over-bottom {
   border-bottom: 2.5px solid var(--primary) !important;
   transform: translateY(2px);
+}
+
+/* File Vault Sidebar Item */
+.vault-nav-item {
+  margin-top: 0.5rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--border-color);
+  font-weight: 700;
+  color: var(--primary);
 }
 
 /* --- Productivity Stats Ring Card --- */
@@ -1020,6 +1031,166 @@ body::after {
   min-height: 380px;
 }
 
+/* ==========================================================================
+   File Vault (파일 보관함) Styles
+   ========================================================================== */
+#files-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Upload Card / Dropzone */
+.file-upload-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-xl);
+  border: 2px dashed var(--border-color);
+  padding: 1.75rem;
+  text-align: center;
+  transition: all 0.25s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.file-upload-card:hover, .file-upload-card.drag-over {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.file-upload-icon {
+  font-size: 2.8rem;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 4px 10px rgba(255, 107, 139, 0.3));
+}
+
+.file-upload-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+}
+
+.file-upload-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+/* Files Grid */
+.files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.file-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.85rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.file-card:hover {
+  background: var(--bg-card-hover);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(255, 107, 139, 0.4);
+}
+
+.file-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.file-type-badge {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  background: var(--primary-light);
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(255, 107, 139, 0.15);
+}
+
+.file-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--text-main);
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+.file-submeta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.file-note-box {
+  background: rgba(0, 0, 0, 0.03);
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+[data-theme="dark"] .file-note-box {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.file-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.btn-file-download {
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, #ff8fa3, #ff6b8b);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  box-shadow: 0 3px 8px var(--primary-glow);
+  transition: all 0.2s ease;
+}
+
+.btn-file-download:hover {
+  transform: scale(1.05);
+}
+
 /* --- Empty State --- */
 .empty-state {
   display: flex;
@@ -1256,6 +1427,9 @@ body::after {
     display: none;
   }
   .kanban-board {
+    grid-template-columns: 1fr;
+  }
+  .files-grid {
     grid-template-columns: 1fr;
   }
 }

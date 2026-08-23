@@ -1,6 +1,8 @@
 /**
- * ToDoList JY - Standalone Application Script
+ * Todolist JY - Standalone Application Script
  * Features:
+ * - Brand Name Click: Instant reset to '모든 할 일 (All Tasks)'
+ * - File Vault (IndexedDB): Store, preview notes, and download Excel/Text/Docs anytime
  * - Category Drag & Drop Reordering with Persistent Storage
  * - iOS Apple Pastel Cute Design & Sound/Confetti Animations
  * - Zero CORS dependency for file:/// and http:// execution
@@ -125,7 +127,7 @@
   const sounds = new CuteSoundEngine();
 
   // =========================================================================
-  // 2. Cute Pastel Confetti & Heart Particles Engine
+  // 2. Cute Pastel Confetti Engine
   // =========================================================================
   class CuteConfettiEngine {
     constructor() {
@@ -234,10 +236,114 @@
   const confetti = new CuteConfettiEngine();
 
   // =========================================================================
-  // 3. State Management & LocalStorage Store
+  // 3. IndexedDB File Vault Engine (Local Secure File Storage)
   // =========================================================================
-  const STORAGE_KEY = 'todolist_jy_data_v3';
-  const STREAK_KEY = 'todolist_jy_streak_v3';
+  class FileVaultDB {
+    constructor() {
+      this.dbName = 'TodolistJY_FileVault_v1';
+      this.storeName = 'vault_files';
+      this.db = null;
+    }
+
+    async init() {
+      if (this.db) return this.db;
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(this.dbName, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(this.storeName)) {
+            db.createObjectStore(this.storeName, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = (e) => {
+          this.db = e.target.result;
+          resolve(this.db);
+        };
+        req.onerror = (e) => reject(e);
+      });
+    }
+
+    async getAll() {
+      await this.init();
+      return new Promise((resolve, reject) => {
+        const tx = this.db.transaction(this.storeName, 'readonly');
+        const store = tx.objectStore(this.storeName);
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const files = req.result || [];
+          files.sort((a, b) => b.createdAt - a.createdAt);
+          resolve(files);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async saveFile(file, note = '') {
+      await this.init();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const fileRecord = {
+            id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            name: file.name,
+            size: file.size,
+            type: file.type || 'application/octet-stream',
+            note: note.trim(),
+            data: e.target.result, // Data URL
+            createdAt: Date.now()
+          };
+          const tx = this.db.transaction(this.storeName, 'readwrite');
+          const store = tx.objectStore(this.storeName);
+          const req = store.put(fileRecord);
+          req.onsuccess = () => resolve(fileRecord);
+          req.onerror = () => reject(req.error);
+        };
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async deleteFile(id) {
+      await this.init();
+      return new Promise((resolve, reject) => {
+        const tx = this.db.transaction(this.storeName, 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        const req = store.delete(id);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async downloadFile(id) {
+      await this.init();
+      return new Promise((resolve, reject) => {
+        const tx = this.db.transaction(this.storeName, 'readonly');
+        const store = tx.objectStore(this.storeName);
+        const req = store.get(id);
+        req.onsuccess = () => {
+          const file = req.result;
+          if (!file) return resolve(false);
+
+          const a = document.createElement('a');
+          a.href = file.data;
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          resolve(true);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+  }
+
+  const fileVault = new FileVaultDB();
+
+  // =========================================================================
+  // 4. State Management & LocalStorage Store
+  // =========================================================================
+  const STORAGE_KEY = 'todolist_jy_data_v4';
+  const STREAK_KEY = 'todolist_jy_streak_v4';
 
   const DEFAULT_CATEGORIES = [
     { id: 'routine', name: '💖 갓생·루틴', color: '#ff6b8b' },
@@ -268,8 +374,8 @@
     },
     {
       id: 'task-2',
-      title: '🎀 ToDoList JY 할 일 등록하고 우선순위 정리',
-      description: '좌측 카테고리 태그를 마우스로 잡고 위아래로 드래그해서 순서를 바꿔보세요!',
+      title: '🎀 Todolist JY 로고 누르면 모든 할 일로 이동',
+      description: '왼쪽 상단 Todolist JY 로고를 누르면 어디서든 모든 할 일 화면으로 초기화돼요!',
       status: 'in-progress',
       priority: 'urgent',
       category: 'work',
@@ -277,8 +383,8 @@
       dueTime: '15:00',
       pinned: true,
       subtasks: [
-        { id: 's3', title: '카테고리 위아래로 드래그해서 순서 변경해보기', completed: false },
-        { id: 's4', title: '체크박스 눌러서 예쁜 완료 소리와 폭죽 보기', completed: false }
+        { id: 's3', title: '좌측 하단 [📁 파일 보관함] 메뉴 눌러서 엑셀/메모장 올려보기', completed: false },
+        { id: 's4', title: '상단 Todolist JY 로고 클릭해서 모든 할 일로 돌아오기', completed: false }
       ],
       createdAt: Date.now() - 3600000 * 3
     },
@@ -314,7 +420,7 @@
     constructor() {
       this.tasks = [];
       this.categories = DEFAULT_CATEGORIES;
-      this.activeFilter = 'all';
+      this.activeFilter = 'all'; // 'all', 'today', 'upcoming', 'overdue', 'pinned', 'completed', categoryId, or 'vault'
       this.activePriority = 'all';
       this.searchQuery = '';
       this.sortBy = 'dueDate';
@@ -515,7 +621,7 @@
 
     exportJSON() {
       return JSON.stringify({
-        appName: 'ToDoList JY',
+        appName: 'Todolist JY',
         tasks: this.tasks,
         categories: this.categories,
         exportedAt: new Date().toISOString()
@@ -547,7 +653,7 @@
   const store = new Store();
 
   // =========================================================================
-  // 4. UI View Engine
+  // 5. UI View Engine
   // =========================================================================
   const UI = {
     showToast(message, type = 'info') {
@@ -568,6 +674,25 @@
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
       }, 2400);
+    },
+
+    formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    },
+
+    getFileIcon(fileName = '') {
+      const ext = fileName.split('.').pop().toLowerCase();
+      if (['xlsx', 'xls', 'csv'].includes(ext)) return { icon: '📊', label: 'Excel' };
+      if (['txt', 'md', 'json', 'log'].includes(ext)) return { icon: '📝', label: 'Memo/Text' };
+      if (['pdf'].includes(ext)) return { icon: '📑', label: 'PDF' };
+      if (['doc', 'docx', 'hwp'].includes(ext)) return { icon: '📄', label: 'Doc' };
+      if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return { icon: '🖼️', label: 'Image' };
+      if (['zip', 'rar', '7z', 'tar'].includes(ext)) return { icon: '📦', label: 'Zip' };
+      return { icon: '📁', label: 'File' };
     },
 
     formatDueDate(dateStr, timeStr) {
@@ -603,7 +728,7 @@
       return map[p] || map.medium;
     },
 
-    renderSidebar() {
+    async renderSidebar() {
       const stats = store.getStats();
       const counts = {
         all: store.tasks.length,
@@ -621,6 +746,13 @@
         const el = document.getElementById(`nav-count-${k}`);
         if (el) el.textContent = counts[k];
       });
+
+      // Update Vault files count
+      try {
+        const vaultFiles = await fileVault.getAll();
+        const vCount = document.getElementById('nav-count-vault');
+        if (vCount) vCount.textContent = vaultFiles.length;
+      } catch (e) {}
 
       // Render Categories with Drag & Drop handles
       const catContainer = document.getElementById('category-nav-list');
@@ -719,9 +851,25 @@
     },
 
     renderTasks() {
+      const tasksView = document.getElementById('tasks-view-container');
+      const filesView = document.getElementById('files-view-container');
       const listContainer = document.getElementById('tasks-list-container');
       const kanbanContainer = document.getElementById('kanban-board-container');
       const emptyState = document.getElementById('empty-state');
+
+      // If in Vault view
+      if (store.activeFilter === 'vault') {
+        if (tasksView) tasksView.style.display = 'none';
+        if (filesView) filesView.style.display = 'flex';
+        this.renderFilesVault();
+        this.renderSidebar();
+        return;
+      }
+
+      // Normal Tasks View
+      if (tasksView) tasksView.style.display = 'flex';
+      if (filesView) filesView.style.display = 'none';
+
       const filtered = store.getFilteredTasks();
 
       const headingEl = document.getElementById('view-title');
@@ -781,6 +929,55 @@
       this.renderSidebar();
     },
 
+    async renderFilesVault() {
+      const grid = document.getElementById('files-grid-container');
+      const emptyState = document.getElementById('vault-empty-state');
+      if (!grid) return;
+
+      try {
+        const files = await fileVault.getAll();
+        if (files.length === 0) {
+          grid.innerHTML = '';
+          if (emptyState) emptyState.style.display = 'flex';
+        } else {
+          if (emptyState) emptyState.style.display = 'none';
+          grid.innerHTML = files.map(file => {
+            const iconInfo = this.getFileIcon(file.name);
+            const dateStr = new Date(file.createdAt).toLocaleDateString('ko-KR', {
+              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+
+            return `
+              <div class="file-card" data-file-id="${file.id}">
+                <div class="file-card-top">
+                  <div class="file-type-badge">${iconInfo.icon}</div>
+                  <div class="file-meta">
+                    <div class="file-name" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</div>
+                    <div class="file-submeta">
+                      <span>${this.formatBytes(file.size)}</span> • <span>${dateStr}</span>
+                    </div>
+                  </div>
+                </div>
+
+                ${file.note ? `<div class="file-note-box">💬 ${escapeHTML(file.note)}</div>` : ''}
+
+                <div class="file-card-actions">
+                  <button type="button" class="btn-file-download" data-action="download-file" data-file-id="${file.id}">
+                    📥 다운로드
+                  </button>
+                  <button type="button" class="task-action-btn delete-btn" data-action="delete-file" data-file-id="${file.id}" title="파일 삭제">
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      } catch (e) {
+        console.error('Error loading vault files:', e);
+      }
+    },
+
     openTaskModal(taskId = null) {
       const modal = document.getElementById('task-modal');
       const form = document.getElementById('task-form');
@@ -814,7 +1011,7 @@
         document.getElementById('task-input-priority').value = 'medium';
         document.getElementById('task-input-status').value = 'todo';
         document.getElementById('task-input-duedate').value = new Date().toISOString().split('T')[0];
-        const defaultCat = store.activeFilter !== 'all' && store.categories.some(c => c.id === store.activeFilter)
+        const defaultCat = store.activeFilter !== 'all' && store.activeFilter !== 'vault' && store.categories.some(c => c.id === store.activeFilter)
           ? store.activeFilter
           : (store.categories[0] ? store.categories[0].id : 'routine');
         document.getElementById('task-input-category').value = defaultCat;
@@ -841,6 +1038,18 @@
         <button type="button" class="task-action-btn delete-btn" title="삭제" onclick="this.parentElement.remove()">✕</button>
       `;
       list.appendChild(row);
+    },
+
+    openFileUploadModal() {
+      const modal = document.getElementById('upload-file-modal');
+      const form = document.getElementById('file-upload-form');
+      if (form) form.reset();
+      if (modal) modal.classList.add('active');
+    },
+
+    closeFileUploadModal() {
+      const modal = document.getElementById('upload-file-modal');
+      if (modal) modal.classList.remove('active');
     }
   };
 
@@ -856,7 +1065,7 @@
   }
 
   // =========================================================================
-  // 5. App Event Handlers & Controller
+  // 6. App Event Handlers & Controller
   // =========================================================================
   function initApp() {
     initTheme();
@@ -864,6 +1073,7 @@
     bindEvents();
     bindDragAndDrop();
     bindCategoryDragAndDrop();
+    bindFileVaultEvents();
     UI.renderTasks();
   }
 
@@ -893,6 +1103,22 @@
     select.innerHTML = store.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
   }
 
+  function resetToAllTasks() {
+    store.activeFilter = 'all';
+    store.searchQuery = '';
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = '';
+
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    const allNav = document.getElementById('nav-filter-all');
+    if (allNav) allNav.classList.add('active');
+
+    UI.renderTasks();
+    sounds.playAdd();
+    UI.showToast('모든 할 일 목록으로 이동했어요 🌸', 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   function handleQuickAdd(e) {
     if (e) e.preventDefault();
     const input = document.getElementById('quick-add-input');
@@ -904,7 +1130,7 @@
       return;
     }
 
-    const defaultCat = store.activeFilter !== 'all' && store.categories.some(c => c.id === store.activeFilter)
+    const defaultCat = store.activeFilter !== 'all' && store.activeFilter !== 'vault' && store.categories.some(c => c.id === store.activeFilter)
       ? store.activeFilter
       : (store.categories[0] ? store.categories[0].id : 'routine');
 
@@ -923,7 +1149,16 @@
   }
 
   function bindEvents() {
-    // 1. Quick Add Form and Enter Key Listener
+    // 1. Brand Click: Reset to All Tasks
+    const brandLinks = document.querySelectorAll('.brand');
+    brandLinks.forEach(b => {
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        resetToAllTasks();
+      });
+    });
+
+    // 2. Quick Add Form and Enter Key Listener
     const quickForm = document.getElementById('quick-add-form');
     if (quickForm) {
       quickForm.addEventListener('submit', handleQuickAdd);
@@ -944,7 +1179,7 @@
       quickBtn.addEventListener('click', handleQuickAdd);
     }
 
-    // 2. Theme & Sound Toggles
+    // 3. Theme & Sound Toggles
     const themeBtn = document.getElementById('btn-theme-toggle');
     if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
 
@@ -958,7 +1193,7 @@
       if (!sounds.enabled) soundBtn.querySelector('.icon').textContent = '🔇';
     }
 
-    // 3. Search Input
+    // 4. Search Input
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
@@ -967,7 +1202,7 @@
       });
     }
 
-    // 4. View Switcher
+    // 5. View Switcher
     const vList = document.getElementById('btn-view-list');
     const vKanban = document.getElementById('btn-view-kanban');
     if (vList && vKanban) {
@@ -993,7 +1228,7 @@
       }
     }
 
-    // 5. Selects
+    // 6. Selects
     const sortSelect = document.getElementById('sort-select');
     if (sortSelect) {
       sortSelect.value = store.sortBy;
@@ -1011,7 +1246,7 @@
       });
     }
 
-    // 6. Sidebar Nav Filter Click (Only when not dragging)
+    // 7. Sidebar Nav Filter Click
     document.addEventListener('click', (e) => {
       const navItem = e.target.closest('.nav-item');
       if (navItem && navItem.dataset.filter) {
@@ -1022,13 +1257,14 @@
       }
     });
 
-    // 7. Modals
+    // 8. Modals
     const openTaskBtn = document.getElementById('btn-open-task-modal');
     if (openTaskBtn) openTaskBtn.addEventListener('click', () => UI.openTaskModal());
 
     document.querySelectorAll('[data-close-modal]').forEach(b => {
       b.addEventListener('click', () => {
         UI.closeTaskModal();
+        UI.closeFileUploadModal();
         const sc = document.getElementById('shortcuts-modal');
         const st = document.getElementById('settings-modal');
         if (sc) sc.classList.remove('active');
@@ -1133,7 +1369,7 @@
         return;
       }
 
-      // Delete
+      // Delete Task
       const delBtn = target.closest('[data-action="delete"]');
       if (delBtn) {
         const card = delBtn.closest('.task-card');
@@ -1146,7 +1382,7 @@
         return;
       }
 
-      // Edit
+      // Edit Task
       const editBtn = target.closest('[data-action="open-edit"]');
       if (editBtn) {
         const card = editBtn.closest('.task-card');
@@ -1160,6 +1396,7 @@
       const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
       if (e.key === 'Escape') {
         UI.closeTaskModal();
+        UI.closeFileUploadModal();
         const sc = document.getElementById('shortcuts-modal');
         const st = document.getElementById('settings-modal');
         if (sc) sc.classList.remove('active');
@@ -1211,7 +1448,7 @@
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(store.exportJSON());
         const a = document.createElement('a');
         a.href = dataStr;
-        a.download = `ToDoList-JY-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `Todolist-JY-backup-${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -1256,7 +1493,7 @@
   }
 
   // =========================================================================
-  // 6. Category Drag & Drop Reordering Handler
+  // 7. Category Drag & Drop Reordering Handler
   // =========================================================================
   function bindCategoryDragAndDrop() {
     let draggedCatId = null;
@@ -1332,15 +1569,135 @@
   }
 
   // =========================================================================
-  // 7. Kanban Drag & Drop Handler
+  // 8. File Vault (파일 보관함) Event Handlers
+  // =========================================================================
+  function bindFileVaultEvents() {
+    // Open Upload Modal
+    const btnOpenUpload = document.getElementById('btn-open-file-upload');
+    if (btnOpenUpload) {
+      btnOpenUpload.addEventListener('click', () => UI.openFileUploadModal());
+    }
+
+    const dropzone = document.getElementById('vault-dropzone');
+    const hiddenFileInput = document.getElementById('vault-file-hidden-input');
+
+    if (dropzone && hiddenFileInput) {
+      dropzone.addEventListener('click', () => hiddenFileInput.click());
+
+      dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('drag-over');
+      });
+
+      dropzone.addEventListener('dragleave', () => {
+        dropzone.classList.remove('drag-over');
+      });
+
+      dropzone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('drag-over');
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+          await handleVaultFileUpload(files[0]);
+        }
+      });
+
+      hiddenFileInput.addEventListener('change', async (e) => {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+          await handleVaultFileUpload(files[0]);
+        }
+      });
+    }
+
+    // Modal Form Upload
+    const uploadForm = document.getElementById('file-upload-form');
+    if (uploadForm) {
+      uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const modalFileInput = document.getElementById('modal-vault-file-input');
+        const modalNoteInput = document.getElementById('modal-vault-file-note');
+        if (!modalFileInput || !modalFileInput.files || modalFileInput.files.length === 0) {
+          UI.showToast('업로드할 파일을 선택해주세요!', 'danger');
+          return;
+        }
+
+        const file = modalFileInput.files[0];
+        const note = modalNoteInput ? modalNoteInput.value.trim() : '';
+
+        try {
+          await fileVault.saveFile(file, note);
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
+          UI.showToast(`'${file.name}' 파일이 안전하게 보관되었어요! 💾`, 'success');
+          UI.closeFileUploadModal();
+          UI.renderFilesVault();
+          UI.renderSidebar();
+        } catch (err) {
+          console.error(err);
+          UI.showToast('파일 저장 중 오류가 발생했습니다.', 'danger');
+        }
+      });
+    }
+
+    // Download & Delete Actions via Delegation
+    document.addEventListener('click', async (e) => {
+      const target = e.target;
+
+      // Download
+      const dlBtn = target.closest('[data-action="download-file"]');
+      if (dlBtn) {
+        const fileId = dlBtn.dataset.fileId;
+        if (fileId) {
+          sounds.playComplete();
+          await fileVault.downloadFile(fileId);
+          UI.showToast('파일 다운로드가 시작되었어요! 📥', 'success');
+        }
+        return;
+      }
+
+      // Delete
+      const delFileBtn = target.closest('[data-action="delete-file"]');
+      if (delFileBtn) {
+        const fileId = delFileBtn.dataset.fileId;
+        if (fileId && confirm('보관 중인 이 파일을 삭제할까요?')) {
+          await fileVault.deleteFile(fileId);
+          sounds.playDelete();
+          UI.showToast('파일이 보관함에서 삭제되었어요.', 'danger');
+          UI.renderFilesVault();
+          UI.renderSidebar();
+        }
+        return;
+      }
+    });
+  }
+
+  async function handleVaultFileUpload(file) {
+    if (!file) return;
+    const note = prompt(`'${file.name}' 파일에 대한 간단한 메모를 입력하세요 (선택 사항):`, '');
+    if (note === null) return; // Cancelled
+
+    try {
+      await fileVault.saveFile(file, note);
+      sounds.playAdd();
+      confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
+      UI.showToast(`'${file.name}' 파일이 안전하게 보관되었어요! 💾`, 'success');
+      UI.renderFilesVault();
+      UI.renderSidebar();
+    } catch (err) {
+      console.error(err);
+      UI.showToast('파일 저장 중 오류가 발생했습니다.', 'danger');
+    }
+  }
+
+  // =========================================================================
+  // 9. Kanban Drag & Drop Handler
   // =========================================================================
   function bindDragAndDrop() {
     let draggedId = null;
 
     document.addEventListener('dragstart', (e) => {
-      // Ignore if it's a category item
       if (e.target.closest('.category-drag-item')) return;
-
       const card = e.target.closest('.task-card');
       if (!card) return;
       draggedId = card.dataset.id;
