@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ZenTask - iOS Pastel & Cute Design System
+   ToDoList JY - iOS Pastel & Cute Design System
    Apple-inspired Aesthetic, Rounded Glassmorphism, Lovely Pastel Colors
    ========================================================================== */
 
@@ -109,7 +109,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
-  transition: background var(--transition-normal), color var(--transition-normal);
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 /* Cute Ambient Light Bubbles */
@@ -380,6 +380,15 @@ body::after {
   justify-content: space-between;
 }
 
+.sidebar-hint {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+}
+
 /* Navigation List */
 .nav-list {
   list-style: none;
@@ -399,6 +408,7 @@ body::after {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .nav-item:hover {
@@ -440,6 +450,45 @@ body::after {
   border-radius: 50%;
   display: inline-block;
   box-shadow: 0 0 6px currentColor;
+}
+
+/* --- Category Drag and Drop Styles --- */
+.category-drag-item {
+  cursor: grab;
+  user-select: none;
+}
+
+.category-drag-item:active {
+  cursor: grabbing;
+}
+
+.category-drag-handle {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-right: 0.25rem;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.category-drag-item:hover .category-drag-handle {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.category-drag-item.dragging {
+  opacity: 0.4;
+  transform: scale(0.96);
+  background: var(--primary-light);
+}
+
+.category-drag-item.drag-over-top {
+  border-top: 2.5px solid var(--primary) !important;
+  transform: translateY(-2px);
+}
+
+.category-drag-item.drag-over-bottom {
+  border-bottom: 2.5px solid var(--primary) !important;
+  transform: translateY(2px);
 }
 
 /* --- Productivity Stats Ring Card --- */
@@ -700,7 +749,7 @@ body::after {
   background: linear-gradient(90deg, rgba(255, 107, 139, 0.05), var(--bg-card));
 }
 
-/* Cute Bubbly Heart Checkbox */
+/* Cute Bubbly Checkbox */
 .task-checkbox-container {
   margin-top: 2px;
   cursor: pointer;

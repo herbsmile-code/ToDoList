@@ -1,6 +1,9 @@
 /**
- * ZenTask - All-in-One Standalone Application Script
- * Optimized for local file:/// and http:// execution without CORS module blocking.
+ * ToDoList JY - Standalone Application Script
+ * Features:
+ * - Category Drag & Drop Reordering with Persistent Storage
+ * - iOS Apple Pastel Cute Design & Sound/Confetti Animations
+ * - Zero CORS dependency for file:/// and http:// execution
  */
 
 (function() {
@@ -12,7 +15,7 @@
   class CuteSoundEngine {
     constructor() {
       this.audioCtx = null;
-      this.enabled = localStorage.getItem('zentask_sound') !== 'false';
+      this.enabled = localStorage.getItem('todolist_jy_sound') !== 'false';
     }
 
     init() {
@@ -27,7 +30,7 @@
 
     toggle() {
       this.enabled = !this.enabled;
-      localStorage.setItem('zentask_sound', this.enabled);
+      localStorage.setItem('todolist_jy_sound', this.enabled);
       return this.enabled;
     }
 
@@ -56,7 +59,6 @@
       this.init();
       try {
         const now = this.audioCtx.currentTime;
-        // High cute bell chimes: G5 -> C6
         [783.99, 1046.50].forEach((freq, idx) => {
           const osc = this.audioCtx.createOscillator();
           const gain = this.audioCtx.createGain();
@@ -210,7 +212,6 @@
         this.ctx.fillStyle = p.color;
 
         if (p.isHeart) {
-          // Draw mini cute heart
           const s = p.size * 0.5;
           this.ctx.beginPath();
           this.ctx.moveTo(0, s * 0.3);
@@ -235,8 +236,8 @@
   // =========================================================================
   // 3. State Management & LocalStorage Store
   // =========================================================================
-  const STORAGE_KEY = 'zentask_ios_data_v2';
-  const STREAK_KEY = 'zentask_ios_streak_v2';
+  const STORAGE_KEY = 'todolist_jy_data_v3';
+  const STREAK_KEY = 'todolist_jy_streak_v3';
 
   const DEFAULT_CATEGORIES = [
     { id: 'routine', name: '💖 갓생·루틴', color: '#ff6b8b' },
@@ -267,8 +268,8 @@
     },
     {
       id: 'task-2',
-      title: '🎀 오늘 할 일 목록 확인하고 우선순위 정리',
-      description: '단축키(N: 새 할 일, /: 검색, T: 테마)와 칸반 보드도 테스트해 보기!',
+      title: '🎀 ToDoList JY 할 일 등록하고 우선순위 정리',
+      description: '좌측 카테고리 태그를 마우스로 잡고 위아래로 드래그해서 순서를 바꿔보세요!',
       status: 'in-progress',
       priority: 'urgent',
       category: 'work',
@@ -276,8 +277,8 @@
       dueTime: '15:00',
       pinned: true,
       subtasks: [
-        { id: 's3', title: '체크박스 눌러서 예쁜 완료 소리와 폭죽 보기', completed: false },
-        { id: 's4', title: '새로운 할 일 빠르게 추가해보기', completed: false }
+        { id: 's3', title: '카테고리 위아래로 드래그해서 순서 변경해보기', completed: false },
+        { id: 's4', title: '체크박스 눌러서 예쁜 완료 소리와 폭죽 보기', completed: false }
       ],
       createdAt: Date.now() - 3600000 * 3
     },
@@ -317,7 +318,7 @@
       this.activePriority = 'all';
       this.searchQuery = '';
       this.sortBy = 'dueDate';
-      this.viewMode = localStorage.getItem('zentask_view') || 'list';
+      this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
       this.streak = { count: 3, lastDate: new Date().toISOString().split('T')[0] };
       this.load();
     }
@@ -354,6 +355,18 @@
       } catch (e) {}
     }
 
+    reorderCategories(draggedId, targetId, insertAfter = false) {
+      const fromIndex = this.categories.findIndex(c => c.id === draggedId);
+      const toIndex = this.categories.findIndex(c => c.id === targetId);
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+
+      const [item] = this.categories.splice(fromIndex, 1);
+      let newIndex = this.categories.findIndex(c => c.id === targetId);
+      if (insertAfter) newIndex += 1;
+      this.categories.splice(newIndex, 0, item);
+      this.save();
+    }
+
     addTask(data) {
       const newTask = {
         id: 'task-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
@@ -361,7 +374,7 @@
         description: (data.description || '').trim(),
         status: data.status || 'todo',
         priority: data.priority || 'medium',
-        category: data.category || 'routine',
+        category: data.category || (this.categories[0] ? this.categories[0].id : 'routine'),
         dueDate: data.dueDate || new Date().toISOString().split('T')[0],
         dueTime: data.dueTime || '',
         pinned: !!data.pinned,
@@ -502,6 +515,7 @@
 
     exportJSON() {
       return JSON.stringify({
+        appName: 'ToDoList JY',
         tasks: this.tasks,
         categories: this.categories,
         exportedAt: new Date().toISOString()
@@ -608,14 +622,16 @@
         if (el) el.textContent = counts[k];
       });
 
+      // Render Categories with Drag & Drop handles
       const catContainer = document.getElementById('category-nav-list');
       if (catContainer) {
         catContainer.innerHTML = store.categories.map(cat => {
           const count = store.tasks.filter(t => t.category === cat.id).length;
           const isActive = store.activeFilter === cat.id ? 'active' : '';
           return `
-            <li class="nav-item ${isActive}" data-filter="${cat.id}">
+            <li class="nav-item category-drag-item ${isActive}" draggable="true" data-cat-id="${cat.id}" data-filter="${cat.id}">
               <div class="nav-item-left">
+                <span class="category-drag-handle" title="위아래로 드래그하여 순서 변경">⋮⋮</span>
                 <span class="category-dot" style="background-color: ${cat.color}; color: ${cat.color};"></span>
                 <span>${cat.name}</span>
               </div>
@@ -715,7 +731,7 @@
         upcoming: '다가오는 일정 🗓️',
         overdue: '기한 지연된 할 일 ⚠️',
         pinned: '중요한 할 일 💖',
-        completed: '완료된 할 일 ✨'
+        completed: '완료된 목록 ✨'
       };
       const catMatch = store.categories.find(c => c.id === store.activeFilter);
       if (headingEl) headingEl.textContent = filterNames[store.activeFilter] || (catMatch ? `${catMatch.name} 할 일` : '할 일 목록');
@@ -800,7 +816,7 @@
         document.getElementById('task-input-duedate').value = new Date().toISOString().split('T')[0];
         const defaultCat = store.activeFilter !== 'all' && store.categories.some(c => c.id === store.activeFilter)
           ? store.activeFilter
-          : 'routine';
+          : (store.categories[0] ? store.categories[0].id : 'routine');
         document.getElementById('task-input-category').value = defaultCat;
       }
 
@@ -847,11 +863,12 @@
     populateCategoriesSelect();
     bindEvents();
     bindDragAndDrop();
+    bindCategoryDragAndDrop();
     UI.renderTasks();
   }
 
   function initTheme() {
-    const saved = localStorage.getItem('zentask_theme') || 'light';
+    const saved = localStorage.getItem('todolist_jy_theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
     updateThemeIcon(saved);
   }
@@ -860,7 +877,7 @@
     const current = document.documentElement.getAttribute('data-theme') || 'light';
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('zentask_theme', next);
+    localStorage.setItem('todolist_jy_theme', next);
     updateThemeIcon(next);
     UI.showToast(next === 'dark' ? '포근한 라벤더 다크 모드 🌙' : '화사한 체리블라썸 라이트 모드 🌸', 'info');
   }
@@ -889,7 +906,7 @@
 
     const defaultCat = store.activeFilter !== 'all' && store.categories.some(c => c.id === store.activeFilter)
       ? store.activeFilter
-      : 'routine';
+      : (store.categories[0] ? store.categories[0].id : 'routine');
 
     store.addTask({
       title,
@@ -956,7 +973,7 @@
     if (vList && vKanban) {
       vList.addEventListener('click', () => {
         store.viewMode = 'list';
-        localStorage.setItem('zentask_view', 'list');
+        localStorage.setItem('todolist_jy_view', 'list');
         vList.classList.add('active');
         vKanban.classList.remove('active');
         UI.renderTasks();
@@ -964,7 +981,7 @@
 
       vKanban.addEventListener('click', () => {
         store.viewMode = 'kanban';
-        localStorage.setItem('zentask_view', 'kanban');
+        localStorage.setItem('todolist_jy_view', 'kanban');
         vKanban.classList.add('active');
         vList.classList.remove('active');
         UI.renderTasks();
@@ -994,7 +1011,7 @@
       });
     }
 
-    // 6. Sidebar Nav Filter
+    // 6. Sidebar Nav Filter Click (Only when not dragging)
     document.addEventListener('click', (e) => {
       const navItem = e.target.closest('.nav-item');
       if (navItem && navItem.dataset.filter) {
@@ -1194,7 +1211,7 @@
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(store.exportJSON());
         const a = document.createElement('a');
         a.href = dataStr;
-        a.download = `zentask-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `ToDoList-JY-backup-${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -1230,6 +1247,7 @@
           store.resetDemo();
           UI.showToast('데모 데이터로 초기화되었어요 🌸', 'info');
           UI.renderTasks();
+          populateCategoriesSelect();
           const m = document.getElementById('settings-modal');
           if (m) m.classList.remove('active');
         }
@@ -1237,11 +1255,92 @@
     }
   }
 
-  // Kanban Drag & Drop
+  // =========================================================================
+  // 6. Category Drag & Drop Reordering Handler
+  // =========================================================================
+  function bindCategoryDragAndDrop() {
+    let draggedCatId = null;
+
+    document.addEventListener('dragstart', (e) => {
+      const catItem = e.target.closest('.category-drag-item');
+      if (!catItem) return;
+      draggedCatId = catItem.dataset.catId;
+      catItem.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedCatId);
+    });
+
+    document.addEventListener('dragend', (e) => {
+      const catItem = e.target.closest('.category-drag-item');
+      if (catItem) catItem.classList.remove('dragging');
+      document.querySelectorAll('.category-drag-item').forEach(el => {
+        el.classList.remove('drag-over-top', 'drag-over-bottom', 'dragging');
+      });
+    });
+
+    const catList = document.getElementById('category-nav-list');
+    if (catList) {
+      catList.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const targetItem = e.target.closest('.category-drag-item');
+        if (!targetItem || !draggedCatId || targetItem.dataset.catId === draggedCatId) return;
+
+        e.dataTransfer.dropEffect = 'move';
+        const rect = targetItem.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+
+        document.querySelectorAll('.category-drag-item').forEach(el => {
+          if (el !== targetItem) el.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+
+        if (e.clientY < midY) {
+          targetItem.classList.add('drag-over-top');
+          targetItem.classList.remove('drag-over-bottom');
+        } else {
+          targetItem.classList.add('drag-over-bottom');
+          targetItem.classList.remove('drag-over-top');
+        }
+      });
+
+      catList.addEventListener('dragleave', (e) => {
+        const targetItem = e.target.closest('.category-drag-item');
+        if (targetItem && !targetItem.contains(e.relatedTarget)) {
+          targetItem.classList.remove('drag-over-top', 'drag-over-bottom');
+        }
+      });
+
+      catList.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const targetItem = e.target.closest('.category-drag-item');
+        if (!targetItem || !draggedCatId || targetItem.dataset.catId === draggedCatId) {
+          document.querySelectorAll('.category-drag-item').forEach(el => {
+            el.classList.remove('drag-over-top', 'drag-over-bottom');
+          });
+          return;
+        }
+
+        const rect = targetItem.getBoundingClientRect();
+        const isAfter = e.clientY >= (rect.top + rect.height / 2);
+        const targetCatId = targetItem.dataset.catId;
+
+        store.reorderCategories(draggedCatId, targetCatId, isAfter);
+        UI.renderSidebar();
+        populateCategoriesSelect();
+        UI.showToast('카테고리 순서가 변경되었어요! 💖', 'info');
+      });
+    }
+  }
+
+  // =========================================================================
+  // 7. Kanban Drag & Drop Handler
+  // =========================================================================
   function bindDragAndDrop() {
     let draggedId = null;
 
     document.addEventListener('dragstart', (e) => {
+      // Ignore if it's a category item
+      if (e.target.closest('.category-drag-item')) return;
+
       const card = e.target.closest('.task-card');
       if (!card) return;
       draggedId = card.dataset.id;
@@ -1250,6 +1349,7 @@
     });
 
     document.addEventListener('dragend', (e) => {
+      if (e.target.closest('.category-drag-item')) return;
       const card = e.target.closest('.task-card');
       if (card) card.style.opacity = '1';
       document.querySelectorAll('.kanban-column').forEach(c => c.classList.remove('drag-over'));
