@@ -27,6 +27,14 @@
     measurementId: "G-F84W7VLNWC"
   };
 
+  // Helper to normalize Firebase object-arrays into standard JS arrays
+  function normalizeArray(val) {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'object') return Object.values(val);
+    return [];
+  }
+
   // =========================================================================
   // 1. Cute Web Audio Sound Engine
   // =========================================================================
