@@ -251,6 +251,14 @@
 
   const confetti = new CuteConfettiEngine();
 
+  // Helper to normalize Firebase RTDB object-arrays into JS arrays
+  function normalizeArray(val) {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'object') return Object.values(val);
+    return [];
+  }
+
   // =========================================================================
   // 3. 2-Step Security Cloud Sync Manager (Realtime DB + Firestore Dual Engine)
   // =========================================================================
@@ -304,125 +312,101 @@
         return false;
       }
 
-      const timeoutPromise = (ms = 2500) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
+      const timeoutPromise = (ms = 3000) => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
+      let foundData = null;
+      let engine = null;
 
-      // 1. Try Realtime Database (RTDB)
+      // 1. Check Realtime Database (RTDB)
       if (this.rtdb) {
         try {
           const ref = this.rtdb.ref('sync_spaces/' + sId);
-          const snapshot = await Promise.race([ref.once('value'), timeoutPromise(2500)]);
-          const data = snapshot ? snapshot.val() : null;
-
-          if (data) {
-            if (data.pin && data.pin !== sPin) {
-              UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
-              return false;
-            }
-            this.spaceId = sId;
-            this.pin = sPin;
-            localStorage.setItem('todolist_jy_space_id', sId);
-            localStorage.setItem('todolist_jy_pin', sPin);
-
-            if (data.tasks) store.tasks = data.tasks;
-            if (data.categories) store.categories = data.categories;
-            if (data.files) this.vaultFiles = data.files;
-            store.saveLocalOnly();
-
-            this.startRealtimeSync();
-            this.updateUIStatus();
-            UI.renderTasks();
-            UI.renderSidebar();
-            return true;
-          } else {
-            this.spaceId = sId;
-            this.pin = sPin;
-            localStorage.setItem('todolist_jy_space_id', sId);
-            localStorage.setItem('todolist_jy_pin', sPin);
-
-            const localFiles = await fileVaultDB.getAll();
-            this.vaultFiles = localFiles;
-
-            ref.set({
-              spaceId: sId,
-              pin: sPin,
-              tasks: store.tasks,
-              categories: store.categories,
-              files: this.vaultFiles,
-              updatedAt: Date.now()
-            }).catch(() => {});
-
-            this.startRealtimeSync();
-            this.updateUIStatus();
-            UI.renderTasks();
-            UI.renderSidebar();
-            return true;
+          const snapshot = await Promise.race([ref.once('value'), timeoutPromise(3000)]);
+          const val = snapshot ? snapshot.val() : null;
+          if (val) {
+            foundData = val;
+            engine = 'rtdb';
           }
         } catch (rtdbErr) {
-          console.warn('RTDB timeout/fallback:', rtdbErr);
+          console.warn('RTDB query warning:', rtdbErr);
         }
       }
 
-      // 2. Try Firestore
-      if (this.firestore) {
+      // 2. Check Firestore if not found in RTDB
+      if (!foundData && this.firestore) {
         try {
           const docRef = this.firestore.collection('sync_spaces').doc(sId);
-          const doc = await Promise.race([docRef.get(), timeoutPromise(2500)]);
-
+          const doc = await Promise.race([docRef.get(), timeoutPromise(3000)]);
           if (doc && doc.exists) {
-            const data = doc.data();
-            if (data.pin && data.pin !== sPin) {
-              UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
-              return false;
-            }
-            this.spaceId = sId;
-            this.pin = sPin;
-            localStorage.setItem('todolist_jy_space_id', sId);
-            localStorage.setItem('todolist_jy_pin', sPin);
-
-            if (data.tasks) store.tasks = data.tasks;
-            if (data.categories) store.categories = data.categories;
-            if (data.files) this.vaultFiles = data.files;
-            store.saveLocalOnly();
-
-            this.startRealtimeSync();
-            this.updateUIStatus();
-            UI.renderTasks();
-            UI.renderSidebar();
-            return true;
-          } else {
-            this.spaceId = sId;
-            this.pin = sPin;
-            localStorage.setItem('todolist_jy_space_id', sId);
-            localStorage.setItem('todolist_jy_pin', sPin);
-
-            const localFiles = await fileVaultDB.getAll();
-            this.vaultFiles = localFiles;
-
-            docRef.set({
-              spaceId: sId,
-              pin: sPin,
-              tasks: store.tasks,
-              categories: store.categories,
-              files: this.vaultFiles,
-              updatedAt: Date.now()
-            }).catch(() => {});
-
-            this.startRealtimeSync();
-            this.updateUIStatus();
-            UI.renderTasks();
-            UI.renderSidebar();
-            return true;
+            foundData = doc.data();
+            engine = 'firestore';
           }
         } catch (err) {
-          console.warn('Firestore connect warning:', err);
+          console.warn('Firestore query warning:', err);
         }
       }
 
-      // 3. Direct Optimistic Connection (Guarantees zero-lock UI response)
+      // If registered space exists: verify PIN
+      if (foundData) {
+        if (foundData.pin && foundData.pin !== sPin) {
+          UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
+          return false;
+        }
+
+        this.spaceId = sId;
+        this.pin = sPin;
+        localStorage.setItem('todolist_jy_space_id', sId);
+        localStorage.setItem('todolist_jy_pin', sPin);
+
+        if (foundData.tasks) store.tasks = normalizeArray(foundData.tasks);
+        if (foundData.categories) store.categories = normalizeArray(foundData.categories);
+        if (foundData.files) {
+          this.vaultFiles = normalizeArray(foundData.files);
+          this.vaultFiles.forEach(f => fileVaultDB.saveFileRecord(f));
+        } else {
+          this.vaultFiles = [];
+        }
+        store.saveLocalOnly();
+
+        this.startRealtimeSync();
+        this.updateUIStatus();
+        UI.renderTasks();
+        UI.renderSidebar();
+        return true;
+      }
+
+      // If no space exists in cloud, check if this is the very first creation matching current session
+      // Otherwise, reject unknown IDs to protect the user's account
+      const isExistingLocal = localStorage.getItem('todolist_jy_space_id') === sId;
+      if (!isExistingLocal && !confirm(`'${sId}' 아이디로 새로운 보안 공간을 처음 생성할까요?`)) {
+        UI.showToast('❌ 등록되지 않은 아이디입니다. 아이디를 확인해주세요!', 'danger');
+        return false;
+      }
+
+      // Initialize new space with local tasks/files
       this.spaceId = sId;
       this.pin = sPin;
       localStorage.setItem('todolist_jy_space_id', sId);
       localStorage.setItem('todolist_jy_pin', sPin);
+
+      const localFiles = await fileVaultDB.getAll();
+      this.vaultFiles = localFiles || [];
+
+      const initialPayload = {
+        spaceId: sId,
+        pin: sPin,
+        tasks: store.tasks,
+        categories: store.categories,
+        files: this.vaultFiles,
+        updatedAt: Date.now()
+      };
+
+      if (this.rtdb) {
+        this.rtdb.ref('sync_spaces/' + sId).set(initialPayload).catch(() => {});
+      }
+      if (this.firestore) {
+        this.firestore.collection('sync_spaces').doc(sId).set(initialPayload).catch(() => {});
+      }
+
       this.startRealtimeSync();
       this.updateUIStatus();
       UI.renderTasks();
@@ -482,7 +466,7 @@
     startRealtimeSync() {
       if (!this.spaceId) return;
 
-      // RTDB listener
+      // RTDB real-time sync listener
       if (this.rtdb) {
         if (this.rtdbRef) this.rtdbRef.off();
         this.rtdbRef = this.rtdb.ref('sync_spaces/' + this.spaceId);
@@ -490,13 +474,13 @@
           const data = snapshot.val();
           if (data) {
             if (data.tasks) {
-              store.tasks = data.tasks;
-              if (data.categories) store.categories = data.categories;
+              store.tasks = normalizeArray(data.tasks);
+              if (data.categories) store.categories = normalizeArray(data.categories);
               store.saveLocalOnly();
             }
             if (data.files) {
-              this.vaultFiles = data.files;
-              data.files.forEach(f => fileVaultDB.saveFileRecord(f));
+              this.vaultFiles = normalizeArray(data.files);
+              this.vaultFiles.forEach(f => fileVaultDB.saveFileRecord(f));
             }
             UI.renderTasks();
             UI.renderSidebar();
@@ -504,7 +488,7 @@
         });
       }
 
-      // Firestore listener
+      // Firestore real-time sync listener
       if (this.firestore) {
         if (this.firestoreUnsubscribe) this.firestoreUnsubscribe();
         const docRef = this.firestore.collection('sync_spaces').doc(this.spaceId);
@@ -512,13 +496,13 @@
           if (doc.exists) {
             const data = doc.data();
             if (data.tasks) {
-              store.tasks = data.tasks;
-              if (data.categories) store.categories = data.categories;
+              store.tasks = normalizeArray(data.tasks);
+              if (data.categories) store.categories = normalizeArray(data.categories);
               store.saveLocalOnly();
             }
             if (data.files) {
-              this.vaultFiles = data.files;
-              data.files.forEach(f => fileVaultDB.saveFileRecord(f));
+              this.vaultFiles = normalizeArray(data.files);
+              this.vaultFiles.forEach(f => fileVaultDB.saveFileRecord(f));
             }
             UI.renderTasks();
             UI.renderSidebar();
@@ -575,7 +559,9 @@
                 files: this.vaultFiles,
                 updatedAt: Date.now()
               });
-            } catch (err) {}
+            } catch (err) {
+              console.warn('RTDB upload err:', err);
+            }
           }
 
           if (this.firestore && this.spaceId) {
@@ -584,7 +570,9 @@
                 files: this.vaultFiles,
                 updatedAt: Date.now()
               }, { merge: true });
-            } catch (err) {}
+            } catch (err) {
+              console.warn('Firestore upload err:', err);
+            }
           }
 
           await fileVaultDB.saveFileRecord(fileRecord);
@@ -596,13 +584,30 @@
     }
 
     async getAllVaultFiles() {
-      if (this.spaceId && this.vaultFiles && this.vaultFiles.length > 0) {
+      if (this.vaultFiles && this.vaultFiles.length > 0) {
         return this.vaultFiles;
       }
-      const localFiles = await fileVaultDB.getAll();
-      if (!this.vaultFiles || this.vaultFiles.length === 0) {
-        this.vaultFiles = localFiles;
+      if (this.rtdb && this.spaceId) {
+        try {
+          const snap = await this.rtdb.ref('sync_spaces/' + this.spaceId + '/files').once('value');
+          const val = snap.val();
+          if (val) {
+            this.vaultFiles = normalizeArray(val);
+            return this.vaultFiles;
+          }
+        } catch (e) {}
       }
+      if (this.firestore && this.spaceId) {
+        try {
+          const doc = await this.firestore.collection('sync_spaces').doc(this.spaceId).get();
+          if (doc.exists && doc.data().files) {
+            this.vaultFiles = normalizeArray(doc.data().files);
+            return this.vaultFiles;
+          }
+        } catch (e) {}
+      }
+      const localFiles = await fileVaultDB.getAll();
+      this.vaultFiles = localFiles || [];
       return this.vaultFiles;
     }
 
