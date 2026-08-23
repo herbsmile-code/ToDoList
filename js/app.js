@@ -639,6 +639,38 @@
       const fileName = file.name || 'download.xlsx';
       const blob = dataURLtoBlob(file.data);
 
+      // 1. Modern Mobile Native Web Share API (Triggers iOS/Android Native Share Sheet: "Save to Files", "Open in Excel", etc.)
+      if (blob && navigator.canShare) {
+        try {
+          const mimeType = blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          const fileObj = new File([blob], fileName, { type: mimeType });
+          if (navigator.canShare({ files: [fileObj] })) {
+            await navigator.share({
+              files: [fileObj],
+              title: fileName,
+              text: `${fileName} 파일 다운로드`
+            });
+            return true;
+          }
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') return true; // User dismissed share sheet
+          console.warn('Share API warning:', shareErr);
+        }
+      }
+
+      // 2. KakaoTalk In-App Browser Fallback (KakaoTalk blocks standard <a> downloads)
+      if (/KAKAOTALK/i.test(navigator.userAgent)) {
+        if (/Android/i.test(navigator.userAgent)) {
+          const targetUrl = location.href.replace(/https?:\/\//i, '');
+          location.href = 'intent://' + targetUrl + '#Intent;scheme=https;package=com.android.chrome;end';
+          return true;
+        } else {
+          alert('카카오톡 인앱 브라우저는 자체 보안 정책상 파일 저장을 차단합니다.\n\n우측 상단 [ ⋮ ] 또는 [ ⋯ ] 버튼을 누르고 [Safari로 열기]를 선택하시면 엑셀 파일이 스마트폰에 바로 다운로드됩니다! 🌸');
+          return false;
+        }
+      }
+
+      // 3. Standard Blob ObjectURL Download for Safari / Chrome / PC
       if (blob) {
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -657,7 +689,7 @@
         return true;
       }
 
-      // Direct fallback
+      // 4. Direct anchor fallback
       const a = document.createElement('a');
       a.href = file.data;
       a.download = fileName;
@@ -1585,6 +1617,20 @@
     bindCloudEvents();
     bindMobileEvents();
     UI.renderTasks();
+    checkKakaoTalkBrowser();
+  }
+
+  function checkKakaoTalkBrowser() {
+    if (/KAKAOTALK/i.test(navigator.userAgent)) {
+      if (/Android/i.test(navigator.userAgent)) {
+        const targetUrl = location.href.replace(/https?:\/\//i, '');
+        location.href = 'intent://' + targetUrl + '#Intent;scheme=https;package=com.android.chrome;end';
+      } else {
+        setTimeout(() => {
+          UI.showToast('💡 카카오톡 앱에서는 파일 저장이 제한됩니다. 우측 상단 [ ⋮ ] ➔ [Safari로 열기]를 권장해요! 🌸', 'info', 6000);
+        }, 1500);
+      }
+    }
   }
 
   function initTheme() {
