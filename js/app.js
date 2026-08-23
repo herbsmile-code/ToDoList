@@ -2,10 +2,9 @@
  * Todolist JY - Standalone Application Script
  * Features:
  * - Full Mobile-First iOS Experience (Bottom Navigation Bar, Horizontal Pill Filters, Safe Area Insets)
- * - Zero-Error Secret Sync Key Cloud Engine (100% Reliable Cross-Device Sync & File Vault via Firestore)
- * - Optional Google Login Authentication
+ * - 2-Step Security Real-Time Cloud Sync (Space ID + 2-Step PIN Protection via Firestore)
+ * - Real-Time File Vault Cross-Device Synchronization (PC <-> Mobile 100% Instant Sync & Download)
  * - Brand Name Click: Instant reset to '모든 할 일 (All Tasks)'
- * - File Vault (IndexedDB + Cloud Firestore Base64 Storage for 100% Free Cross-Device Download)
  * - Category Drag & Drop Reordering with Persistent Storage
  * - iOS Apple Pastel Cute Design & Sound/Confetti Animations
  * - Zero CORS dependency for file:/// and http:// execution
@@ -252,15 +251,15 @@
   const confetti = new CuteConfettiEngine();
 
   // =========================================================================
-  // 3. Bulletproof Cloud Sync & File Vault Manager (Sync Key + Google Auth)
+  // 3. 2-Step Security Cloud Sync Manager (Space ID + PIN)
   // =========================================================================
   class CloudSyncManager {
     constructor() {
-      this.syncKey = localStorage.getItem('todolist_jy_sync_key') || '';
-      this.currentUser = null;
+      this.spaceId = localStorage.getItem('todolist_jy_space_id') || '';
+      this.pin = localStorage.getItem('todolist_jy_pin') || '';
       this.db = null;
-      this.auth = null;
-      this.unsubscribeTasks = null;
+      this.vaultFiles = [];
+      this.unsubscribe = null;
       this.init();
     }
 
@@ -273,41 +272,103 @@
           if (!firebase.apps.length) {
             firebase.initializeApp(config);
           }
-          this.auth = firebase.auth();
           this.db = firebase.firestore();
-
-          this.auth.onAuthStateChanged((user) => {
-            this.currentUser = user;
-            if (user && !this.syncKey) {
-              this.setSyncKey(user.uid);
-            }
-            this.updateUIStatus();
-          });
         } catch (e) {
           console.warn('Firebase init error:', e);
         }
       }
 
-      if (this.syncKey) {
+      if (this.spaceId && this.pin) {
         this.startRealtimeSync();
       }
       this.updateUIStatus();
     }
 
-    setSyncKey(key) {
-      this.syncKey = key.trim().toLowerCase();
-      if (this.syncKey) {
-        localStorage.setItem('todolist_jy_sync_key', this.syncKey);
-        this.startRealtimeSync();
-      } else {
-        localStorage.removeItem('todolist_jy_sync_key');
-        if (this.unsubscribeTasks) {
-          this.unsubscribeTasks();
-          this.unsubscribeTasks = null;
+    async connect2Step(spaceId, pin) {
+      if (!this.db) {
+        UI.showToast('Firebase 연결 상태를 확인해주세요.', 'danger');
+        return false;
+      }
+
+      const sId = spaceId.trim().toLowerCase();
+      const sPin = pin.trim();
+
+      if (!sId || !sPin) {
+        UI.showToast('아이디와 비밀번호를 모두 입력해주세요!', 'danger');
+        return false;
+      }
+
+      try {
+        const docRef = this.db.collection('sync_spaces').doc(sId);
+        const doc = await docRef.get();
+
+        if (doc.exists) {
+          const data = doc.data();
+          if (data.pin && data.pin !== sPin) {
+            UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
+            return false;
+          }
+          // Correct PIN
+          this.spaceId = sId;
+          this.pin = sPin;
+          localStorage.setItem('todolist_jy_space_id', sId);
+          localStorage.setItem('todolist_jy_pin', sPin);
+
+          if (data.tasks) store.tasks = data.tasks;
+          if (data.categories) store.categories = data.categories;
+          if (data.files) this.vaultFiles = data.files;
+          store.saveLocalOnly();
+
+          this.startRealtimeSync();
+          this.updateUIStatus();
+          UI.renderTasks();
+          UI.renderSidebar();
+          return true;
+        } else {
+          // Create new space
+          this.spaceId = sId;
+          this.pin = sPin;
+          localStorage.setItem('todolist_jy_space_id', sId);
+          localStorage.setItem('todolist_jy_pin', sPin);
+
+          // Get existing local files to migrate to cloud
+          const localFiles = await fileVaultDB.getAll();
+          this.vaultFiles = localFiles;
+
+          await docRef.set({
+            spaceId: sId,
+            pin: sPin,
+            tasks: store.tasks,
+            categories: store.categories,
+            files: this.vaultFiles,
+            updatedAt: Date.now()
+          });
+
+          this.startRealtimeSync();
+          this.updateUIStatus();
+          UI.renderTasks();
+          UI.renderSidebar();
+          return true;
         }
+      } catch (err) {
+        console.error('2Step connect error:', err);
+        UI.showToast('연결 중 오류: ' + (err.message || '다시 시도해 주세요.'), 'danger');
+        return false;
+      }
+    }
+
+    disconnect() {
+      this.spaceId = '';
+      this.pin = '';
+      localStorage.removeItem('todolist_jy_space_id');
+      localStorage.removeItem('todolist_jy_pin');
+      if (this.unsubscribe) {
+        this.unsubscribe();
+        this.unsubscribe = null;
       }
       this.updateUIStatus();
       UI.renderSidebar();
+      UI.showToast('2단계 동기화가 해제되었습니다.', 'info');
     }
 
     updateUIStatus() {
@@ -316,63 +377,62 @@
       const btn = document.getElementById('btn-cloud-status');
       const banner = document.getElementById('sync-active-banner');
       const keyDisplay = document.getElementById('current-sync-key-display');
-      const syncForm = document.getElementById('sync-key-form');
-      const keyInput = document.getElementById('sync-key-input');
+      const form = document.getElementById('sync-2step-form');
 
-      if (this.syncKey) {
+      if (this.spaceId && this.pin) {
         if (icon) icon.textContent = '🟢';
         if (text) text.textContent = '동기화 중';
         if (btn) btn.style.color = '#10b981';
         if (banner) banner.style.display = 'block';
-        if (keyDisplay) keyDisplay.textContent = `연결된 키: ${this.syncKey}`;
-        if (syncForm) syncForm.style.display = 'none';
+        if (keyDisplay) keyDisplay.textContent = `아이디: ${this.spaceId} | 2단계 보안 적용됨`;
+        if (form) form.style.display = 'none';
       } else {
         if (icon) icon.textContent = '☁️';
         if (text) text.textContent = '동기화';
         if (btn) btn.style.color = 'var(--text-muted)';
         if (banner) banner.style.display = 'none';
-        if (syncForm) syncForm.style.display = 'flex';
-        if (keyInput) keyInput.value = '';
+        if (form) form.style.display = 'flex';
       }
     }
 
     startRealtimeSync() {
-      if (!this.db || !this.syncKey) return;
-      if (this.unsubscribeTasks) this.unsubscribeTasks();
+      if (!this.db || !this.spaceId) return;
+      if (this.unsubscribe) this.unsubscribe();
 
-      const docRef = this.db.collection('sync_spaces').doc(this.syncKey);
+      const docRef = this.db.collection('sync_spaces').doc(this.spaceId);
 
-      this.unsubscribeTasks = docRef.onSnapshot((doc) => {
+      this.unsubscribe = docRef.onSnapshot((doc) => {
         if (doc.exists) {
           const data = doc.data();
           if (data.tasks) {
             store.tasks = data.tasks;
             if (data.categories) store.categories = data.categories;
             store.saveLocalOnly();
-            UI.renderTasks();
           }
-        } else {
-          docRef.set({
-            tasks: store.tasks,
-            categories: store.categories,
-            updatedAt: Date.now()
-          });
+          if (data.files) {
+            this.vaultFiles = data.files;
+            // Also cache to local IndexedDB
+            data.files.forEach(f => fileVaultDB.saveFileRecord(f));
+          }
+          UI.renderTasks();
+          UI.renderSidebar();
         }
       }, (err) => {
-        console.warn('Sync space listener status:', err.message);
+        console.warn('Realtime sync status:', err.message);
       });
     }
 
     async pushTasksToCloud() {
-      if (this.db && this.syncKey) {
+      if (this.db && this.spaceId && this.pin) {
         try {
-          await this.db.collection('sync_spaces').doc(this.syncKey).set({
+          await this.db.collection('sync_spaces').doc(this.spaceId).set({
             tasks: store.tasks,
             categories: store.categories,
+            files: this.vaultFiles,
             updatedAt: Date.now()
           }, { merge: true });
         } catch (e) {
-          console.warn('Push to sync space error:', e);
+          console.warn('Push tasks error:', e);
         }
       }
     }
@@ -388,18 +448,26 @@
             size: file.size,
             type: file.type || 'application/octet-stream',
             note: note.trim(),
-            data: e.target.result,
+            data: e.target.result, // Base64 Data URL
             createdAt: Date.now()
           };
 
-          if (this.db && this.syncKey) {
+          // Add to memory list
+          this.vaultFiles.unshift(fileRecord);
+
+          // Push to cloud Firestore if connected
+          if (this.db && this.spaceId) {
             try {
-              await this.db.collection('sync_spaces').doc(this.syncKey).collection('vault').doc(fileId).set(fileRecord);
+              await this.db.collection('sync_spaces').doc(this.spaceId).set({
+                files: this.vaultFiles,
+                updatedAt: Date.now()
+              }, { merge: true });
             } catch (err) {
-              console.warn('Cloud save fallback:', err);
+              console.warn('Cloud vault save fallback:', err);
             }
           }
 
+          // Also save in local IndexedDB
           await fileVaultDB.saveFileRecord(fileRecord);
           resolve(fileRecord);
         };
@@ -409,43 +477,47 @@
     }
 
     async getAllVaultFiles() {
-      if (this.db && this.syncKey) {
-        try {
-          const snap = await this.db.collection('sync_spaces').doc(this.syncKey).collection('vault').orderBy('createdAt', 'desc').get();
-          const files = [];
-          snap.forEach(d => files.push(d.data()));
-          if (files.length > 0) return files;
-        } catch (e) {}
+      if (this.spaceId && this.vaultFiles && this.vaultFiles.length > 0) {
+        return this.vaultFiles;
       }
-      return await fileVaultDB.getAll();
+      const localFiles = await fileVaultDB.getAll();
+      if (!this.vaultFiles || this.vaultFiles.length === 0) {
+        this.vaultFiles = localFiles;
+      }
+      return this.vaultFiles;
     }
 
     async deleteVaultFile(id) {
-      if (this.db && this.syncKey) {
+      this.vaultFiles = this.vaultFiles.filter(f => f.id !== id);
+
+      if (this.db && this.spaceId) {
         try {
-          await this.db.collection('sync_spaces').doc(this.syncKey).collection('vault').doc(id).delete();
+          await this.db.collection('sync_spaces').doc(this.spaceId).set({
+            files: this.vaultFiles,
+            updatedAt: Date.now()
+          }, { merge: true });
         } catch (e) {}
       }
-      return await fileVaultDB.deleteFile(id);
+
+      await fileVaultDB.deleteFile(id);
+      return true;
     }
 
     async downloadVaultFile(id) {
-      if (this.db && this.syncKey) {
-        try {
-          const doc = await this.db.collection('sync_spaces').doc(this.syncKey).collection('vault').doc(id).get();
-          if (doc.exists) {
-            const f = doc.data();
-            const a = document.createElement('a');
-            a.href = f.data;
-            a.download = f.name;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            return true;
-          }
-        } catch (e) {}
+      let file = this.vaultFiles.find(f => f.id === id);
+      if (!file) {
+        file = await fileVaultDB.getFile(id);
       }
-      return await fileVaultDB.downloadFile(id);
+      if (file && file.data) {
+        const a = document.createElement('a');
+        a.href = file.data;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return true;
+      }
+      return false;
     }
   }
 
@@ -454,7 +526,7 @@
   // =========================================================================
   class FileVaultDB {
     constructor() {
-      this.dbName = 'TodolistJY_FileVault_v1';
+      this.dbName = 'TodolistJY_FileVault_v2';
       this.storeName = 'vault_files';
       this.db = null;
     }
@@ -492,6 +564,17 @@
       });
     }
 
+    async getFile(id) {
+      await this.init();
+      return new Promise((resolve, reject) => {
+        const tx = this.db.transaction(this.storeName, 'readonly');
+        const store = tx.objectStore(this.storeName);
+        const req = store.get(id);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
     async saveFileRecord(record) {
       await this.init();
       return new Promise((resolve, reject) => {
@@ -510,27 +593,6 @@
         const store = tx.objectStore(this.storeName);
         const req = store.delete(id);
         req.onsuccess = () => resolve(true);
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    async downloadFile(id) {
-      await this.init();
-      return new Promise((resolve, reject) => {
-        const tx = this.db.transaction(this.storeName, 'readonly');
-        const store = tx.objectStore(this.storeName);
-        const req = store.get(id);
-        req.onsuccess = () => {
-          const file = req.result;
-          if (!file) return resolve(false);
-          const a = document.createElement('a');
-          a.href = file.data;
-          a.download = file.name;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          resolve(true);
-        };
         req.onerror = () => reject(req.error);
       });
     }
@@ -583,7 +645,7 @@
       dueTime: '15:00',
       pinned: true,
       subtasks: [
-        { id: 's3', title: '상단 [☁️ 동기화] 눌러서 나만의 키로 집/회사 실시간 연동하기', completed: false },
+        { id: 's3', title: '상단 [☁️ 동기화] 눌러서 나만의 2단계 보안으로 집/회사 연동하기', completed: false },
         { id: 's4', title: '좌측 [📁 파일 보관함]에 엑셀/메모장 올려보기', completed: false }
       ],
       createdAt: Date.now() - 3600000 * 3
@@ -1923,7 +1985,7 @@
           await cloudSync.uploadVaultFile(file, note);
           sounds.playAdd();
           confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
-          UI.showToast(`'${file.name}' 파일이 안전하게 보관되었어요! 💾`, 'success');
+          UI.showToast(`'${file.name}' 파일이 보관함에 동기화되었어요! 💾`, 'success');
           UI.closeFileUploadModal();
           UI.renderFilesVault();
           UI.renderSidebar();
@@ -1972,7 +2034,7 @@
       await cloudSync.uploadVaultFile(file, note);
       sounds.playAdd();
       confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
-      UI.showToast(`'${file.name}' 파일이 안전하게 보관되었어요! 💾`, 'success');
+      UI.showToast(`'${file.name}' 파일이 보관함에 동기화되었어요! 💾`, 'success');
       UI.renderFilesVault();
       UI.renderSidebar();
     } catch (err) {
@@ -1982,7 +2044,7 @@
   }
 
   // =========================================================================
-  // 11. Cloud Sync Events (Secret Sync Key + Google Auth)
+  // 11. 2-Step Security Cloud Sync Events
   // =========================================================================
   function bindCloudEvents() {
     const btnCloudStatus = document.getElementById('btn-cloud-status');
@@ -1990,24 +2052,30 @@
       btnCloudStatus.addEventListener('click', () => UI.openCloudModal());
     }
 
-    // Sync Key Form Submit
-    const syncForm = document.getElementById('sync-key-form');
-    if (syncForm) {
-      syncForm.addEventListener('submit', (e) => {
+    // 2-Step Security Form Submit
+    const sync2StepForm = document.getElementById('sync-2step-form');
+    if (sync2StepForm) {
+      sync2StepForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const keyInput = document.getElementById('sync-key-input');
-        if (!keyInput) return;
-        const key = keyInput.value.trim();
-        if (!key) {
-          UI.showToast('동기화 키(비밀번호)를 입력해주세요!', 'danger');
+        const spaceInput = document.getElementById('sync-input-space-id');
+        const pinInput = document.getElementById('sync-input-pin');
+        if (!spaceInput || !pinInput) return;
+
+        const spaceId = spaceInput.value.trim();
+        const pin = pinInput.value.trim();
+
+        if (!spaceId || !pin) {
+          UI.showToast('아이디와 2단계 비밀번호를 모두 입력해주세요!', 'danger');
           return;
         }
 
-        cloudSync.setSyncKey(key);
-        sounds.playCelebration();
-        confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 45);
-        UI.showToast(`'${key}' 키로 실시간 동기화가 연결되었습니다! 💖`, 'success');
-        UI.closeCloudModal();
+        const ok = await cloudSync.connect2Step(spaceId, pin);
+        if (ok) {
+          sounds.playCelebration();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 45);
+          UI.showToast(`'${spaceId}' 2단계 보안 동기화 연결 완료! 💖`, 'success');
+          UI.closeCloudModal();
+        }
       });
     }
 
@@ -2016,37 +2084,8 @@
     if (btnDisconnect) {
       btnDisconnect.addEventListener('click', () => {
         if (confirm('동기화를 해제하고 로컬 모드로 전환할까요?')) {
-          cloudSync.setSyncKey('');
-          UI.showToast('동기화가 해제되었습니다.', 'info');
+          cloudSync.disconnect();
           UI.closeCloudModal();
-        }
-      });
-    }
-
-    // Google Login Option
-    const btnGoogleLogin = document.getElementById('btn-google-login');
-    if (btnGoogleLogin) {
-      btnGoogleLogin.addEventListener('click', async () => {
-        if (!cloudSync.auth) {
-          UI.showToast('Firebase 연결을 확인해주세요!', 'danger');
-          return;
-        }
-        try {
-          const provider = new firebase.auth.GoogleAuthProvider();
-          const res = await cloudSync.auth.signInWithPopup(provider);
-          if (res && res.user) {
-            cloudSync.setSyncKey(res.user.email || res.user.uid);
-            sounds.playCelebration();
-            UI.showToast('Google 계정 동기화 완료! 💖', 'success');
-            UI.closeCloudModal();
-          }
-        } catch (e) {
-          console.error(e);
-          if (e.code === 'auth/unauthorized-domain') {
-            UI.showToast('Google 대신 위의 [🔑 나만의 동기화 비밀 키]를 입력하시면 오류 없이 즉시 연동됩니다! 🌸', 'info');
-          } else {
-            UI.showToast('안내: 위의 [🔑 나만의 동기화 비밀 키]에 단어를 입력하시면 즉시 연동됩니다! 🌸', 'info');
-          }
         }
       });
     }
