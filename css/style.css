@@ -1417,31 +1417,243 @@ body::after {
   z-index: 999;
 }
 
-/* Responsive */
+/* ==========================================================================
+   Mobile-First iOS Cute App Experience
+   Bottom Nav Bar, Horizontal Category Pills, Bottom Sheets
+   ========================================================================== */
+
+/* Mobile Horizontal Category Pills (Sticky under header on mobile) */
+.mobile-category-bar {
+  display: none;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0.25rem 0.75rem 0.25rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin-bottom: 0.5rem;
+}
+.mobile-category-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-cat-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.mobile-cat-pill.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 4px 14px var(--primary-glow);
+  transform: scale(1.02);
+}
+
+/* iOS Mobile Floating Bottom Navigation Bar */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 68px;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border-color);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+  z-index: 100;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 0.5rem;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.mobile-nav-btn .nav-icon {
+  font-size: 1.3rem;
+  transition: transform 0.2s ease;
+}
+
+.mobile-nav-btn.active {
+  color: var(--primary);
+}
+
+.mobile-nav-btn.active .nav-icon {
+  transform: translateY(-2px) scale(1.1);
+}
+
+/* Floating Add Button for Mobile */
+.mobile-fab-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent-pink));
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 18px var(--primary-glow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 300;
+  cursor: pointer;
+  transform: translateY(-12px);
+  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.mobile-fab-btn:active {
+  transform: translateY(-10px) scale(0.92);
+}
+
+/* Responsive Media Queries */
 @media (max-width: 992px) {
   .main-wrapper {
     grid-template-columns: 1fr;
-    padding: 1.25rem 1rem;
+    padding: 1rem 0.85rem;
+    padding-bottom: 90px;
   }
+
   .sidebar {
     display: none;
   }
+
+  .mobile-category-bar {
+    display: flex;
+  }
+
+  .mobile-bottom-nav {
+    display: flex;
+  }
+
   .kanban-board {
     grid-template-columns: 1fr;
+    gap: 1.25rem;
   }
+
   .files-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.85rem;
+  }
+
+  .toolbar {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .segmented-control {
+    flex: 1;
+  }
+
+  .select-dropdown {
+    flex: 1;
+    min-width: 110px;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-card {
+    max-width: 100%;
+    border-radius: 28px 28px 0 0;
+    max-height: 85vh;
+    padding: 1.5rem 1.25rem;
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+    transform: translateY(100%);
+  }
+
+  .modal-overlay.active .modal-card {
+    transform: translateY(0);
   }
 }
 
 @media (max-width: 640px) {
   .app-header {
-    padding: 0 1rem;
+    padding: 0 0.85rem;
+    height: 60px;
   }
+
+  .brand-name {
+    font-size: 1.15rem;
+  }
+
+  .brand-tagline {
+    display: none;
+  }
+
   .header-center {
     display: none;
   }
+
+  .header-actions .btn-icon:not(#btn-theme-toggle) {
+    display: none;
+  }
+
+  #btn-open-task-modal {
+    display: none;
+  }
+
+  #btn-cloud-status {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.75rem;
+  }
+
+  .task-card {
+    padding: 0.95rem;
+    gap: 0.75rem;
+  }
+
+  .task-title {
+    font-size: 0.96rem;
+  }
+
+  .task-meta-row {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 }
+

@@ -2,7 +2,10 @@
 <html lang="ko" data-theme="light">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#fff0f3">
   <meta name="description" content="Todolist JY - 아이폰 스타일의 아기자기하고 깔끔한 프리미엄 To-Do List 및 클라우드 파일 보관함">
   <title>Todolist JY 🌸 | 오늘의 반짝이는 할 일</title>
   
@@ -10,11 +13,10 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/animations.css">
 
-  <!-- Firebase SDKs (v10 Modular via CDN) -->
+  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
 </head>
 <body>
   <!-- Canvas for Cute Confetti & Heart Particles -->
@@ -43,9 +45,9 @@
 
       <div class="header-actions">
         <!-- Cloud Sync Status Badge -->
-        <button id="btn-cloud-status" class="btn" style="padding: 0.45rem 0.9rem; font-size: 0.8rem; background: rgba(0,0,0,0.04); color: var(--text-muted);" title="클라우드 동기화 설정">
+        <button id="btn-cloud-status" class="btn" style="padding: 0.45rem 0.85rem; font-size: 0.8rem; background: rgba(0,0,0,0.04); color: var(--text-muted);" title="클라우드 동기화 설정">
           <span id="cloud-status-icon">☁️</span>
-          <span id="cloud-status-text">동기화 설정</span>
+          <span id="cloud-status-text">동기화</span>
         </button>
         <button id="btn-sound-toggle" class="btn-icon" title="효과음 켜기/끄기" aria-label="사운드 토글">
           <span class="icon">🔊</span>
@@ -68,7 +70,7 @@
 
     <!-- Main Workspace Layout -->
     <div class="main-wrapper">
-      <!-- Left Sidebar: Filters, Categories & Productivity Stats -->
+      <!-- Left Sidebar (Desktop View) -->
       <aside class="sidebar">
         <!-- Main Navigation Filters -->
         <div class="sidebar-card">
@@ -126,10 +128,10 @@
             <span class="sidebar-hint">드래그로 순서 변경</span>
           </div>
           <ul class="nav-list" id="category-nav-list">
-            <!-- Dynamically populated draggable categories -->
+            <!-- Dynamically populated categories -->
           </ul>
           
-          <!-- File Vault Menu Item (At Bottom of Categories) -->
+          <!-- File Vault Menu Item -->
           <ul class="nav-list" style="margin-top: 0.5rem;">
             <li class="nav-item vault-nav-item" data-filter="vault" id="nav-filter-vault" title="엑셀, 메모장 등 파일 보관소">
               <div class="nav-item-left">
@@ -170,11 +172,19 @@
         </div>
       </aside>
 
-      <!-- Center Main Content -->
+      <!-- Center Main Content Area -->
       <main class="content-area">
         
+        <!-- Mobile Horizontal Scrollable Category Pills -->
+        <div class="mobile-category-bar" id="mobile-category-bar">
+          <button type="button" class="mobile-cat-pill active" data-filter="all">🌸 전체</button>
+          <button type="button" class="mobile-cat-pill" data-filter="today">☀️ 오늘</button>
+          <button type="button" class="mobile-cat-pill" data-filter="pinned">💖 중요</button>
+          <!-- Categories populated dynamically -->
+        </div>
+
         <!-- SECTION A: Normal Tasks View -->
-        <div id="tasks-view-container" style="display: flex; flex-direction: column; gap: 1.35rem;">
+        <div id="tasks-view-container" style="display: flex; flex-direction: column; gap: 1.25rem;">
           <!-- Top Title & Toolbar -->
           <div class="dashboard-header">
             <div class="view-heading">
@@ -228,9 +238,8 @@
             <!-- Dynamically populated task cards -->
           </div>
 
-          <!-- Kanban Board View Container (Initially Hidden) -->
+          <!-- Kanban Board View Container -->
           <div id="kanban-board-container" class="kanban-board" style="display: none;">
-            <!-- Column 1: To Do -->
             <div class="kanban-column" data-status="todo">
               <div class="kanban-column-header">
                 <div class="kanban-column-title">
@@ -242,7 +251,6 @@
               <div class="kanban-tasks-list" id="kanban-col-todo"></div>
             </div>
 
-            <!-- Column 2: In Progress -->
             <div class="kanban-column" data-status="in-progress">
               <div class="kanban-column-header">
                 <div class="kanban-column-title">
@@ -254,7 +262,6 @@
               <div class="kanban-tasks-list" id="kanban-col-inprogress"></div>
             </div>
 
-            <!-- Column 3: Completed -->
             <div class="kanban-column" data-status="completed">
               <div class="kanban-column-header">
                 <div class="kanban-column-title">
@@ -278,12 +285,12 @@
           </div>
         </div>
 
-        <!-- SECTION B: File Vault (파일 보관함) View -->
+        <!-- SECTION B: File Vault View -->
         <div id="files-view-container" style="display: none; flex-direction: column; gap: 1.5rem;">
           <div class="dashboard-header">
             <div class="view-heading">
               <h1>📁 파일 보관함 (File Vault)</h1>
-              <p>엑셀 시트, 메모장, 문서 등 소중한 파일을 안전하게 보관하고 언제든 다운로드하세요 ✨</p>
+              <p>엑셀 시트, 메모장, 문서 등 소중한 파일을 보관하고 어디서든 다운로드하세요 ✨</p>
             </div>
             <button type="button" id="btn-open-file-upload" class="btn btn-primary">
               <span>+</span>
@@ -291,14 +298,14 @@
             </button>
           </div>
 
-          <!-- Cute Dropzone -->
+          <!-- Dropzone -->
           <div class="file-upload-card" id="vault-dropzone">
             <input type="file" id="vault-file-hidden-input" style="display: none;">
             <div class="file-upload-icon">📂</div>
             <div class="file-upload-title">이곳을 클릭하거나 파일을 끌어다 놓으세요</div>
-            <div class="file-upload-desc">엑셀(.xlsx, .csv), 메모장(.txt), PDF, 이미지 등 모든 파일 지원 (어디서든 다운로드 가능)</div>
+            <div class="file-upload-desc">엑셀(.xlsx, .csv), 메모장(.txt), PDF, 이미지 등 모든 파일 지원 (집/회사 어디서나 다운로드)</div>
             <button type="button" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.1rem;" onclick="event.stopPropagation(); document.getElementById('vault-file-hidden-input').click()">
-              내 컴퓨터에서 파일 찾기
+              내 컴퓨터/기기에서 파일 찾기
             </button>
           </div>
 
@@ -320,6 +327,29 @@
 
       </main>
     </div>
+
+    <!-- iOS Mobile Floating Bottom Navigation Bar -->
+    <nav class="mobile-bottom-nav">
+      <button type="button" class="mobile-nav-btn active" data-mobile-nav="tasks">
+        <span class="nav-icon">📋</span>
+        <span>할 일</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="vault">
+        <span class="nav-icon">📁</span>
+        <span>보관함</span>
+      </button>
+      <button type="button" class="mobile-fab-btn" id="btn-mobile-fab-add" title="새 할 일 등록">
+        +
+      </button>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="kanban">
+        <span class="nav-icon">📊</span>
+        <span>칸반</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="cloud">
+        <span class="nav-icon">☁️</span>
+        <span>동기화</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Modal: Create / Edit Task -->
@@ -437,45 +467,60 @@
     </div>
   </div>
 
-  <!-- Modal: Cloud Sync (Firebase) Settings -->
+  <!-- Modal: Cloud Sync (Firebase) Settings & Login -->
   <div id="cloud-modal" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal-card" style="max-width: 520px;">
+    <div class="modal-card" style="max-width: 480px;">
       <div class="modal-header">
-        <h3 class="modal-title">☁️ 클라우드 동기화 설정 (Firebase)</h3>
+        <h3 class="modal-title">☁️ 실시간 클라우드 동기화</h3>
         <button class="modal-close-btn" data-close-modal>✕</button>
       </div>
       <div style="display: flex; flex-direction: column; gap: 1.15rem; font-size: 0.9rem;">
         <div style="background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.2); padding: 1rem; border-radius: var(--radius-md);">
-          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.25rem;">✨ 집-회사-모바일 어디서든 실시간 동기화!</div>
+          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.25rem;">✨ 집·회사·스마트폰 어디서든 실시간 연동!</div>
           <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.45;">
-            Google Firebase(무료) 프로젝트의 설정 코드를 붙여넣으면, 로그인하여 모든 컴퓨터에서 실시간으로 할 일과 파일을 완벽 동기화할 수 있습니다.
+            로그인하시면 모든 기기에서 내가 작성한 할 일과 엑셀 파일이 1초 만에 똑같이 실시간 동기화됩니다.
           </p>
         </div>
 
-        <!-- Auth Section -->
+        <!-- Auth Active State -->
         <div id="firebase-auth-section" style="display: none; padding: 1rem; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <div>
               <div style="font-weight: 700;" id="user-display-name">로그인 상태</div>
-              <div style="font-size: 0.8rem; color: var(--text-muted);" id="user-display-email">user@email.com</div>
+              <div style="font-size: 0.8rem; color: #10b981; font-weight: 600;" id="user-display-email">실시간 동기화 활성화됨 🟢</div>
             </div>
-            <button type="button" id="btn-firebase-logout" class="btn" style="padding: 4px 10px; font-size: 0.78rem; background: rgba(0,0,0,0.06);">로그아웃</button>
+            <button type="button" id="btn-firebase-logout" class="btn" style="padding: 5px 12px; font-size: 0.78rem; background: rgba(0,0,0,0.06);">로그아웃</button>
           </div>
         </div>
 
-        <div id="firebase-login-buttons" style="display: flex; flex-direction: column; gap: 0.6rem;">
-          <button type="button" id="btn-google-login" class="btn btn-primary" style="width: 100%;">
+        <!-- Login Options -->
+        <div id="firebase-login-buttons" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <button type="button" id="btn-google-login" class="btn btn-primary" style="width: 100%; padding: 0.85rem 1rem; font-size: 0.92rem;">
             <span>🌐</span>
-            <span>Google 계정으로 로그인 & 동기화 시작</span>
+            <span>Google 계정으로 원클릭 로그인</span>
           </button>
+
+          <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-dim); font-size: 0.78rem; justify-content: center;">
+            <span style="flex: 1; height: 1px; background: var(--border-subtle);"></span>
+            <span>또는 간편 이메일/비밀번호 로그인</span>
+            <span style="flex: 1; height: 1px; background: var(--border-subtle);"></span>
+          </div>
+
+          <!-- Email/Pass simple login form for seamless mobile access -->
+          <form id="email-login-form" style="display: flex; flex-direction: column; gap: 0.6rem;">
+            <input type="email" id="email-login-id" class="form-input" placeholder="이메일 주소 (예: jy@todolist.com)" required style="padding: 0.65rem 0.85rem; font-size: 0.88rem;">
+            <input type="password" id="email-login-pw" class="form-input" placeholder="비밀번호 (6자리 이상)" required style="padding: 0.65rem 0.85rem; font-size: 0.88rem;">
+            <button type="submit" class="btn" style="background: var(--primary-light); color: var(--primary); font-weight: 700; padding: 0.7rem;">
+              🔑 이메일로 로그인 / 자동 가입
+            </button>
+          </form>
         </div>
 
-        <details style="border-top: 1px solid var(--border-subtle); padding-top: 0.75rem;">
-          <summary style="cursor: pointer; font-weight: 600; font-size: 0.85rem; color: var(--text-muted);">⚙️ Firebase 설정 코드 직접 입력 / 수정</summary>
-          <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
-            <p style="font-size: 0.78rem; color: var(--text-muted);">Firebase Console에서 복사한 `firebaseConfig` 객체(JSON)를 붙여넣으세요:</p>
-            <textarea id="firebase-config-input" class="form-textarea" placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "storageBucket": "..." }' style="font-family: monospace; font-size: 0.8rem;"></textarea>
-            <button type="button" id="btn-save-firebase-config" class="btn" style="background: var(--primary-light); color: var(--primary); font-size: 0.82rem;">Firebase 설정 저장 및 연결</button>
+        <details style="border-top: 1px solid var(--border-subtle); padding-top: 0.5rem;">
+          <summary style="cursor: pointer; font-size: 0.76rem; color: var(--text-dim);">Firebase 설정 코드 보기</summary>
+          <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+            <textarea id="firebase-config-input" class="form-textarea" style="font-family: monospace; font-size: 0.75rem; min-height: 60px;"></textarea>
+            <button type="button" id="btn-save-firebase-config" class="btn" style="font-size: 0.75rem; padding: 4px;">설정 다시 저장</button>
           </div>
         </details>
       </div>

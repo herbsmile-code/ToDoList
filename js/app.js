@@ -1,9 +1,10 @@
 /**
  * Todolist JY - Standalone Application Script
  * Features:
- * - Google Firebase Cloud Sync (Firestore + Storage + Auth for anywhere-access)
+ * - Full Mobile-First iOS Experience (Bottom Navigation Bar, Horizontal Pill Filters, Safe Area Insets)
+ * - Google Firebase Cloud Sync (Firestore + Auth: Google Login & Simple Email Login)
  * - Brand Name Click: Instant reset to '모든 할 일 (All Tasks)'
- * - File Vault (IndexedDB + Cloud Storage): Store, preview notes, and download Excel/Text/Docs anytime
+ * - File Vault (IndexedDB + Cloud Firestore Base64 Storage for 100% Free Cross-Device Download)
  * - Category Drag & Drop Reordering with Persistent Storage
  * - iOS Apple Pastel Cute Design & Sound/Confetti Animations
  * - Zero CORS dependency for file:/// and http:// execution
@@ -250,14 +251,13 @@
   const confetti = new CuteConfettiEngine();
 
   // =========================================================================
-  // 3. Cloud Sync & File Vault Manager (Firebase + IndexedDB Hybrid)
+  // 3. Cloud Sync & File Vault Manager (Firebase Cloud + Local DB Hybrid)
   // =========================================================================
   class CloudSyncManager {
     constructor() {
       this.isConfigured = false;
       this.currentUser = null;
       this.db = null;
-      this.storage = null;
       this.auth = null;
       this.unsubscribeTasks = null;
       this.init();
@@ -274,7 +274,6 @@
           }
           this.auth = firebase.auth();
           this.db = firebase.firestore();
-          this.storage = firebase.storage();
           this.isConfigured = true;
 
           this.auth.onAuthStateChanged((user) => {
@@ -304,7 +303,7 @@
 
       if (!this.isConfigured) {
         if (icon) icon.textContent = '☁️';
-        if (text) text.textContent = '클라우드 동기화';
+        if (text) text.textContent = '동기화';
         if (btn) btn.style.color = 'var(--text-muted)';
         if (authSec) authSec.style.display = 'none';
         if (loginSec) loginSec.style.display = 'flex';
@@ -313,15 +312,15 @@
 
       if (this.currentUser) {
         if (icon) icon.textContent = '🟢';
-        if (text) text.textContent = (this.currentUser.displayName || this.currentUser.email || '동기화 중');
+        if (text) text.textContent = '동기화 중';
         if (btn) btn.style.color = '#10b981';
         if (authSec) authSec.style.display = 'block';
         if (loginSec) loginSec.style.display = 'none';
-        if (nameEl) nameEl.textContent = this.currentUser.displayName || '내 클라우드 계정';
-        if (emailEl) emailEl.textContent = this.currentUser.email || '실시간 동기화 활성화됨';
+        if (nameEl) nameEl.textContent = this.currentUser.displayName || this.currentUser.email || '내 계정';
+        if (emailEl) emailEl.textContent = '실시간 동기화 활성화됨 🟢';
       } else {
         if (icon) icon.textContent = '☁️';
-        if (text) text.textContent = '로그인하고 어디서든 동기화';
+        if (text) text.textContent = '로그인';
         if (btn) btn.style.color = 'var(--primary)';
         if (authSec) authSec.style.display = 'none';
         if (loginSec) loginSec.style.display = 'flex';
@@ -349,7 +348,7 @@
           });
         }
       }, (err) => {
-        console.warn('Firestore sync note:', err.message);
+        console.warn('Firestore sync status:', err.message);
       });
     }
 
@@ -367,33 +366,38 @@
       }
     }
 
+    // Save File into 100% Free Firestore Document (Base64) for multi-device sync
     async uploadVaultFile(file, note = '') {
-      if (this.storage && this.currentUser) {
-        try {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
           const fileId = 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-          const storageRef = this.storage.ref(`users/${this.currentUser.uid}/vault/${fileId}_${file.name}`);
-          const snapshot = await storageRef.put(file);
-          const downloadUrl = await snapshot.ref.getDownloadURL();
-
           const fileRecord = {
             id: fileId,
             name: file.name,
             size: file.size,
             type: file.type || 'application/octet-stream',
             note: note.trim(),
-            downloadUrl,
+            data: e.target.result,
             createdAt: Date.now()
           };
 
-          await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(fileId).set(fileRecord);
-          return fileRecord;
-        } catch (err) {
-          console.warn('Cloud storage fallback to local DB:', err);
-          return await fileVaultDB.saveFile(file, note);
-        }
-      } else {
-        return await fileVaultDB.saveFile(file, note);
-      }
+          // If logged in, save directly to Firestore user collection
+          if (this.db && this.currentUser) {
+            try {
+              await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(fileId).set(fileRecord);
+            } catch (err) {
+              console.warn('Cloud save fallback:', err);
+            }
+          }
+
+          // Also save in local IndexedDB
+          await fileVaultDB.saveFileRecord(fileRecord);
+          resolve(fileRecord);
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      });
     }
 
     async getAllVaultFiles() {
@@ -421,11 +425,10 @@
       if (this.db && this.currentUser) {
         try {
           const doc = await this.db.collection('users').doc(this.currentUser.uid).collection('vault').doc(id).get();
-          if (doc.exists && doc.data().downloadUrl) {
+          if (doc.exists) {
             const f = doc.data();
             const a = document.createElement('a');
-            a.href = f.downloadUrl;
-            a.target = '_blank';
+            a.href = f.data;
             a.download = f.name;
             document.body.appendChild(a);
             a.click();
@@ -439,7 +442,7 @@
   }
 
   // =========================================================================
-  // 4. IndexedDB File Vault (Local Storage)
+  // 4. IndexedDB File Vault (Local Offline Engine)
   // =========================================================================
   class FileVaultDB {
     constructor() {
@@ -481,28 +484,14 @@
       });
     }
 
-    async saveFile(file, note = '') {
+    async saveFileRecord(record) {
       await this.init();
       return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const fileRecord = {
-            id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-            name: file.name,
-            size: file.size,
-            type: file.type || 'application/octet-stream',
-            note: note.trim(),
-            data: e.target.result,
-            createdAt: Date.now()
-          };
-          const tx = this.db.transaction(this.storeName, 'readwrite');
-          const store = tx.objectStore(this.storeName);
-          const req = store.put(fileRecord);
-          req.onsuccess = () => resolve(fileRecord);
-          req.onerror = () => reject(req.error);
-        };
-        reader.onerror = (e) => reject(e);
-        reader.readAsDataURL(file);
+        const tx = this.db.transaction(this.storeName, 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        const req = store.put(record);
+        req.onsuccess = () => resolve(record);
+        req.onerror = () => reject(req.error);
       });
     }
 
@@ -586,7 +575,7 @@
       dueTime: '15:00',
       pinned: true,
       subtasks: [
-        { id: 's3', title: '상단 [☁️ 동기화] 눌러서 Google 로그인으로 집/회사 연동하기', completed: false },
+        { id: 's3', title: '상단 [☁️ 동기화] 눌러서 로그인하고 집/회사 연동하기', completed: false },
         { id: 's4', title: '좌측 [📁 파일 보관함]에 엑셀/메모장 올려보기', completed: false }
       ],
       createdAt: Date.now() - 3600000 * 3
@@ -962,7 +951,7 @@
         if (vCount) vCount.textContent = vaultFiles.length;
       } catch (e) {}
 
-      // Render Categories
+      // Render Categories in Sidebar (Desktop)
       const catContainer = document.getElementById('category-nav-list');
       if (catContainer) {
         catContainer.innerHTML = store.categories.map(cat => {
@@ -979,6 +968,21 @@
             </li>
           `;
         }).join('');
+      }
+
+      // Render Mobile Category Horizontal Pills
+      const mobileBar = document.getElementById('mobile-category-bar');
+      if (mobileBar) {
+        let pillsHTML = `
+          <button type="button" class="mobile-cat-pill ${store.activeFilter === 'all' ? 'active' : ''}" data-filter="all">🌸 전체</button>
+          <button type="button" class="mobile-cat-pill ${store.activeFilter === 'today' ? 'active' : ''}" data-filter="today">☀️ 오늘</button>
+          <button type="button" class="mobile-cat-pill ${store.activeFilter === 'pinned' ? 'active' : ''}" data-filter="pinned">💖 중요</button>
+        `;
+        store.categories.forEach(cat => {
+          const isAct = store.activeFilter === cat.id ? 'active' : '';
+          pillsHTML += `<button type="button" class="mobile-cat-pill ${isAct}" data-filter="${cat.id}">${cat.name}</button>`;
+        });
+        mobileBar.innerHTML = pillsHTML;
       }
 
       const rateEl = document.getElementById('stats-rate');
@@ -1064,6 +1068,20 @@
       const listContainer = document.getElementById('tasks-list-container');
       const kanbanContainer = document.getElementById('kanban-board-container');
       const emptyState = document.getElementById('empty-state');
+
+      // Update Mobile Nav Active States
+      document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+        const action = btn.dataset.mobileNav;
+        if (store.activeFilter === 'vault' && action === 'vault') {
+          btn.classList.add('active');
+        } else if (store.activeFilter !== 'vault' && store.viewMode === 'kanban' && action === 'kanban') {
+          btn.classList.add('active');
+        } else if (store.activeFilter !== 'vault' && store.viewMode === 'list' && action === 'tasks') {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
 
       if (store.activeFilter === 'vault') {
         if (tasksView) tasksView.style.display = 'none';
@@ -1295,6 +1313,7 @@
     bindCategoryDragAndDrop();
     bindFileVaultEvents();
     bindCloudEvents();
+    bindMobileEvents();
     UI.renderTasks();
   }
 
@@ -1419,7 +1438,7 @@
       });
     }
 
-    // View Switcher
+    // View Switcher (Desktop)
     const vList = document.getElementById('btn-view-list');
     const vKanban = document.getElementById('btn-view-kanban');
     if (vList && vKanban) {
@@ -1463,7 +1482,7 @@
       });
     }
 
-    // Sidebar Nav Filter Click
+    // Sidebar Nav Filter Click (Desktop)
     document.addEventListener('click', (e) => {
       const navItem = e.target.closest('.nav-item');
       if (navItem && navItem.dataset.filter) {
@@ -1712,7 +1731,60 @@
   }
 
   // =========================================================================
-  // 8. Category Drag & Drop Reordering Handler
+  // 8. Mobile Navigation & Horizontal Filter Bar Handlers
+  // =========================================================================
+  function bindMobileEvents() {
+    // Horizontal Category Pills
+    document.addEventListener('click', (e) => {
+      const pill = e.target.closest('.mobile-cat-pill');
+      if (pill && pill.dataset.filter) {
+        document.querySelectorAll('.mobile-cat-pill').forEach(el => el.classList.remove('active'));
+        pill.classList.add('active');
+        store.activeFilter = pill.dataset.filter;
+        UI.renderTasks();
+      }
+    });
+
+    // Mobile Floating Bottom Navigation Bar
+    document.addEventListener('click', (e) => {
+      const navBtn = e.target.closest('.mobile-nav-btn');
+      if (navBtn && navBtn.dataset.mobileNav) {
+        const nav = navBtn.dataset.mobileNav;
+        document.querySelectorAll('.mobile-nav-btn').forEach(el => el.classList.remove('active'));
+        navBtn.classList.add('active');
+
+        if (nav === 'tasks') {
+          store.activeFilter = 'all';
+          store.viewMode = 'list';
+          UI.renderTasks();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else if (nav === 'vault') {
+          store.activeFilter = 'vault';
+          UI.renderTasks();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else if (nav === 'kanban') {
+          store.activeFilter = 'all';
+          store.viewMode = 'kanban';
+          UI.renderTasks();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else if (nav === 'cloud') {
+          UI.openCloudModal();
+        }
+      }
+    });
+
+    // Mobile Floating Action Button (+)
+    const fabAdd = document.getElementById('btn-mobile-fab-add');
+    if (fabAdd) {
+      fabAdd.addEventListener('click', () => {
+        sounds.playAdd();
+        UI.openTaskModal();
+      });
+    }
+  }
+
+  // =========================================================================
+  // 9. Category Drag & Drop Reordering Handler
   // =========================================================================
   function bindCategoryDragAndDrop() {
     let draggedCatId = null;
@@ -1788,7 +1860,7 @@
   }
 
   // =========================================================================
-  // 9. File Vault Event Handlers
+  // 10. File Vault Event Handlers
   // =========================================================================
   function bindFileVaultEvents() {
     const btnOpenUpload = document.getElementById('btn-open-file-upload');
@@ -1901,7 +1973,7 @@
   }
 
   // =========================================================================
-  // 10. Cloud Sync Events
+  // 11. Cloud Sync Events (Google Auth + Simple Email Auth)
   // =========================================================================
   function bindCloudEvents() {
     const btnCloudStatus = document.getElementById('btn-cloud-status');
@@ -1923,7 +1995,7 @@
         try {
           JSON.parse(val);
           localStorage.setItem('todolist_jy_firebase_config', val);
-          UI.showToast('Firebase 설정 저장 완료! 페이지를 새로고침합니다.', 'success');
+          UI.showToast('Firebase 설정 저장 완료! 새로고침합니다.', 'success');
           setTimeout(() => location.reload(), 800);
         } catch (e) {
           UI.showToast('올바른 JSON 설정 형식이 아닙니다.', 'danger');
@@ -1931,6 +2003,7 @@
       });
     }
 
+    // Google Login
     const btnGoogleLogin = document.getElementById('btn-google-login');
     if (btnGoogleLogin) {
       btnGoogleLogin.addEventListener('click', async () => {
@@ -1942,14 +2015,54 @@
           const provider = new firebase.auth.GoogleAuthProvider();
           await cloudSync.auth.signInWithPopup(provider);
           sounds.playCelebration();
-          UI.showToast('Google 로그인 완료! 실시간 클라우드 동기화가 활성화되었습니다 💖', 'success');
+          UI.showToast('Google 로그인 완료! 실시간 클라우드 동기화 시작 💖', 'success');
           UI.closeCloudModal();
         } catch (e) {
           console.error(e);
-          if (e.code === 'auth/configuration-not-found' || e.code === 'auth/operation-not-allowed') {
-            UI.showToast('Firebase 콘솔에서 Authentication -> Google 로그인을 사용 설정(활성화)해 주세요!', 'warning');
+          if (e.code === 'auth/popup-blocked') {
+            try {
+              const provider = new firebase.auth.GoogleAuthProvider();
+              await cloudSync.auth.signInWithRedirect(provider);
+            } catch (err2) {
+              UI.showToast('팝업 차단을 해제하거나 아래 간편 이메일 로그인을 이용해 주세요.', 'info');
+            }
           } else {
-            UI.showToast('로그인 알림: ' + e.message, 'info');
+            UI.showToast('알림: 아래 간편 이메일 로그인을 이용하시면 즉시 연동됩니다! 🌸', 'info');
+          }
+        }
+      });
+    }
+
+    // Simple Email/Pass Login & Auto Registration
+    const emailForm = document.getElementById('email-login-form');
+    if (emailForm) {
+      emailForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!cloudSync.auth) return;
+
+        const email = document.getElementById('email-login-id').value.trim();
+        const pw = document.getElementById('email-login-pw').value.trim();
+        if (!email || !pw) return;
+
+        try {
+          // Try sign in
+          await cloudSync.auth.signInWithEmailAndPassword(email, pw);
+          sounds.playCelebration();
+          UI.showToast('로그인 성공! 실시간 동기화가 활성화되었습니다 💖', 'success');
+          UI.closeCloudModal();
+        } catch (err) {
+          if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+            try {
+              // Automatically register if first time
+              await cloudSync.auth.createUserWithEmailAndPassword(email, pw);
+              sounds.playCelebration();
+              UI.showToast('회원가입 & 로그인 완료! 이제 어디서든 동기화됩니다 💖', 'success');
+              UI.closeCloudModal();
+            } catch (regErr) {
+              UI.showToast('로그인 안내: ' + (regErr.message || '비밀번호를 확인해 주세요.'), 'danger');
+            }
+          } else {
+            UI.showToast('로그인 안내: ' + (err.message || '정보를 확인해 주세요.'), 'danger');
           }
         }
       });
@@ -1968,7 +2081,7 @@
   }
 
   // =========================================================================
-  // 11. Kanban Drag & Drop Handler
+  // 12. Kanban Drag & Drop Handler
   // =========================================================================
   function bindDragAndDrop() {
     let draggedId = null;
