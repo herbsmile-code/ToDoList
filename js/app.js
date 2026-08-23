@@ -384,7 +384,7 @@
         if (text) text.textContent = '동기화 중';
         if (btn) btn.style.color = '#10b981';
         if (banner) banner.style.display = 'block';
-        if (keyDisplay) keyDisplay.textContent = `아이디: ${this.spaceId} | 2단계 보안 적용됨`;
+        if (keyDisplay) keyDisplay.textContent = `2단계 보안 동기화 활성화됨 🟢`;
         if (form) form.style.display = 'none';
       } else {
         if (icon) icon.textContent = '☁️';
