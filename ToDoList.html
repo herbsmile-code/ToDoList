@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Todolist JY - 아이폰 스타일의 아기자기하고 깔끔한 프리미엄 To-Do List 및 파일 보관함">
+  <meta name="description" content="Todolist JY - 아이폰 스타일의 아기자기하고 깔끔한 프리미엄 To-Do List 및 클라우드 파일 보관함">
   <title>Todolist JY 🌸 | 오늘의 반짝이는 할 일</title>
   
   <!-- CSS Stylesheets -->
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/animations.css">
+
+  <!-- Firebase SDKs (v10 Modular via CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
 </head>
 <body>
   <!-- Canvas for Cute Confetti & Heart Particles -->
@@ -36,6 +42,11 @@
       </div>
 
       <div class="header-actions">
+        <!-- Cloud Sync Status Badge -->
+        <button id="btn-cloud-status" class="btn" style="padding: 0.45rem 0.9rem; font-size: 0.8rem; background: rgba(0,0,0,0.04); color: var(--text-muted);" title="클라우드 동기화 설정">
+          <span id="cloud-status-icon">☁️</span>
+          <span id="cloud-status-text">동기화 설정</span>
+        </button>
         <button id="btn-sound-toggle" class="btn-icon" title="효과음 켜기/끄기" aria-label="사운드 토글">
           <span class="icon">🔊</span>
         </button>
@@ -285,7 +296,7 @@
             <input type="file" id="vault-file-hidden-input" style="display: none;">
             <div class="file-upload-icon">📂</div>
             <div class="file-upload-title">이곳을 클릭하거나 파일을 끌어다 놓으세요</div>
-            <div class="file-upload-desc">엑셀(.xlsx, .csv), 메모장(.txt), PDF, 이미지 등 모든 파일 지원 (브라우저 안전 보관)</div>
+            <div class="file-upload-desc">엑셀(.xlsx, .csv), 메모장(.txt), PDF, 이미지 등 모든 파일 지원 (어디서든 다운로드 가능)</div>
             <button type="button" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.1rem;" onclick="event.stopPropagation(); document.getElementById('vault-file-hidden-input').click()">
               내 컴퓨터에서 파일 찾기
             </button>
@@ -423,6 +434,54 @@
           <button type="submit" class="btn btn-primary">보관하기 💾</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Cloud Sync (Firebase) Settings -->
+  <div id="cloud-modal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title">☁️ 클라우드 동기화 설정 (Firebase)</h3>
+        <button class="modal-close-btn" data-close-modal>✕</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 1.15rem; font-size: 0.9rem;">
+        <div style="background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.2); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.25rem;">✨ 집-회사-모바일 어디서든 실시간 동기화!</div>
+          <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.45;">
+            Google Firebase(무료) 프로젝트의 설정 코드를 붙여넣으면, 로그인하여 모든 컴퓨터에서 실시간으로 할 일과 파일을 완벽 동기화할 수 있습니다.
+          </p>
+        </div>
+
+        <!-- Auth Section -->
+        <div id="firebase-auth-section" style="display: none; padding: 1rem; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 700;" id="user-display-name">로그인 상태</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted);" id="user-display-email">user@email.com</div>
+            </div>
+            <button type="button" id="btn-firebase-logout" class="btn" style="padding: 4px 10px; font-size: 0.78rem; background: rgba(0,0,0,0.06);">로그아웃</button>
+          </div>
+        </div>
+
+        <div id="firebase-login-buttons" style="display: flex; flex-direction: column; gap: 0.6rem;">
+          <button type="button" id="btn-google-login" class="btn btn-primary" style="width: 100%;">
+            <span>🌐</span>
+            <span>Google 계정으로 로그인 & 동기화 시작</span>
+          </button>
+        </div>
+
+        <details style="border-top: 1px solid var(--border-subtle); padding-top: 0.75rem;">
+          <summary style="cursor: pointer; font-weight: 600; font-size: 0.85rem; color: var(--text-muted);">⚙️ Firebase 설정 코드 직접 입력 / 수정</summary>
+          <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+            <p style="font-size: 0.78rem; color: var(--text-muted);">Firebase Console에서 복사한 `firebaseConfig` 객체(JSON)를 붙여넣으세요:</p>
+            <textarea id="firebase-config-input" class="form-textarea" placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "storageBucket": "..." }' style="font-family: monospace; font-size: 0.8rem;"></textarea>
+            <button type="button" id="btn-save-firebase-config" class="btn" style="background: var(--primary-light); color: var(--primary); font-size: 0.82rem;">Firebase 설정 저장 및 연결</button>
+          </div>
+        </details>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" data-close-modal>닫기</button>
+      </div>
     </div>
   </div>
 
