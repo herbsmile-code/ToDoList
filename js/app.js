@@ -273,6 +273,9 @@
             firebase.initializeApp(config);
           }
           this.db = firebase.firestore();
+          if (firebase.auth) {
+            firebase.auth().signInAnonymously().catch(e => console.warn('Anon auth:', e));
+          }
         } catch (e) {
           console.warn('Firebase init error:', e);
         }
@@ -286,7 +289,7 @@
 
     async connect2Step(spaceId, pin) {
       if (!this.db) {
-        UI.showToast('Firebase 연결 상태를 확인해주세요.', 'danger');
+        UI.showToast('Firebase 설정을 확인해주세요.', 'danger');
         return false;
       }
 
@@ -300,9 +303,20 @@
 
       try {
         const docRef = this.db.collection('sync_spaces').doc(sId);
-        const doc = await docRef.get();
+        
+        let doc = null;
+        try {
+          doc = await docRef.get();
+        } catch (fetchErr) {
+          console.warn('docRef.get() warning:', fetchErr);
+          // If offline error or permissions, try direct write or snapshot
+          if (fetchErr.message && fetchErr.message.includes('offline')) {
+            throw new Error('Firebase 규칙(Rules) 허용이 필요합니다. (Firestore 규칙을 allow read, write: if true; 로 게시해주세요)');
+          }
+          throw fetchErr;
+        }
 
-        if (doc.exists) {
+        if (doc && doc.exists) {
           const data = doc.data();
           if (data.pin && data.pin !== sPin) {
             UI.showToast('❌ 2단계 비밀번호가 일치하지 않습니다!', 'danger');
@@ -352,7 +366,7 @@
         }
       } catch (err) {
         console.error('2Step connect error:', err);
-        UI.showToast('연결 중 오류: ' + (err.message || '다시 시도해 주세요.'), 'danger');
+        UI.showToast(err.message || '연결 중 오류가 발생했습니다.', 'danger');
         return false;
       }
     }
