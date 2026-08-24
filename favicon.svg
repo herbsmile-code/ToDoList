@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9a9e" />
+      <stop offset="50%" stop-color="#fecfef" />
+      <stop offset="100%" stop-color="#a18cd1" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- App Background (Squircle) -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+  
+  <!-- Subtle Inner Ring -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="4" />
+  
+  <!-- Sparkles -->
+  <g fill="#ffffff" opacity="0.9">
+    <!-- Top Right Sparkle -->
+    <path d="M 380,110 Q 380,140 410,140 Q 380,140 380,170 Q 380,140 350,140 Q 380,140 380,110 Z" />
+    <!-- Top Left Sparkle -->
+    <path d="M 130,130 Q 130,150 150,150 Q 130,150 130,170 Q 130,150 110,150 Q 130,150 130,130 Z" transform="scale(0.8) translate(30, 30)" />
+    <!-- Bottom Right Sparkle -->
+    <path d="M 390,360 Q 390,375 405,375 Q 390,375 390,390 Q 390,375 375,375 Q 390,375 390,360 Z" />
+  </g>
+  
+  <!-- Center Main Heart & Checkmark Symbol -->
+  <g transform="translate(256, 260) scale(1.05)" filter="url(#glow)">
+    <!-- Big Heart -->
+    <path d="M 0,-40 C -80,-140 -200,-30 -140,80 C -90,170 0,220 0,220 C 0,220 90,170 140,80 C 200,-30 80,-140 0,-40 Z" fill="#ffffff" opacity="0.96" />
+    
+    <!-- Checklist Icon inside Heart -->
+    <path d="M -50,60 L -15,95 L 60,15" fill="none" stroke="#ff6b8b" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>
