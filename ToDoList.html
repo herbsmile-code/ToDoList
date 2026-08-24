@@ -144,31 +144,20 @@
           </ul>
         </div>
 
-        <!-- Productivity Summary & Stats -->
-        <div class="sidebar-card stats-card">
-          <div class="sidebar-title">오늘의 달성도 🌷</div>
-          <div class="stats-ring-container">
-            <svg class="progress-ring-svg" viewBox="0 0 78 78">
-              <defs>
-                <linearGradient id="gradient-progress" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#ff8fa3" />
-                  <stop offset="100%" stop-color="#b197fc" />
-                </linearGradient>
-              </defs>
-              <circle class="progress-ring-bg" cx="39" cy="39" r="31" />
-              <circle class="progress-ring-bar" id="progress-ring-bar" cx="39" cy="39" r="31" />
-            </svg>
-            <div class="stats-info">
-              <div class="stats-percent" id="stats-rate">0%</div>
-              <div class="stats-subtext" id="stats-subtext">0/0개 완료됨</div>
-            </div>
+        <!-- My Treasure Vault (나의 보물 모음집♡) -->
+        <div class="sidebar-card treasure-card" id="sidebar-treasure-card" title="오늘 배운 지식 & 꿀팁 보물함 열기 ✨">
+          <div class="sidebar-title" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>나의 보물 모음집♡ 💎</span>
+            <span class="treasure-count-badge" id="nav-count-treasure">5</span>
           </div>
-          <div class="streak-box">
-            <div class="streak-left">
-              <span>🔥</span>
-              <span>연속 달성</span>
-            </div>
-            <strong id="streak-count">1일 연속</strong>
+          <div class="treasure-card-body">
+            <div class="treasure-sparkle-icon">✨ 📚 💖</div>
+            <p class="treasure-desc">오늘 배운 지식, 개발 꿀팁, 노하우가 차곡차곡 쌓여있어요!</p>
+            <button type="button" class="btn-treasure-open" id="btn-open-treasure">
+              <span>💎</span>
+              <span>보물 모음집 열기</span>
+              <span>✨</span>
+            </button>
           </div>
         </div>
       </aside>
@@ -620,7 +609,132 @@
   <!-- Dynamic Toast Container -->
   <div id="toast-container" aria-live="polite"></div>
 
-  <!-- Standalone Application Logic Script -->
+  
+    <!-- =========================================================================
+         Treasure Vault Modal (나의 보물 모음집♡ 팝업 창)
+         ========================================================================= -->
+    <div id="treasure-vault-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+      <div class="tr-modal-card">
+        <div class="tr-modal-header">
+          <div>
+            <h2><span>💎</span> 나의 보물 모음집♡ (Study & Knowledge Hub)</h2>
+            <p>오늘 배우거나 새로 알게 된 개발 지식, 꿀팁 노하우를 한곳에 모아보고 복사하세요 ✨</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <button type="button" id="btn-tr-open-add" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1rem;">
+              <span>+</span> 새 보물 등록
+            </button>
+            <button class="modal-close-btn" data-close-treasure-modal title="닫기 (Esc)">✕</button>
+          </div>
+        </div>
+
+        <div class="tr-modal-body">
+          <!-- Toolbar: Filter Pills & Search -->
+          <div class="tr-toolbar">
+            <div class="tr-filter-pills" id="tr-filter-pills">
+              <button type="button" class="tr-pill active" data-cat="all">💎 전체보기</button>
+              <button type="button" class="tr-pill" data-cat="terms">📚 개발 용어</button>
+              <button type="button" class="tr-pill" data-cat="setup">🚀 1~5번 셋업</button>
+              <button type="button" class="tr-pill" data-cat="security">🔒 보안 & 품질</button>
+              <button type="button" class="tr-pill" data-cat="study">📝 내 공부 노트</button>
+            </div>
+
+            <div class="tr-search-box">
+              <span>🔍</span>
+              <input type="text" id="tr-search-input" placeholder="보물 지식 검색...">
+            </div>
+          </div>
+
+          <!-- Treasure Cards Grid -->
+          <div class="tr-grid" id="tr-grid-container">
+            <!-- Dynamically populated treasure cards -->
+          </div>
+
+          <!-- Empty State -->
+          <div id="tr-empty-state" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">💎</div>
+            <h3>아직 등록된 보물이 없어요</h3>
+            <p>새로운 개발 지식이나 꿀팁을 등록하여 나만의 보물 모음집을 채워보세요 ✨</p>
+            <button class="btn btn-primary" id="btn-tr-empty-add">+ 첫 보물 추가하기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Add New Treasure -->
+    <div id="treasure-add-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
+      <div class="modal-card" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3 class="modal-title">💎 새 보물(학습 지식) 등록</h3>
+          <button class="modal-close-btn" data-close-treasure-add-modal title="닫기 (Esc)">✕</button>
+        </div>
+
+        <form id="treasure-add-form">
+          <div class="form-group">
+            <label class="form-label" for="tr-input-title">지식 / 꿀팁 제목 *</label>
+            <input type="text" id="tr-input-title" class="form-input" placeholder="예: [개발 용어] 패키지와 uv add란?" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="tr-input-cat">카테고리 분류</label>
+            <select id="tr-input-cat" class="form-input">
+              <option value="terms">📚 개발 용어</option>
+              <option value="setup">🚀 1~5번 셋업</option>
+              <option value="security">🔒 보안 & 품질</option>
+              <option value="study">📝 내 공부 노트</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="tr-input-desc">핵심 요약 & 설명 *</label>
+            <textarea id="tr-input-desc" class="form-textarea" placeholder="이해하기 쉽게 비유나 핵심 설명을 적어주세요..." style="min-height: 90px;" required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="tr-input-code">명령어 또는 코드 예시 (선택)</label>
+            <textarea id="tr-input-code" class="form-textarea" placeholder="예: uv add python-docx" style="min-height: 60px; font-family: monospace;"></textarea>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-treasure-add-modal>취소</button>
+            <button type="submit" class="btn btn-primary">보물함에 쏙 넣기 💖</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Standalone Application Logic Script -->
   <script src="js/app.js?v=2.7"></script>
+    <script src="js/treasure.js"></script>
+
+    <!-- =========================================================================
+         Treasure Detail View Modal (큰 화면으로 전체 보기 모달)
+         ========================================================================= -->
+    <div id="treasure-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10002;">
+      <div class="tr-detail-modal-card">
+        <div class="tr-detail-header">
+          <div>
+            <div class="tr-detail-meta">
+              <span class="tr-badge-tag" id="tr-detail-badge">💎 지식</span>
+              <span style="font-size: 0.78rem; color: #a0aec0;" id="tr-detail-date">2026.08.24</span>
+            </div>
+            <h2 class="tr-detail-title" id="tr-detail-title">학습 지식 제목</h2>
+          </div>
+          <button class="modal-close-btn" data-close-treasure-detail-modal title="닫기 (Esc)">✕</button>
+        </div>
+
+        <div class="tr-detail-body">
+          <div class="tr-detail-desc" id="tr-detail-desc">
+            <!-- Full Content -->
+          </div>
+
+          <div class="tr-code-box" id="tr-detail-code-box" style="display: none;">
+            <button type="button" class="tr-btn-copy" id="btn-detail-copy-code">📋 코드 복사</button>
+            <pre><code id="tr-detail-code"></code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
 </body>
 </html>

@@ -1201,7 +1201,7 @@
         if (rateEl) rateEl.textContent = `0%`;
         if (subtextEl) subtextEl.textContent = `로그인 필요 🔒`;
         if (streakEl) streakEl.textContent = `보안 잠금 중`;
-        if (ringBar) ringBar.style.strokeDashoffset = 2 * Math.PI * 31;
+        if (ringBar) if (ringBar) ringBar.style.strokeDashoffset = 2 * Math.PI * 31;
         return;
       }
 
@@ -1275,10 +1275,12 @@
       if (streakEl) streakEl.textContent = `${stats.streak}일 연속 달성 중`;
 
       if (ringBar) {
-        const circumference = 2 * Math.PI * 31;
-        const offset = circumference - (stats.rate / 100) * circumference;
-        ringBar.style.strokeDasharray = `${circumference} ${circumference}`;
-        ringBar.style.strokeDashoffset = offset;
+        if (ringBar) {
+          const circumference = 2 * Math.PI * 31;
+          const offset = circumference - (stats.rate / 100) * circumference;
+          ringBar.style.strokeDasharray = `${circumference} ${circumference}`;
+          ringBar.style.strokeDashoffset = offset;
+        }
       }
     },
 
