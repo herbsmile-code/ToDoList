@@ -975,7 +975,7 @@
 
     formatDueDate(dateStr) {
       if (!dateStr) return null;
-      let label = dateStr;
+      let label = dateStr.replace(/-/g, '.');
       let className = '';
 
       if (dateStr === TODAY_STR) {
@@ -984,9 +984,6 @@
       } else if (dateStr === '2026-08-26') {
         label = '내일 (2026.08.26)';
         className = 'due-tomorrow';
-      } else if (dateStr < TODAY_STR) {
-        label = `지연됨 (${dateStr})`;
-        className = 'overdue';
       }
 
       return { label, className };
@@ -996,20 +993,17 @@
       const map = {
         'todo': { label: '할 일 📋', class: 'type-todo' },
         'schedule': { label: '일정 ⏰', class: 'type-schedule' },
-        'half-off': { label: '반차 🏖️', class: 'half-off' },
+        'half-off': { label: '반차 🌿', class: 'half-off' },
         'vacation': { label: '휴가 🌴', class: 'vacation' }
       };
       return map[type] || map['todo'];
     },
 
     getPriorityInfo(p) {
-      const map = {
-        urgent: { label: '긴급 🔥', class: 'badge-priority-urgent' },
-        high: { label: '높음 🔴', class: 'badge-priority-high' },
-        medium: { label: '중간 🟡', class: 'badge-priority-medium' },
-        low: { label: '낮음 🟢', class: 'badge-priority-low' }
-      };
-      return map[p] || map.medium;
+      if (p === 'urgent' || p === 'high') {
+        return { label: '중요 ⭐', class: 'badge-priority-high' };
+      }
+      return { label: '보통 🌸', class: 'badge-priority-medium' };
     },
 
     async renderSidebar() {
@@ -1132,7 +1126,6 @@
               <span class="badge ${priority.class}">${priority.label}</span>
               ${cat ? `<span class="badge badge-tag" style="background: ${cat.color}15; color: ${cat.color};">${cat.name}</span>` : ''}
               ${dueInfo ? `<span class="badge badge-date ${dueInfo.className}">🗓️ ${dueInfo.label}</span>` : ''}
-              <span class="badge badge-created" style="background: rgba(0,0,0,0.04); color: var(--text-dim);">📅 등록: ${createdDateStr}</span>
             </div>
           </div>
 
@@ -1370,25 +1363,31 @@
         daysTasks.slice(0, 3).forEach(task => {
           const isDone = task.status === 'completed';
 
+          const isImportant = (task.priority === 'urgent' || task.priority === 'high');
+          const starIcon = isImportant ? '<span class="cal-star-badge" title="중요">⭐</span>' : '';
+
           if (task.type === 'half-off') {
             taskChipsHTML += `
               <div class="cal-task-chip half-off ${isDone ? 'completed' : ''}" title="${escapeHTML(task.title || '반차')}">
-                <span>🏖️</span>
+                ${starIcon}
+                <span>🌿</span>
                 <span>반차</span>
               </div>
             `;
           } else if (task.type === 'vacation') {
             taskChipsHTML += `
               <div class="cal-task-chip vacation ${isDone ? 'completed' : ''}" title="${escapeHTML(task.title || '휴가')}">
+                ${starIcon}
                 <span>🌴</span>
                 <span>휴가</span>
               </div>
             `;
           } else {
-            const pClass = task.priority || 'medium';
-            const icon = task.type === 'schedule' ? '⏰' : (isDone ? '✨' : '📌');
+            const pClass = isImportant ? 'high' : 'medium';
+            const icon = task.type === 'schedule' ? '⏰' : (isDone ? '✨' : '📋');
             taskChipsHTML += `
               <div class="cal-task-chip ${isDone ? 'completed' : ''} ${pClass}" title="${escapeHTML(task.title)}">
+                ${starIcon}
                 <span>${icon}</span>
                 <span>${escapeHTML(task.title)}</span>
               </div>
@@ -1504,11 +1503,9 @@
         if (tasksForDay.length === 0) {
           chipsHTML = `<span class="weekly-row-empty">등록된 일정이 없어요 🌱</span>`;
         } else {
-          chipsHTML = tasksForDay.map(task => {
-            const isDone = task.status === 'completed';
-            const isSpecial = (task.type === 'half-off' || task.type === 'vacation');
-            const chipStyle = isSpecial ? 'background: linear-gradient(135deg, #fff3bf, #ffd43b); color: #8c5300; border-color: #fab005;' : '';
-            const chipLabel = task.type === 'half-off' ? '🏖️ 반차' : (task.type === 'vacation' ? '🌴 휴가' : escapeHTML(task.title));
+            const isImportant = (task.priority === 'urgent' || task.priority === 'high');
+            const star = isImportant ? '⭐ ' : '';
+            const chipLabel = task.type === 'half-off' ? `${star}🌿 반차` : (task.type === 'vacation' ? `${star}🌴 휴가` : `${star}${escapeHTML(task.title)}`);
 
             return `
               <div class="weekly-item-chip ${isDone ? 'completed' : ''}" style="${chipStyle}" data-task-id="${task.id}" data-action="toggle-complete">
@@ -1966,16 +1963,10 @@
         document.getElementById('task-input-title').value = task.title;
         document.getElementById('task-input-type').value = task.type || 'todo';
         document.getElementById('task-input-desc').value = task.description || '';
-        document.getElementById('task-input-priority').value = task.priority || 'medium';
+        document.getElementById('task-input-priority').value = (task.priority === 'urgent' || task.priority === 'high') ? 'high' : 'medium';
         document.getElementById('task-input-category').value = task.category || 'routine';
         document.getElementById('task-input-duedate').value = task.dueDate || TODAY_STR;
         document.getElementById('task-input-pinned').checked = !!task.pinned;
-
-        if (createdGroup && createdVal) {
-          const cDate = new Date(task.createdAt || Date.now());
-          createdVal.textContent = `${cDate.getFullYear()}-${String(cDate.getMonth() + 1).padStart(2, '0')}-${String(cDate.getDate()).padStart(2, '0')}`;
-          createdGroup.style.display = 'flex';
-        }
 
         if (task.subtasks) {
           task.subtasks.forEach(s => this.addSubtaskRow(s.title, s.completed, s.id));
@@ -1986,7 +1977,6 @@
         document.getElementById('task-input-type').value = 'todo';
         document.getElementById('task-input-priority').value = 'medium';
         document.getElementById('task-input-duedate').value = presetDueDate || TODAY_STR;
-        if (createdGroup) createdGroup.style.display = 'none';
 
         const defaultCat = store.activeFilter !== 'all' && store.activeFilter !== 'vault' && store.categories.some(c => c.id === store.activeFilter)
           ? store.activeFilter
@@ -2645,7 +2635,7 @@
           sounds.playAdd();
           if (type === 'vacation' || type === 'half-off') {
             confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
-            UI.showToast(`${type === 'vacation' ? '🌴 휴가' : '🏖️ 반차'} 일정이 개나리색으로 등록되었어요! 🌼`, 'success');
+            UI.showToast(`${type === 'vacation' ? '🌴 휴가' : '🌿 반차'} 일정이 개나리색으로 등록되었어요! 🌼`, 'success');
           } else {
             UI.showToast('새로운 일정이 등록되었어요! 💖', 'success');
           }

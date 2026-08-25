@@ -256,10 +256,8 @@
               <!-- Priority Filter -->
               <select id="priority-filter-select" class="select-dropdown" aria-label="우선순위 필터">
                 <option value="all">우선순위 전체</option>
-                <option value="urgent">긴급 🔥</option>
-                <option value="high">높음 🔴</option>
-                <option value="medium">중간 🟡</option>
-                <option value="low">낮음 🟢</option>
+                <option value="high">중요 ⭐</option>
+                <option value="medium">보통 🌸</option>
               </select>
 
               <!-- Sorting Dropdown -->
@@ -798,7 +796,7 @@
             <select id="task-input-type" class="form-select">
               <option value="todo" selected>할 일 (To Do)</option>
               <option value="schedule">일정 (Schedule)</option>
-              <option value="half-off">반차 🏖️</option>
+              <option value="half-off">반차 🌿</option>
               <option value="vacation">휴가 🌴</option>
             </select>
           </div>
@@ -806,10 +804,8 @@
           <div class="form-group">
             <label class="form-label" for="task-input-priority">우선순위</label>
             <select id="task-input-priority" class="form-select">
-              <option value="urgent">긴급 🔥</option>
-              <option value="high">높음 🔴</option>
-              <option value="medium" selected>중간 🟡</option>
-              <option value="low">낮음 🟢</option>
+              <option value="high">중요 ⭐</option>
+              <option value="medium" selected>보통 🌸</option>
             </select>
           </div>
         </div>
@@ -828,22 +824,12 @@
           </div>
         </div>
 
-        <!-- Registration Date Display (등록일 정보 - 수정 시 노출) & Pinned Option -->
-        <div class="form-row" style="align-items: center;">
-          <div class="form-group" id="task-createdat-group" style="display: none; margin-bottom: 0;">
-            <label class="form-label">등록일 (작성일)</label>
-            <div class="form-badge-createdat" id="task-display-createdat">
-              <span>📅</span> <span id="task-createdat-val">2026-08-25</span>
-            </div>
-          </div>
-
-          <div class="form-group" style="justify-content: center; margin-bottom: 0; padding-top: 0.25rem;">
-            <label class="form-label" style="margin-bottom: 0.4rem;">상단 고정 여부</label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
-              <input type="checkbox" id="task-input-pinned" class="task-checkbox">
-              <span>중요 작업으로 상단 고정 📌</span>
-            </label>
-          </div>
+        <!-- Pinned Option -->
+        <div class="form-group" style="margin-top: 0.25rem; margin-bottom: 0.5rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
+            <input type="checkbox" id="task-input-pinned" class="task-checkbox">
+            <span>상단 고정 📌</span>
+          </label>
         </div>
 
         <!-- Subtasks Checklist Builder -->
