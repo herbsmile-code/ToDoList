@@ -997,22 +997,6 @@
     },
 
     async renderSidebar() {
-      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
-
-      if (!isLogged) {
-        const counts = ['all', 'upcoming', 'overdue', 'pinned', 'completed', 'notes', 'ledger', 'wishlist', 'vault'];
-        counts.forEach(k => {
-          const el = document.getElementById(`nav-count-${k}`);
-          if (el) el.textContent = '🔒';
-        });
-
-        const catContainer = document.getElementById('category-nav-list');
-        if (catContainer) {
-          catContainer.innerHTML = `<li style="padding: 0.85rem 0.5rem; font-size: 0.82rem; color: var(--text-dim); text-align: center;">🔐 로그인 시 표시됩니다</li>`;
-        }
-        return;
-      }
-
       const stats = store.getStats();
       const counts = {
         all: store.tasks.length,
@@ -1147,18 +1131,6 @@
       const emptyState = document.getElementById('empty-state');
       const lockedScreen = document.getElementById('locked-privacy-screen');
       const mobileBar = document.getElementById('mobile-category-bar');
-
-      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
-
-      if (!isLogged) {
-        if (lockedScreen) lockedScreen.style.display = 'flex';
-        [tasksView, filesView, wishView, notesView, ledgerView, calMView, calWView].forEach(v => {
-          if (v) v.style.display = 'none';
-        });
-        if (mobileBar) mobileBar.style.display = 'none';
-        this.renderSidebar();
-        return;
-      }
 
       if (lockedScreen) lockedScreen.style.display = 'none';
       if (mobileBar) mobileBar.style.display = 'flex';
@@ -2486,37 +2458,20 @@
 
     // Sidebar & Mobile Nav Filter Delegation
     document.addEventListener('click', (e) => {
-      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
-
       const navItem = e.target.closest('.nav-item');
       if (navItem && navItem.dataset.filter) {
-        if (!isLogged) {
-          UI.showToast('동기화 로그인(잠금 해제)을 하시면 모든 메뉴가 열립니다 🔐', 'info');
-          UI.openCloudModal();
-          return;
-        }
         store.activeFilter = navItem.dataset.filter;
         UI.renderTasks();
       }
 
       const mobileNavBtn = e.target.closest('.mobile-nav-btn');
       if (mobileNavBtn && mobileNavBtn.dataset.mobileNav) {
-        if (!isLogged) {
-          UI.showToast('동기화 로그인(잠금 해제)을 하시면 모든 메뉴가 열립니다 🔐', 'info');
-          UI.openCloudModal();
-          return;
-        }
         store.activeFilter = mobileNavBtn.dataset.mobileNav;
         UI.renderTasks();
       }
 
       const mobilePill = e.target.closest('.mobile-cat-pill');
       if (mobilePill && mobilePill.dataset.filter) {
-        if (!isLogged) {
-          UI.showToast('동기화 로그인(잠금 해제)을 하시면 모든 메뉴가 열립니다 🔐', 'info');
-          UI.openCloudModal();
-          return;
-        }
         store.activeFilter = mobilePill.dataset.filter;
         UI.renderTasks();
       }

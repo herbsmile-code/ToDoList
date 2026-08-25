@@ -21,6 +21,7 @@
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
     window.addEventListener('error', function(e) {
+      if (!e || e.message === 'Script error.' || (!e.filename && !e.lineno)) return;
       console.error('Captured Script Error:', e);
       try {
         const box = document.getElementById('debug-error-banner') || (function() {
@@ -30,7 +31,7 @@
           (document.body || document.documentElement).appendChild(el);
           return el;
         })();
-        const errMsg = (e.message || (e.error && e.error.message) || e.error || '알 수 없는 스크립트 에러');
+        const errMsg = (e.message || (e.error && e.error.message) || e.error || '스크립트 에러');
         const fileLine = (e.filename ? e.filename.split('/').pop() : '') + ':' + (e.lineno || 0);
         box.innerHTML = '⚠️ 스크립트 실행 오류: ' + errMsg + '<br><span style="font-size:11px; opacity:0.85;">(' + fileLine + ')</span>';
         box.onclick = function() {
@@ -1254,7 +1255,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=4.0"></script>
-  <script src="js/treasure.js?v=4.0"></script>
+  <script src="js/app.js?v=4.1"></script>
+  <script src="js/treasure.js?v=4.1"></script>
 </body>
 </html>
