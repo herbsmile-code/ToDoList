@@ -3202,13 +3202,25 @@
   // 9. Application Bootstrap
   // =========================================================================
   function initApp() {
-    const savedTheme = localStorage.getItem('todolist_jy_theme') || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    const icon = document.getElementById('theme-toggle-icon');
-    if (icon) icon.textContent = savedTheme === 'dark' ? '🌙' : '🌸';
+    try {
+      const savedTheme = localStorage.getItem('todolist_jy_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      const icon = document.getElementById('theme-toggle-icon');
+      if (icon) icon.textContent = savedTheme === 'dark' ? '🌙' : '🌸';
 
-    bindEvents();
-    UI.renderTasks();
+      bindEvents();
+      UI.renderTasks();
+    } catch (err) {
+      console.error('initApp fatal error:', err);
+      const box = document.getElementById('debug-error-banner') || (function() {
+        const el = document.createElement('div');
+        el.id = 'debug-error-banner';
+        el.style.cssText = 'position:fixed; top:12px; left:50%; transform:translateX(-50%); background:#e03131; color:#fff; padding:12px 24px; border-radius:12px; z-index:999999; font-size:13px; font-weight:bold; box-shadow:0 8px 25px rgba(0,0,0,0.35); max-width:90vw; word-break:break-all; text-align:center;';
+        (document.body || document.documentElement).appendChild(el);
+        return el;
+      })();
+      box.innerHTML = '⚠️ 앱 초기화 오류: ' + (err.message || err);
+    }
   }
 
   if (document.readyState === 'loading') {
