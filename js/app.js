@@ -340,16 +340,24 @@
       const sKey = 'on3257';
       const cleanPin = pin.trim();
       const hashed = await this.hashPin(cleanPin);
-      const authUrl = `${this.activeUrl}/auth_registry/${sKey}.json`;
-      const dataSpaceUrl = `${this.activeUrl}/spaces/space_on3257_${this.sanitizeKey(cleanPin)}.json`;
 
+      // 1. Local Storage Master Hash Check (로컬 브라우저 1차 검증)
+      const LOCAL_HASH_KEY = 'todolist_jy_master_pinhash';
+      const localMasterHash = localStorage.getItem(LOCAL_HASH_KEY);
+      if (localMasterHash && localMasterHash !== hashed) {
+        return { 
+          success: false, 
+          message: '⚠️ 비밀번호가 일치하지 않습니다! 🔒' 
+        };
+      }
+
+      // 2. Cloud Auth Registry Check (클라우드 2차 검증)
+      const authUrl = `${this.activeUrl}/auth_registry/${sKey}.json`;
       try {
-        // Check Cloud Auth Registry for on3257
         const res = await fetch(authUrl);
         if (res.ok) {
           const registered = await res.json();
           if (registered && registered.pinHash) {
-            // Already registered on Cloud: pin hash MUST strictly match!
             if (registered.pinHash !== hashed) {
               return { 
                 success: false, 
@@ -357,7 +365,7 @@
               };
             }
           } else {
-            // First time registration: save hash permanently
+            // Register to cloud registry on first time
             await fetch(authUrl, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
@@ -371,6 +379,11 @@
         }
       } catch (err) {
         console.warn('Cloud Auth check warning:', err);
+      }
+
+      // Save master hash locally if not set
+      if (!localMasterHash) {
+        localStorage.setItem(LOCAL_HASH_KEY, hashed);
       }
 
       // Login success: bind to on3257 and cleanPin
