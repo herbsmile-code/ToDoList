@@ -1,7 +1,7 @@
 {
   "name": "Todolist JY 🌸 | 오늘의 반짝이는 할 일",
   "short_name": "Todolist JY",
-  "description": "아기자기하고 깔끔한 프리미엄 To-Do List 및 학습 보물 모음집",
+  "description": "아기자기하고 깔끔한 프리미엄 To-Do List 및 학습 보물 지식",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#fff0f3",

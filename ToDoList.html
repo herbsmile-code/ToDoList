@@ -6,17 +6,20 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#fff0f3">
-    <!-- App Icons & PWA Manifest -->
+  <!-- App Icons & PWA Manifest -->
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="apple-touch-icon" href="favicon.svg">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="description" content="Todolist JY - 아이폰 스타일의 아기자기하고 깔끔한 프리미엄 To-Do List 및 클라우드 파일 보관함">
-  <title>Todolist JY 🌸 | 오늘의 반짝이는 할 일</title>
+  <meta name="description" content="Todolist JY - 아이폰 스타일의 아기자기하고 깔끔한 프리미엄 다이어리 플래너, 가계부, 위시리스트 & 끄적끄적 메모장">
+  <title>Todolist JY 🌸 | 나만의 감성 다이어리 & 가계부 플래너</title>
   
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=2.7">
-  <link rel="stylesheet" href="css/animations.css?v=2.7">
+  <link rel="stylesheet" href="css/style.css?v=3.5">
+  <link rel="stylesheet" href="css/animations.css?v=3.5">
+
+  <!-- SheetJS (Excel Parser) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -36,7 +39,7 @@
           <div class="brand-icon">💖</div>
           <div>
             <span class="brand-name">Todolist JY</span>
-            <span class="brand-tagline">daily planner</span>
+            <span class="brand-tagline">daily diary & planner</span>
           </div>
         </a>
       </div>
@@ -44,7 +47,7 @@
       <div class="header-center">
         <div class="search-box">
           <span class="search-icon">🔍</span>
-          <input type="text" id="search-input" class="search-input" placeholder="오늘 할 일, 메모 검색... (단축키: /)" aria-label="검색창">
+          <input type="text" id="search-input" class="search-input" placeholder="오늘 할 일, 메모, 가계부, 위시 검색... (단축키: /)" aria-label="검색창">
           <span class="search-badge">/</span>
         </div>
       </div>
@@ -69,7 +72,7 @@
         </button>
         <button id="btn-open-task-modal" class="btn btn-primary" title="새로운 할 일 등록 (단축키: N)">
           <span>+</span>
-          <span>새 할 일</span>
+          <span>새 등록</span>
         </button>
       </div>
     </header>
@@ -80,8 +83,22 @@
       <aside class="sidebar">
         <!-- Main Navigation Filters -->
         <div class="sidebar-card">
-          <div class="sidebar-title">메인 메뉴 📌</div>
+          <div class="sidebar-title">다이어리 & 플래너 📌</div>
           <ul class="nav-list" id="main-nav-list">
+            <li class="nav-item nav-item-calendar" data-filter="calendar-month" id="nav-filter-calendar-month" title="2026년 8월 기준 월별 달력 (반차/휴가 개나리색 표시)">
+              <div class="nav-item-left">
+                <span>🗓️</span>
+                <span>월별 달력</span>
+              </div>
+              <span class="nav-pill-badge">8월</span>
+            </li>
+            <li class="nav-item nav-item-calendar" data-filter="calendar-week" id="nav-filter-calendar-week" title="이번 주간 가로형 플래너 리스트">
+              <div class="nav-item-left">
+                <span>📅</span>
+                <span>주간 달력</span>
+              </div>
+              <span class="nav-pill-badge">주간</span>
+            </li>
             <li class="nav-item active" data-filter="all" id="nav-filter-all">
               <div class="nav-item-left">
                 <span>📋</span>
@@ -89,16 +106,9 @@
               </div>
               <span class="nav-count" id="nav-count-all">0</span>
             </li>
-            <li class="nav-item" data-filter="today" id="nav-filter-today">
-              <div class="nav-item-left">
-                <span>☀️</span>
-                <span>오늘 할 일</span>
-              </div>
-              <span class="nav-count" id="nav-count-today">0</span>
-            </li>
             <li class="nav-item" data-filter="upcoming" id="nav-filter-upcoming">
               <div class="nav-item-left">
-                <span>🗓️</span>
+                <span>⏰</span>
                 <span>다가오는 일정</span>
               </div>
               <span class="nav-count" id="nav-count-upcoming">0</span>
@@ -127,7 +137,7 @@
           </ul>
         </div>
 
-        <!-- Category Tag Filters & File Vault -->
+        <!-- Category Tag Filters, Notes, Ledger, Wishlist & File Vault -->
         <div class="sidebar-card">
           <div class="sidebar-title">
             <span>카테고리 태그 🏷️</span>
@@ -137,8 +147,33 @@
             <!-- Dynamically populated categories -->
           </ul>
           
-          <!-- File Vault Menu Item -->
-          <ul class="nav-list" style="margin-top: 0.5rem;">
+          <!-- Extra Features: Notes, Ledger, Wishlist & File Vault -->
+          <ul class="nav-list" style="margin-top: 0.65rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
+            <!-- Notes / Doodle Menu Item (끄적끄적) -->
+            <li class="nav-item notes-nav-item" data-filter="notes" id="nav-filter-notes" title="자유롭게 생각을 적는 간단한 메모장">
+              <div class="nav-item-left">
+                <span>✏️</span>
+                <span>끄적끄적</span>
+              </div>
+              <span class="nav-count" id="nav-count-notes">0</span>
+            </li>
+            <!-- Household Ledger Menu Item (가계부) -->
+            <li class="nav-item ledger-nav-item" data-filter="ledger" id="nav-filter-ledger" title="가계부 엑셀 업로드 및 월별 지출 비교">
+              <div class="nav-item-left">
+                <span>💰</span>
+                <span>가계부</span>
+              </div>
+              <span class="nav-count" id="nav-count-ledger">0</span>
+            </li>
+            <!-- Wishlist Menu Item (위시리스트) -->
+            <li class="nav-item wishlist-nav-item" data-filter="wishlist" id="nav-filter-wishlist" title="사고 싶은 것, 가고 싶은 곳 위시 보관함">
+              <div class="nav-item-left">
+                <span>🎁</span>
+                <span>위시리스트</span>
+              </div>
+              <span class="nav-count" id="nav-count-wishlist">0</span>
+            </li>
+            <!-- File Vault Menu Item (파일 보관함) -->
             <li class="nav-item vault-nav-item" data-filter="vault" id="nav-filter-vault" title="엑셀, 메모장 등 파일 보관소">
               <div class="nav-item-left">
                 <span>📁</span>
@@ -149,10 +184,10 @@
           </ul>
         </div>
 
-        <!-- My Treasure Vault (나의 보물 모음집♡) -->
+        <!-- My Treasure Vault (나의 보물 지식♡) -->
         <div class="sidebar-card treasure-card" id="sidebar-treasure-card" title="오늘 배운 지식 & 꿀팁 보물함 열기 ✨">
           <div class="sidebar-title" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>나의 보물 모음집♡ 💎</span>
+            <span>나의 보물 지식♡ 💎</span>
             <span class="treasure-count-badge" id="nav-count-treasure">5</span>
           </div>
           <div class="treasure-card-body">
@@ -160,7 +195,7 @@
             <p class="treasure-desc">오늘 배운 지식, 개발 꿀팁, 노하우가 차곡차곡 쌓여있어요!</p>
             <button type="button" class="btn-treasure-open" id="btn-open-treasure">
               <span>💎</span>
-              <span>보물 모음집 열기</span>
+              <span>보물 지식함 열기</span>
               <span>✨</span>
             </button>
           </div>
@@ -176,7 +211,7 @@
           <h2 class="locked-title">Todolist JY 프라이버시 보호 중 🌸</h2>
           <p class="locked-desc">
             개인정보 및 보안을 위해 내용이 안전하게 잠겨 있습니다.<br>
-            2단계 보안 로그인 시 내 모든 할 일과 파일이 나타납니다.
+            2단계 보안 로그인 시 내 모든 할 일, 달력, 끄적끄적 메모, 가계부, 위시리스트가 나타납니다.
           </p>
           <button type="button" id="btn-locked-login" class="locked-btn-login">
             🔐 2단계 보안 로그인하기 ✨
@@ -185,13 +220,18 @@
 
         <!-- Mobile Horizontal Scrollable Category Pills -->
         <div class="mobile-category-bar" id="mobile-category-bar">
+          <button type="button" class="mobile-cat-pill" data-filter="calendar-month">🗓️ 월별달력</button>
+          <button type="button" class="mobile-cat-pill" data-filter="calendar-week">📅 주간달력</button>
           <button type="button" class="mobile-cat-pill active" data-filter="all">🌸 전체</button>
-          <button type="button" class="mobile-cat-pill" data-filter="today">☀️ 오늘</button>
+          <button type="button" class="mobile-cat-pill" data-filter="notes">✏️ 끄적끄적</button>
+          <button type="button" class="mobile-cat-pill" data-filter="ledger">💰 가계부</button>
+          <button type="button" class="mobile-cat-pill" data-filter="wishlist">🎁 위시</button>
           <button type="button" class="mobile-cat-pill" data-filter="pinned">💖 중요</button>
-          <!-- Categories populated dynamically -->
         </div>
 
-        <!-- SECTION A: Normal Tasks View -->
+        <!-- ===================================================================
+             SECTION 1: Normal Tasks View (List & Kanban)
+             =================================================================== -->
         <div id="tasks-view-container" style="display: flex; flex-direction: column; gap: 1.25rem;">
           <!-- Top Title & Toolbar -->
           <div class="dashboard-header">
@@ -235,7 +275,7 @@
           <!-- Quick Add Task Bar -->
           <form id="quick-add-form" class="quick-add-card" onsubmit="return false;">
             <span class="quick-add-icon">✨</span>
-            <input type="text" id="quick-add-input" class="quick-add-input" placeholder="새로운 할 일을 입력하고 Enter를 누르세요..." autocomplete="off">
+            <input type="text" id="quick-add-input" class="quick-add-input" placeholder="새로운 할 일 또는 일정을 입력하고 Enter를 누르세요..." autocomplete="off">
             <button type="button" id="quick-add-submit-btn" class="quick-add-btn">
               추가
             </button>
@@ -285,15 +325,386 @@
           <!-- Tasks Empty State -->
           <div id="empty-state" class="empty-state" style="display: none;">
             <div class="empty-state-icon">🌷</div>
-            <h3>해당하는 할 일이 없어요!</h3>
-            <p>모든 할 일을 마쳤거나 검색 결과가 없어요. 새로운 할 일을 추가해 보세요 ✨</p>
+            <h3>해당하는 항목이 없어요!</h3>
+            <p>모든 할 일을 마쳤거나 검색 결과가 없어요. 새로운 일정을 등록해 보세요 ✨</p>
             <button class="btn btn-primary" onclick="document.getElementById('btn-open-task-modal').click()">
-              + 새 할 일 등록하기
+              + 새 일정/할 일 등록하기
             </button>
           </div>
         </div>
 
-        <!-- SECTION B: File Vault View -->
+        <!-- ===================================================================
+             SECTION 2: Monthly Calendar View (월별 달력)
+             =================================================================== -->
+        <div id="calendar-month-view-container" class="calendar-view-container" style="display: none; flex-direction: column; gap: 1.25rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1 id="month-cal-header-title">🗓️ 2026년 8월 달력 플래너</h1>
+              <p>한 달간의 할 일, 일정 및 반차/휴가(개나리색 🌼)를 한눈에 확인하세요 🌸</p>
+            </div>
+            
+            <div class="calendar-nav-controls">
+              <button type="button" class="btn btn-cal-nav" id="btn-month-prev" title="이전 달">◀ 이전 달</button>
+              <button type="button" class="btn btn-cal-today" id="btn-month-today" title="오늘 날짜(2026.08.25)로 이동">오늘 (2026.08.25)</button>
+              <button type="button" class="btn btn-cal-nav" id="btn-month-next" title="다음 달">다음 달 ▶</button>
+            </div>
+          </div>
+
+          <!-- Month Summary Stats Banner -->
+          <div class="cal-month-stats-banner">
+            <div class="cal-stat-item">
+              <span class="cal-stat-label">이달의 총 일정/할일</span>
+              <span class="cal-stat-num" id="cal-stat-total">0개</span>
+            </div>
+            <div class="cal-stat-item">
+              <span class="cal-stat-label">달성 완료</span>
+              <span class="cal-stat-num cal-stat-completed" id="cal-stat-completed">0개</span>
+            </div>
+            <div class="cal-stat-item">
+              <span class="cal-stat-label">반차 / 휴가 🌼</span>
+              <span class="cal-stat-num cal-stat-vacation" id="cal-stat-vacation" style="color: #f59f00;">0일</span>
+            </div>
+            <div class="cal-stat-item">
+              <span class="cal-stat-label">이달의 달성률</span>
+              <span class="cal-stat-num cal-stat-rate" id="cal-stat-rate">0%</span>
+            </div>
+          </div>
+
+          <!-- Month Calendar Card (Fixed column width, ellipsis for overflow) -->
+          <div class="calendar-card">
+            <!-- Weekday Names Header -->
+            <div class="cal-weekdays-grid">
+              <div class="cal-weekday sun">일 (Sun)</div>
+              <div class="cal-weekday">월 (Mon)</div>
+              <div class="cal-weekday">화 (Tue)</div>
+              <div class="cal-weekday">수 (Wed)</div>
+              <div class="cal-weekday">목 (Thu)</div>
+              <div class="cal-weekday">금 (Fri)</div>
+              <div class="cal-weekday sat">토 (Sat)</div>
+            </div>
+
+            <!-- Month Days Grid -->
+            <div class="cal-days-grid" id="month-days-grid">
+              <!-- Dynamically populated day cells with fixed width -->
+            </div>
+          </div>
+
+          <!-- Selected Day Detail View Panel -->
+          <div class="cal-selected-day-panel" id="cal-selected-day-panel">
+            <div class="cal-selected-header">
+              <div class="cal-selected-title-group">
+                <span class="cal-selected-badge">선택된 날짜</span>
+                <h3 id="cal-selected-day-title">2026년 8월 25일 (화) 일정 목록</h3>
+              </div>
+              <button type="button" class="btn btn-primary" id="btn-cal-add-for-day" style="font-size: 0.82rem; padding: 0.45rem 1rem;">
+                <span>+</span> 이 날짜에 새 일정/할 일 추가
+              </button>
+            </div>
+            <div class="cal-selected-tasks-list" id="cal-selected-tasks-list">
+              <!-- Dynamically populated task list for selected date -->
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             SECTION 3: Weekly Calendar View (가로형 슬림 주간 다이어리 플래너)
+             =================================================================== -->
+        <div id="calendar-week-view-container" class="calendar-view-container" style="display: none; flex-direction: column; gap: 1.25rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1 id="week-cal-header-title">📅 가로형 주간 다이어리 플래너</h1>
+              <p>이번 주 7일간의 할 일과 일정을 가로형 타임라인으로 한눈에 쏙 확인하세요 ✨</p>
+            </div>
+
+            <div class="calendar-nav-controls">
+              <button type="button" class="btn btn-cal-nav" id="btn-week-prev" title="이전 주">◀ 이전 주</button>
+              <button type="button" class="btn btn-cal-today" id="btn-week-today" title="이번 주로 이동">이번 주 (8월 4주차)</button>
+              <button type="button" class="btn btn-cal-nav" id="btn-week-next" title="다음 주">다음 주 ▶</button>
+            </div>
+          </div>
+
+          <!-- Weekly Horizontal Rows Container -->
+          <div class="weekly-horizontal-container" id="weekly-board-grid">
+            <!-- Dynamically populated 7 horizontal day rows -->
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             SECTION 4: 끄적끄적 (Quick Notes / Memo) View (그레이 색상 추가)
+             =================================================================== -->
+        <div id="notes-view-container" style="display: none; flex-direction: column; gap: 1.25rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>✏️ 끄적끄적 (Quick Notes)</h1>
+              <p>순간 떠오른 아이디어, 생각, 낙서, 중요한 메모를 편하게 적어보세요 📝✨</p>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">
+              총 <strong id="notes-count-total" style="color: var(--primary);">0</strong>개의 메모
+            </div>
+          </div>
+
+          <!-- Quick Note Add Card -->
+          <form id="quick-note-form" class="note-composer-card" onsubmit="return false;">
+            <div class="note-composer-top">
+              <textarea id="note-composer-input" class="note-composer-textarea" placeholder="여기에 가볍게 생각을 끄적여보세요... (단축키: 엔터로 줄바꿈)" rows="3" required></textarea>
+            </div>
+            <div class="note-composer-bottom">
+              <!-- Color Palette Picker (핑크, 옐로우, 민트, 라벤더, 스카이, 그레이) -->
+              <div class="note-color-picker" id="note-color-picker" title="메모지 색상 선택">
+                <label class="color-dot-label">
+                  <input type="radio" name="note-color" value="pink" checked>
+                  <span class="color-dot dot-pink" title="체리 핑크"></span>
+                </label>
+                <label class="color-dot-label">
+                  <input type="radio" name="note-color" value="yellow">
+                  <span class="color-dot dot-yellow" title="레몬 옐로우"></span>
+                </label>
+                <label class="color-dot-label">
+                  <input type="radio" name="note-color" value="mint">
+                  <span class="color-dot dot-mint" title="파스텔 민트"></span>
+                </label>
+                <label class="color-dot-label">
+                  <input type="radio" name="note-color" value="lavender">
+                  <span class="color-dot dot-lavender" title="라벤더 퍼플"></span>
+                </label>
+                <label class="color-dot-label">
+                  <input type="radio" name="note-color" value="sky">
+                  <span class="color-dot dot-sky" title="스카이 블루"></span>
+                </label>
+                <label class="color-dot-label">
+                  <input type="radio" name="note-color" value="gray">
+                  <span class="color-dot dot-gray" title="모던 쿨 그레이"></span>
+                </label>
+              </div>
+
+              <button type="button" id="btn-add-note" class="btn btn-primary" style="padding: 0.5rem 1.25rem; font-size: 0.85rem;">
+                <span>✏️</span>
+                <span>끄적이기</span>
+              </button>
+            </div>
+          </form>
+
+          <!-- Notes Sticky Grid -->
+          <div class="notes-grid" id="notes-grid-container">
+            <!-- Dynamically populated sticky note cards -->
+          </div>
+
+          <!-- Notes Empty State -->
+          <div id="notes-empty-state" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">📝</div>
+            <h3>아직 끄적여둔 메모가 없어요</h3>
+            <p>위 입력창에 간단한 생각이나 기억하고 싶은 메모를 적어보세요 ✨</p>
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             SECTION 5: Household Ledger View (2026년 신혼 가계부 분석 & 비교)
+             =================================================================== -->
+        <div id="ledger-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>💍 2026년 신혼 가계부 (영호 & 진영)</h1>
+              <p>영호 & 진영 급여(수입), 집세/공과금(고정지출), 생활비(변동지출)를 한눈에 쏙 비교하세요 💖</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" id="btn-download-ledger-template" class="btn" style="background: rgba(255, 107, 139, 0.08); color: var(--primary); border: 1px solid rgba(255, 107, 139, 0.25);" title="공식 2026 신혼 가계부 엑셀 서식 파일 다운로드">
+                <span>📥</span>
+                <span>2026 표준 양식 다운로드</span>
+              </button>
+              <button type="button" id="btn-open-ledger-upload" class="btn btn-primary">
+                <span>+</span>
+                <span>신혼 가계부 엑셀 등록</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Honeymoon 4 Core Stats Cards -->
+          <div class="ledger-stats-banner">
+            <div class="ledger-stat-card">
+              <span class="ledger-stat-title" id="ledger-stat-month-title">💌 7월 수입(급여) & 총 지출</span>
+              <div style="display: flex; align-items: baseline; gap: 0.4rem;">
+                <span class="ledger-stat-val" id="ledger-stat-cur-month">7,064,406원</span>
+                <span style="font-size: 0.76rem; color: var(--text-muted);" id="ledger-stat-income-sub">/ 급여 6,075,570원</span>
+              </div>
+              <span class="ledger-stat-badge" id="ledger-stat-diff-badge">7월 결산 완료 ✨</span>
+            </div>
+
+            <div class="ledger-stat-card">
+              <span class="ledger-stat-title">🔒 7월 고정지출 계 (집세/공과금)</span>
+              <span class="ledger-stat-val" id="ledger-stat-fixed" style="color: #7048e8;">649,070원</span>
+              <span class="ledger-stat-sub">전세이자, 관리비, 가스/전기/수도</span>
+            </div>
+
+            <div class="ledger-stat-card">
+              <span class="ledger-stat-title">🛍️ 7월 변동지출 계 (I35 생활비)</span>
+              <span class="ledger-stat-val" id="ledger-stat-variable" style="color: #ff6b8b;">6,415,336원</span>
+              <span class="ledger-stat-sub">식비, 외식, 여름휴가, 경조사, 쇼핑</span>
+            </div>
+
+            <div class="ledger-stat-card">
+              <span class="ledger-stat-title">🌱 7월 결산 수지 (초과분)</span>
+              <span class="ledger-stat-val" id="ledger-stat-savings" style="color: #ff6b6b;">-988,836원</span>
+              <span class="ledger-stat-sub" id="ledger-stat-savings-rate">비상금/전월저축분 활용 💡</span>
+            </div>
+          </div>
+
+          <!-- Monthly Expense Stacked Bar Chart Card -->
+          <div class="ledger-chart-card">
+            <div class="ledger-chart-header">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.2rem;">📊</span>
+                <h3 style="font-size: 1.05rem; font-weight: 800; margin: 0;">2026년 월별 지출 비교 (고정지출 vs 변동지출 vs 월급)</h3>
+              </div>
+              <div class="ledger-legend">
+                <span class="legend-item"><span class="legend-dot dot-fixed"></span> 고정지출</span>
+                <span class="legend-item"><span class="legend-dot dot-variable"></span> 변동지출</span>
+                <span class="legend-item"><span class="legend-dot dot-income"></span> 월급(수입)</span>
+              </div>
+            </div>
+            
+            <div class="ledger-bar-chart" id="ledger-bar-chart-container">
+              <!-- Dynamically populated 12-month stacked expense bars -->
+            </div>
+          </div>
+
+          <!-- Monthly Detail Breakdown Section (A열 구분 & B열 항목 목록) -->
+          <div class="ledger-breakdown-card">
+            <div class="ledger-breakdown-header">
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <span>📖</span>
+                <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800;" id="breakdown-month-title">2026년 7월 신혼 가계부 상세 내역</h3>
+              </div>
+              
+              <!-- Month Selector Tabs -->
+              <div class="ledger-month-tabs" id="ledger-month-selector-tabs">
+                <button type="button" class="l-m-tab" data-l-month="1">1월</button>
+                <button type="button" class="l-m-tab" data-l-month="2">2월</button>
+                <button type="button" class="l-m-tab" data-l-month="3">3월</button>
+                <button type="button" class="l-m-tab" data-l-month="4">4월</button>
+                <button type="button" class="l-m-tab" data-l-month="5">5월</button>
+                <button type="button" class="l-m-tab" data-l-month="6">6월</button>
+                <button type="button" class="l-m-tab active" data-l-month="7">7월</button>
+                <button type="button" class="l-m-tab" data-l-month="8">8월</button>
+                <button type="button" class="l-m-tab" data-l-month="9">9월</button>
+                <button type="button" class="l-m-tab" data-l-month="10">10월</button>
+                <button type="button" class="l-m-tab" data-l-month="11">11월</button>
+                <button type="button" class="l-m-tab" data-l-month="12">12월</button>
+              </div>
+            </div>
+
+            <!-- 3-Column Breakdown Tables (수입 / 고정지출 / 변동지출) -->
+            <div class="ledger-columns-grid">
+              <!-- Column 1: Income (월급) -->
+              <div class="ledger-col-box col-income">
+                <div class="ledger-col-header">
+                  <span class="col-icon">💰</span>
+                  <span class="col-title">수입 (월급)</span>
+                  <span class="col-total" id="col-total-income">5,200,000원</span>
+                </div>
+                <div class="ledger-items-list" id="list-items-income"></div>
+              </div>
+
+              <!-- Column 2: Fixed Expenses (고정지출 계) -->
+              <div class="ledger-col-box col-fixed">
+                <div class="ledger-col-header">
+                  <span class="col-icon">🔒</span>
+                  <span class="col-title">고정지출 계</span>
+                  <span class="col-total" id="col-total-fixed">1,650,000원</span>
+                </div>
+                <div class="ledger-items-list" id="list-items-fixed"></div>
+              </div>
+
+              <!-- Column 3: Variable Expenses (변동지출 계) -->
+              <div class="ledger-col-box col-variable">
+                <div class="ledger-col-header">
+                  <span class="col-icon">🛍️</span>
+                  <span class="col-title">변동지출 계</span>
+                  <span class="col-total" id="col-total-variable">1,810,000원</span>
+                </div>
+                <div class="ledger-items-list" id="list-items-variable"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Upload Dropzone Card -->
+          <div class="file-upload-card" id="ledger-dropzone" style="background: rgba(255, 107, 139, 0.03); border: 2px dashed rgba(255, 107, 139, 0.35);">
+            <input type="file" id="ledger-file-hidden-input" accept=".xlsx, .xls, .csv" style="display: none;">
+            <div class="file-upload-icon">💍 📊</div>
+            <div class="file-upload-title">'2026년 신혼가계부' 엑셀 파일을 끌어다 놓거나 클릭하세요</div>
+            <div class="file-upload-desc">A열(구분), B열(항목) 및 1~12월 지출 데이터가 자동으로 분석되어 대시보드에 즉시 반영됩니다 ✨</div>
+            <button type="button" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.1rem;" onclick="event.stopPropagation(); document.getElementById('ledger-file-hidden-input').click()">
+              내 컴퓨터에서 신혼 가계부 엑셀 선택
+            </button>
+          </div>
+
+          <!-- Stored Ledger Files Section -->
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+              <h3 style="font-size: 1rem; font-weight: 800; color: var(--text-main); margin: 0;">📁 보관된 신혼 가계부 파일 목록</h3>
+              <span style="font-size: 0.8rem; color: var(--text-muted);">총 <strong id="ledger-files-count" style="color: var(--primary);">0</strong>개 보관 중</span>
+            </div>
+
+            <div class="files-grid" id="ledger-files-grid">
+              <!-- Dynamically populated stored ledger excel files -->
+            </div>
+
+            <div id="ledger-empty-state" class="empty-state" style="display: none; padding: 2rem 1rem;">
+              <div class="empty-state-icon">💰</div>
+              <h3>보관된 가계부 엑셀 파일이 없어요</h3>
+              <p>매월 작성하시는 신혼 가계부 엑셀 파일을 업로드해 두면 언제든 다운로드하고 월별 지출을 비교할 수 있어요 ✨</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             SECTION 6: Wishlist View (위시리스트 보관함)
+             =================================================================== -->
+        <div id="wishlist-view-container" style="display: none; flex-direction: column; gap: 1.25rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>🎁 나의 위시리스트 & 버킷 (Wishlist)</h1>
+              <p>사고 싶은 것, 가고 싶은 곳, 먹고 싶은 것들을 모아두고 하나씩 이뤄보세요 💖</p>
+            </div>
+            <button type="button" id="btn-open-wishlist-modal" class="btn btn-primary">
+              <span>+</span>
+              <span>새 위시 등록</span>
+            </button>
+          </div>
+
+          <!-- Wishlist Category Filter Tabs -->
+          <div class="wishlist-tabs-bar">
+            <div class="wishlist-tabs" id="wishlist-filter-tabs">
+              <button type="button" class="wish-tab active" data-wish-cat="all">💫 전체보기</button>
+              <button type="button" class="wish-tab" data-wish-cat="shop">🛍️ 사고 싶은 것</button>
+              <button type="button" class="wish-tab" data-wish-cat="travel">✈️ 가고 싶은 곳</button>
+              <button type="button" class="wish-tab" data-wish-cat="food">🍰 먹고 싶은 것</button>
+              <button type="button" class="wish-tab" data-wish-cat="bucket">🎯 하고 싶은 것</button>
+            </div>
+
+            <div class="wish-stats-summary" id="wish-stats-summary">
+              총 <strong id="wish-count-total">0</strong>개 중 <strong id="wish-count-completed">0</strong>개 달성! 💮
+            </div>
+          </div>
+
+          <!-- Wishlist Cards Grid -->
+          <div class="wishlist-grid" id="wishlist-grid-container">
+            <!-- Dynamically populated wishlist cards -->
+          </div>
+
+          <!-- Wishlist Empty State -->
+          <div id="wishlist-empty-state" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">🎁</div>
+            <h3>아직 등록된 위시가 없어요</h3>
+            <p>갖고 싶었던 물건이나 꼭 가보고 싶었던 여행지를 등록하고 설레는 하루를 만들어보세요 ✨</p>
+            <button class="btn btn-primary" onclick="document.getElementById('btn-open-wishlist-modal').click()">
+              + 첫 위시 등록하기 💖
+            </button>
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             SECTION 7: File Vault View (파일 보관함)
+             =================================================================== -->
         <div id="files-view-container" style="display: none; flex-direction: column; gap: 1.5rem;">
           <div class="dashboard-header">
             <div class="view-heading">
@@ -338,40 +749,42 @@
 
     <!-- iOS Mobile Floating Bottom Navigation Bar -->
     <nav class="mobile-bottom-nav">
-      <button type="button" class="mobile-nav-btn active" data-mobile-nav="tasks">
-        <span class="nav-icon">📋</span>
-        <span>할 일</span>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="calendar-month">
+        <span class="nav-icon">🗓️</span>
+        <span>달력</span>
       </button>
-      <button type="button" class="mobile-nav-btn" data-mobile-nav="vault">
-        <span class="nav-icon">📁</span>
-        <span>보관함</span>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="notes">
+        <span class="nav-icon">✏️</span>
+        <span>메모</span>
       </button>
-      <button type="button" class="mobile-fab-btn" id="btn-mobile-fab-add" title="새 할 일 등록">
+      <button type="button" class="mobile-fab-btn" id="btn-mobile-fab-add" title="새 일정/할 일 등록">
         +
       </button>
-      <button type="button" class="mobile-nav-btn" data-mobile-nav="kanban">
-        <span class="nav-icon">📊</span>
-        <span>칸반</span>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="ledger">
+        <span class="nav-icon">💰</span>
+        <span>가계부</span>
       </button>
-      <button type="button" class="mobile-nav-btn" data-mobile-nav="cloud">
-        <span class="nav-icon">☁️</span>
-        <span>동기화</span>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="wishlist">
+        <span class="nav-icon">🎁</span>
+        <span>위시</span>
       </button>
     </nav>
   </div>
 
-  <!-- Modal: Create / Edit Task -->
+  <!-- =========================================================================
+       Modal: Create / Edit Task (구분: 할 일, 일정, 반차, 휴가)
+       ========================================================================= -->
   <div id="task-modal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 class="modal-title" id="modal-title">새로운 할 일 등록 💖</h3>
+        <h3 class="modal-title" id="modal-title">새로운 일정/할 일 등록 💖</h3>
         <button class="modal-close-btn" data-close-modal title="닫기 (Esc)">✕</button>
       </div>
 
       <form id="task-form">
         <div class="form-group">
-          <label class="form-label" for="task-input-title">제목 *</label>
-          <input type="text" id="task-input-title" class="form-input" placeholder="어떤 일을 시작해볼까요?" required>
+          <label class="form-label" for="task-input-title">제목 / 일정명 *</label>
+          <input type="text" id="task-input-title" class="form-input" placeholder="어떤 일이나 일정을 시작해볼까요?" required>
         </div>
 
         <div class="form-group">
@@ -381,6 +794,16 @@
 
         <div class="form-row">
           <div class="form-group">
+            <label class="form-label" for="task-input-type">구분 🏷️</label>
+            <select id="task-input-type" class="form-select">
+              <option value="todo" selected>할 일 (To Do)</option>
+              <option value="schedule">일정 (Schedule)</option>
+              <option value="half-off">반차 🏖️</option>
+              <option value="vacation">휴가 🌴</option>
+            </select>
+          </div>
+
+          <div class="form-group">
             <label class="form-label" for="task-input-priority">우선순위</label>
             <select id="task-input-priority" class="form-select">
               <option value="urgent">긴급 🔥</option>
@@ -389,39 +812,33 @@
               <option value="low">낮음 🟢</option>
             </select>
           </div>
+        </div>
 
+        <div class="form-row">
           <div class="form-group">
             <label class="form-label" for="task-input-category">카테고리</label>
             <select id="task-input-category" class="form-select">
               <!-- Dynamically populated -->
             </select>
           </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="task-input-status">진행 상태</label>
-            <select id="task-input-status" class="form-select">
-              <option value="todo">할 일 (To Do)</option>
-              <option value="in-progress">진행 중 (In Progress)</option>
-              <option value="completed">완료 (Completed)</option>
-            </select>
-          </div>
 
           <div class="form-group">
-            <label class="form-label" for="task-input-duedate">마감일</label>
+            <label class="form-label" for="task-input-duedate">날짜 / 마감일 🗓️</label>
             <input type="date" id="task-input-duedate" class="form-input">
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="task-input-duetime">마감 시간</label>
-            <input type="time" id="task-input-duetime" class="form-input">
+        <!-- Registration Date Display (등록일 정보 - 수정 시 노출) & Pinned Option -->
+        <div class="form-row" style="align-items: center;">
+          <div class="form-group" id="task-createdat-group" style="display: none; margin-bottom: 0;">
+            <label class="form-label">등록일 (작성일)</label>
+            <div class="form-badge-createdat" id="task-display-createdat">
+              <span>📅</span> <span id="task-createdat-val">2026-08-25</span>
+            </div>
           </div>
 
-          <div class="form-group" style="justify-content: center;">
-            <label class="form-label" style="margin-bottom: 0.5rem;">상단 고정 여부</label>
+          <div class="form-group" style="justify-content: center; margin-bottom: 0; padding-top: 0.25rem;">
+            <label class="form-label" style="margin-bottom: 0.4rem;">상단 고정 여부</label>
             <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
               <input type="checkbox" id="task-input-pinned" class="task-checkbox">
               <span>중요 작업으로 상단 고정 📌</span>
@@ -430,7 +847,7 @@
         </div>
 
         <!-- Subtasks Checklist Builder -->
-        <div class="form-group">
+        <div class="form-group" style="margin-top: 0.75rem;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
             <label class="form-label">체크리스트 (하위 항목)</label>
             <button type="button" id="btn-add-subtask" class="btn" style="background: var(--primary-light); color: var(--primary); padding: 3px 10px; font-size: 0.78rem;">
@@ -443,6 +860,110 @@
         <div class="modal-actions">
           <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-modal>취소</button>
           <button type="submit" class="btn btn-primary" id="btn-save-task">저장하기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       Modal: Ledger Excel Upload (가계부 엑셀 등록 모달)
+       ========================================================================= -->
+  <div id="ledger-upload-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title">💰 가계부 엑셀 파일 등록</h3>
+        <button class="modal-close-btn" data-close-ledger-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="ledger-upload-form">
+        <div class="form-group">
+          <label class="form-label" for="ledger-modal-file-input">가계부 엑셀 파일 (.xlsx, .csv) *</label>
+          <input type="file" id="ledger-modal-file-input" class="form-input" accept=".xlsx, .xls, .csv" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="ledger-modal-month">대상 월 선택 (선택)</label>
+            <select id="ledger-modal-month" class="form-select">
+              <option value="auto">엑셀 데이터 자동 분석 🤖</option>
+              <option value="1">2026년 1월</option>
+              <option value="2">2026년 2월</option>
+              <option value="3">2026년 3월</option>
+              <option value="4">2026년 4월</option>
+              <option value="5">2026년 5월</option>
+              <option value="6">2026년 6월</option>
+              <option value="7">2026년 7월</option>
+              <option value="8" selected>2026년 8월</option>
+              <option value="9">2026년 9월</option>
+              <option value="10">2026년 10월</option>
+              <option value="11">2026년 11월</option>
+              <option value="12">2026년 12월</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ledger-modal-manual-amount">직접 지출 총액 입력 (선택)</label>
+            <input type="text" id="ledger-modal-manual-amount" class="form-input" placeholder="예: 1,250,000">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="ledger-modal-note">이달의 가계부 한줄 메모</label>
+          <textarea id="ledger-modal-note" class="form-textarea" placeholder="예: 휴가철 여행 경비 포함, 식비 절약 목표 달성 등..." style="min-height: 70px;"></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-ledger-modal>취소</button>
+          <button type="submit" class="btn btn-primary">가계부에 저장 & 분석 📊</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Wishlist Create / Edit (위시리스트 등록 및 수정 모달) -->
+  <div id="wishlist-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="wishlist-modal-title">🎁 새로운 위시 등록</h3>
+        <button class="modal-close-btn" data-close-wishlist-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="wishlist-form">
+        <div class="form-group">
+          <label class="form-label" for="wish-input-title">위시 제목 *</label>
+          <input type="text" id="wish-input-title" class="form-input" placeholder="예: 아이패드 에어 M2, 제주 감성 숙소 여행, 런던베이글" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="wish-input-cat">분류 카테고리</label>
+            <select id="wish-input-cat" class="form-select">
+              <option value="shop">🛍️ 사고 싶은 것 (쇼핑)</option>
+              <option value="travel">✈️ 가고 싶은 곳 (여행/나들이)</option>
+              <option value="food">🍰 먹고 싶은 것 (맛집/디저트)</option>
+              <option value="bucket">🎯 하고 싶은 것 (버킷리스트)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="wish-input-cost">예상 금액 또는 위치</label>
+            <input type="text" id="wish-input-cost" class="form-input" placeholder="예: 890,000원 또는 제주 서귀포">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="wish-input-url">참고 링크 URL (선택)</label>
+          <input type="url" id="wish-input-url" class="form-input" placeholder="https://...">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="wish-input-memo">설레는 한마디 / 메모</label>
+          <textarea id="wish-input-memo" class="form-textarea" placeholder="왜 갖고 싶은지, 누구와 가고 싶은지 적어보세요..." style="min-height: 80px;"></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-wishlist-modal>취소</button>
+          <button type="submit" class="btn btn-primary">위시리스트에 쏙 담기 💖</button>
         </div>
       </form>
     </div>
@@ -464,7 +985,7 @@
 
         <div class="form-group">
           <label class="form-label" for="modal-vault-file-note">간단한 메모 / 설명</label>
-          <textarea id="modal-vault-file-note" class="form-textarea" placeholder="예: 2026년 가계부 정리 시트, 아이디어 메모 등..." style="min-height: 70px;"></textarea>
+          <textarea id="modal-vault-file-note" class="form-textarea" placeholder="예: 2026년 문서 정리, 아이디어 메모 등..." style="min-height: 70px;"></textarea>
         </div>
 
         <div class="modal-actions">
@@ -486,7 +1007,7 @@
         <div style="background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.2); padding: 0.85rem 1rem; border-radius: var(--radius-md);">
           <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">✨ 스마트폰·회사·집 실시간 2단계 보안 연동</div>
           <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
-            나만의 아이디와 2단계 비밀번호를 설정하여, 나만 안전하게 할 일과 엑셀 파일을 실시간 동기화하세요!
+            나만의 아이디와 2단계 비밀번호를 설정하여, 나만 안전하게 할 일과 달력, 끄적끄적 메모, 가계부, 위시리스트를 실시간 동기화하세요!
           </p>
         </div>
 
@@ -518,14 +1039,6 @@
           </button>
           <span style="font-size: 0.74rem; color: var(--text-dim); text-align: center;">* 스마트폰과 회사 PC에 동일한 아이디와 비밀번호를 입력하면 즉시 연결됩니다.</span>
         </form>
-
-        <details style="border-top: 1px solid var(--border-subtle); padding-top: 0.5rem;">
-          <summary style="cursor: pointer; font-size: 0.74rem; color: var(--text-dim);">Firebase 고급 설정</summary>
-          <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-            <textarea id="firebase-config-input" class="form-textarea" style="font-family: monospace; font-size: 0.72rem; min-height: 50px;"></textarea>
-            <button type="button" id="btn-save-firebase-config" class="btn" style="font-size: 0.74rem; padding: 3px;">설정 저장</button>
-          </div>
-        </details>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-primary" data-close-modal>닫기</button>
@@ -542,7 +1055,7 @@
       </div>
       <div style="display: flex; flex-direction: column; gap: 0.85rem; font-size: 0.9rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>새로운 할 일 등록</span>
+          <span>새로운 등록</span>
           <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">N</kbd>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
@@ -550,16 +1063,8 @@
           <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">/</kbd>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>테마 전환 (체리블라썸 / 라벤더)</span>
+          <span>테마 전환</span>
           <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">T</kbd>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>목록 뷰</span>
-          <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">1</kbd>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle);">
-          <span>칸반 보드 뷰</span>
-          <kbd style="padding: 3px 8px; background: rgba(0,0,0,0.06); border-radius: 6px; font-family: monospace;">2</kbd>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <span>모달 닫기</span>
@@ -582,7 +1087,7 @@
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div>
           <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">데이터 백업 (내보내기)</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">작성한 모든 할 일 데이터를 JSON 파일로 다운로드합니다.</p>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">작성한 모든 할 일, 끄적끄적 메모, 가계부, 위시리스트 데이터를 JSON 파일로 다운로드합니다.</p>
           <button type="button" id="btn-export-data" class="btn" style="width: 100%; background: var(--primary-light); color: var(--primary);">
             💾 JSON 데이터 다운로드
           </button>
@@ -614,132 +1119,125 @@
   <!-- Dynamic Toast Container -->
   <div id="toast-container" aria-live="polite"></div>
 
-  
-    <!-- =========================================================================
-         Treasure Vault Modal (나의 보물 모음집♡ 팝업 창)
-         ========================================================================= -->
-    <div id="treasure-vault-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
-      <div class="tr-modal-card">
-        <div class="tr-modal-header">
-          <div>
-            <h2><span>💎</span> 나의 보물 모음집♡ (Study & Knowledge Hub)</h2>
-            <p>오늘 배우거나 새로 알게 된 개발 지식, 꿀팁 노하우를 한곳에 모아보고 복사하세요 ✨</p>
+  <!-- =========================================================================
+       Treasure Vault Modal (나의 보물 지식♡ 팝업 창)
+       ========================================================================= -->
+  <div id="treasure-vault-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="tr-modal-card">
+      <div class="tr-modal-header">
+        <div>
+          <h2><span>💎</span> 나의 보물 지식♡ (Study & Knowledge Hub)</h2>
+          <p>오늘 배우거나 새로 알게 된 개발 지식, 꿀팁 노하우를 한곳에 모아보고 복사하세요 ✨</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <button type="button" id="btn-tr-open-add" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1rem;">
+            <span>+</span> 새 보물 등록
+          </button>
+          <button class="modal-close-btn" data-close-treasure-modal title="닫기 (Esc)">✕</button>
+        </div>
+      </div>
+
+      <div class="tr-modal-body">
+        <!-- Toolbar: Filter Pills & Search -->
+        <div class="tr-toolbar">
+          <div class="tr-filter-pills" id="tr-filter-pills">
+            <button type="button" class="tr-pill active" data-cat="all">💎 전체보기</button>
+            <button type="button" class="tr-pill" data-cat="terms">📚 개발 용어</button>
+            <button type="button" class="tr-pill" data-cat="setup">🚀 1~5번 셋업</button>
+            <button type="button" class="tr-pill" data-cat="security">🔒 보안 & 품질</button>
+            <button type="button" class="tr-pill" data-cat="study">📝 내 공부 노트</button>
           </div>
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <button type="button" id="btn-tr-open-add" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1rem;">
-              <span>+</span> 새 보물 등록
-            </button>
-            <button class="modal-close-btn" data-close-treasure-modal title="닫기 (Esc)">✕</button>
+
+          <div class="tr-search-box">
+            <span>🔍</span>
+            <input type="text" id="tr-search-input" placeholder="보물 지식 검색...">
           </div>
         </div>
 
-        <div class="tr-modal-body">
-          <!-- Toolbar: Filter Pills & Search -->
-          <div class="tr-toolbar">
-            <div class="tr-filter-pills" id="tr-filter-pills">
-              <button type="button" class="tr-pill active" data-cat="all">💎 전체보기</button>
-              <button type="button" class="tr-pill" data-cat="terms">📚 개발 용어</button>
-              <button type="button" class="tr-pill" data-cat="setup">🚀 1~5번 셋업</button>
-              <button type="button" class="tr-pill" data-cat="security">🔒 보안 & 품질</button>
-              <button type="button" class="tr-pill" data-cat="study">📝 내 공부 노트</button>
-            </div>
+        <!-- Treasure Cards Grid -->
+        <div class="tr-grid" id="tr-grid-container">
+          <!-- Dynamically populated treasure cards -->
+        </div>
 
-            <div class="tr-search-box">
-              <span>🔍</span>
-              <input type="text" id="tr-search-input" placeholder="보물 지식 검색...">
-            </div>
-          </div>
-
-          <!-- Treasure Cards Grid -->
-          <div class="tr-grid" id="tr-grid-container">
-            <!-- Dynamically populated treasure cards -->
-          </div>
-
-          <!-- Empty State -->
-          <div id="tr-empty-state" class="empty-state" style="display: none;">
-            <div class="empty-state-icon">💎</div>
-            <h3>아직 등록된 보물이 없어요</h3>
-            <p>새로운 개발 지식이나 꿀팁을 등록하여 나만의 보물 모음집을 채워보세요 ✨</p>
-            <button class="btn btn-primary" id="btn-tr-empty-add">+ 첫 보물 추가하기</button>
-          </div>
+        <!-- Empty State -->
+        <div id="tr-empty-state" class="empty-state" style="display: none;">
+          <div class="empty-state-icon">💎</div>
+          <h3>아직 등록된 보물이 없어요</h3>
+          <p>새로운 개발 지식이나 꿀팁을 등록하여 나만의 보물 지식함을 채워보세요 ✨</p>
+          <button class="btn btn-primary" id="btn-tr-empty-add">+ 첫 보물 추가하기</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Modal: Add New Treasure -->
-    <div id="treasure-add-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
-      <div class="modal-card" style="max-width: 500px;">
-        <div class="modal-header">
-          <h3 class="modal-title">💎 새 보물(학습 지식) 등록</h3>
-          <button class="modal-close-btn" data-close-treasure-add-modal title="닫기 (Esc)">✕</button>
-        </div>
-
-        <form id="treasure-add-form">
-          <div class="form-group">
-            <label class="form-label" for="tr-input-title">지식 / 꿀팁 제목 *</label>
-            <input type="text" id="tr-input-title" class="form-input" placeholder="예: [개발 용어] 패키지와 uv add란?" required>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="tr-input-cat">카테고리 분류</label>
-            <select id="tr-input-cat" class="form-input">
-              <option value="terms">📚 개발 용어</option>
-              <option value="setup">🚀 1~5번 셋업</option>
-              <option value="security">🔒 보안 & 품질</option>
-              <option value="study">📝 내 공부 노트</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="tr-input-desc">핵심 요약 & 설명 *</label>
-            <textarea id="tr-input-desc" class="form-textarea" placeholder="이해하기 쉽게 비유나 핵심 설명을 적어주세요..." style="min-height: 90px;" required></textarea>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="tr-input-code">명령어 또는 코드 예시 (선택)</label>
-            <textarea id="tr-input-code" class="form-textarea" placeholder="예: uv add python-docx" style="min-height: 60px; font-family: monospace;"></textarea>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-treasure-add-modal>취소</button>
-            <button type="submit" class="btn btn-primary">보물함에 쏙 넣기 💖</button>
-          </div>
-        </form>
+  <!-- Modal: Add New Treasure -->
+  <div id="treasure-add-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title">💎 새 보물(학습 지식) 등록</h3>
+        <button class="modal-close-btn" data-close-treasure-add-modal title="닫기 (Esc)">✕</button>
       </div>
-    </div>
 
-    <!-- Standalone Application Logic Script -->
-  <script src="js/app.js?v=2.7"></script>
-    <script src="js/treasure.js"></script>
-
-    <!-- =========================================================================
-         Treasure Detail View Modal (큰 화면으로 전체 보기 모달)
-         ========================================================================= -->
-    <div id="treasure-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10002;">
-      <div class="tr-detail-modal-card">
-        <div class="tr-detail-header">
-          <div>
-            <div class="tr-detail-meta">
-              <span class="tr-badge-tag" id="tr-detail-badge">💎 지식</span>
-              <span style="font-size: 0.78rem; color: #a0aec0;" id="tr-detail-date">2026.08.24</span>
-            </div>
-            <h2 class="tr-detail-title" id="tr-detail-title">학습 지식 제목</h2>
-          </div>
-          <button class="modal-close-btn" data-close-treasure-detail-modal title="닫기 (Esc)">✕</button>
+      <form id="treasure-add-form">
+        <div class="form-group">
+          <label class="form-label" for="tr-input-title">지식 / 꿀팁 제목 *</label>
+          <input type="text" id="tr-input-title" class="form-input" placeholder="예: [개발 용어] 패키지와 uv add란?" required>
         </div>
 
-        <div class="tr-detail-body">
-          <div class="tr-detail-desc" id="tr-detail-desc">
-            <!-- Full Content -->
-          </div>
+        <div class="form-group">
+          <label class="form-label" for="tr-input-cat">카테고리 분류</label>
+          <select id="tr-input-cat" class="form-input">
+            <option value="terms">📚 개발 용어</option>
+            <option value="setup">🚀 1~5번 셋업</option>
+            <option value="security">🔒 보안 & 품질</option>
+            <option value="study">📝 내 공부 노트</option>
+          </select>
+        </div>
 
-          <div class="tr-code-box" id="tr-detail-code-box" style="display: none;">
-            <button type="button" class="tr-btn-copy" id="btn-detail-copy-code">📋 코드 복사</button>
-            <pre><code id="tr-detail-code"></code></pre>
+        <div class="form-group">
+          <label class="form-label" for="tr-input-desc">핵심 요약 & 설명 *</label>
+          <textarea id="tr-input-desc" class="form-textarea" placeholder="이해하기 쉽게 비유나 핵심 설명을 적어주세요..." style="min-height: 90px;" required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="tr-input-code">명령어 또는 코드 예시 (선택)</label>
+          <textarea id="tr-input-code" class="form-textarea" placeholder="예: uv add python-docx" style="min-height: 60px; font-family: monospace;"></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-treasure-add-modal>취소</button>
+          <button type="submit" class="btn btn-primary">보물함에 쏙 넣기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Treasure Detail View -->
+  <div id="treasure-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10002;">
+    <div class="tr-detail-modal-card">
+      <div class="tr-detail-header">
+        <div>
+          <div class="tr-detail-meta">
+            <span class="tr-badge-tag" id="tr-detail-badge">💎 지식</span>
+            <span style="font-size: 0.78rem; color: #a0aec0;" id="tr-detail-date">2026.08.24</span>
           </div>
+          <h2 class="tr-detail-title" id="tr-detail-title">학습 지식 제목</h2>
+        </div>
+        <button class="modal-close-btn" data-close-treasure-detail-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <div class="tr-detail-body">
+        <div class="tr-detail-desc" id="tr-detail-desc"></div>
+        <div class="tr-code-box" id="tr-detail-code-box" style="display: none;">
+          <button type="button" class="tr-btn-copy" id="btn-detail-copy-code">📋 코드 복사</button>
+          <pre><code id="tr-detail-code"></code></pre>
         </div>
       </div>
     </div>
+  </div>
 
+  <!-- Application Logic Scripts -->
+  <script src="js/app.js?v=3.5"></script>
+  <script src="js/treasure.js"></script>
 </body>
 </html>

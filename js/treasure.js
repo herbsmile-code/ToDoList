@@ -1,5 +1,5 @@
 /**
- * My Treasure Vault (나의 보물 모음집♡ / Study & Knowledge Hub)
+ * My Treasure Vault (나의 보물 지식♡ / Study & Knowledge Hub)
  * 독립형 학습 노트 및 지식 보관소 모듈 (상세 보기 팝업 지원)
  */
 
