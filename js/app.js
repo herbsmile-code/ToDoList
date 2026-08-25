@@ -344,41 +344,31 @@
       const dataSpaceUrl = `${this.activeUrl}/spaces/space_on3257_${this.sanitizeKey(cleanPin)}.json`;
 
       try {
-        // 1. Check if user's actual existing cloud data space exists with this pin
-        const dataRes = await fetch(dataSpaceUrl);
-        let hasExistingData = false;
-        if (dataRes.ok) {
-          const cloudData = await dataRes.json();
-          if (cloudData && (cloudData.tasks || cloudData.notes || cloudData.updatedAt)) {
-            hasExistingData = true;
-          }
-        }
-
-        // 2. Check auth registry
+        // Check Cloud Auth Registry for on3257
         const res = await fetch(authUrl);
         if (res.ok) {
           const registered = await res.json();
           if (registered && registered.pinHash) {
-            // If hash matches OR user has existing data space with this pin: Valid!
-            if (registered.pinHash !== hashed && !hasExistingData) {
+            // Already registered on Cloud: pin hash MUST strictly match!
+            if (registered.pinHash !== hashed) {
               return { 
                 success: false, 
-                message: '⚠️ 비밀번호가 일치하지 않습니다! (기존 설정한 비밀번호를 입력해 주세요 🔒)' 
+                message: '⚠️ 비밀번호가 일치하지 않습니다! 🔒' 
               };
             }
+          } else {
+            // First time registration: save hash permanently
+            await fetch(authUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                spaceId: 'on3257',
+                pinHash: hashed,
+                registeredAt: Date.now()
+              })
+            });
           }
         }
-
-        // Update/sync registry with the true pin hash
-        await fetch(authUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            spaceId: 'on3257',
-            pinHash: hashed,
-            updatedAt: Date.now()
-          })
-        });
       } catch (err) {
         console.warn('Cloud Auth check warning:', err);
       }
