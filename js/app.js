@@ -338,43 +338,56 @@
       }
 
       const sKey = 'on3257';
-      const hashed = await this.hashPin(pin);
+      const cleanPin = pin.trim();
+      const hashed = await this.hashPin(cleanPin);
       const authUrl = `${this.activeUrl}/auth_registry/${sKey}.json`;
+      const dataSpaceUrl = `${this.activeUrl}/spaces/space_on3257_${this.sanitizeKey(cleanPin)}.json`;
 
       try {
+        // 1. Check if user's actual existing cloud data space exists with this pin
+        const dataRes = await fetch(dataSpaceUrl);
+        let hasExistingData = false;
+        if (dataRes.ok) {
+          const cloudData = await dataRes.json();
+          if (cloudData && (cloudData.tasks || cloudData.notes || cloudData.updatedAt)) {
+            hasExistingData = true;
+          }
+        }
+
+        // 2. Check auth registry
         const res = await fetch(authUrl);
         if (res.ok) {
           const registered = await res.json();
           if (registered && registered.pinHash) {
-            // Already registered on Cloud: pin hash MUST match
-            if (registered.pinHash !== hashed) {
+            // If hash matches OR user has existing data space with this pin: Valid!
+            if (registered.pinHash !== hashed && !hasExistingData) {
               return { 
                 success: false, 
                 message: '⚠️ 비밀번호가 일치하지 않습니다! (기존 설정한 비밀번호를 입력해 주세요 🔒)' 
               };
             }
-          } else {
-            // First time registering on3257 on cloud
-            await fetch(authUrl, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                spaceId: 'on3257',
-                pinHash: hashed,
-                registeredAt: Date.now()
-              })
-            });
           }
         }
+
+        // Update/sync registry with the true pin hash
+        await fetch(authUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            spaceId: 'on3257',
+            pinHash: hashed,
+            updatedAt: Date.now()
+          })
+        });
       } catch (err) {
-        console.warn('Cloud Auth fetch warning:', err);
+        console.warn('Cloud Auth check warning:', err);
       }
 
-      // Login success
+      // Login success: bind to on3257 and cleanPin
       this.spaceId = 'on3257';
-      this.pin = pin;
+      this.pin = cleanPin;
       localStorage.setItem('todolist_jy_space_id', 'on3257');
-      localStorage.setItem('todolist_jy_pin', pin);
+      localStorage.setItem('todolist_jy_pin', cleanPin);
 
       this.updateUIStatus();
       await this.fetchLatestFromCloud(true);
