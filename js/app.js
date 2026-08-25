@@ -2075,12 +2075,12 @@
         console.error('cloud-modal element not found!');
         return;
       }
-      if (!cloudSync.spaceId) {
-        const sInput = document.getElementById('sync-input-space-id');
-        const pInput = document.getElementById('sync-input-pin');
-        if (sInput) sInput.value = '';
-        if (pInput) pInput.value = '';
-      }
+      // Always reset inputs to blank for absolute privacy
+      const sInput = document.getElementById('sync-input-space-id');
+      const pInput = document.getElementById('sync-input-pin');
+      if (sInput) sInput.value = '';
+      if (pInput) pInput.value = '';
+
       cloudSync.updateUIStatus();
       modal.style.display = 'flex';
       modal.style.opacity = '1';
@@ -2088,7 +2088,6 @@
       modal.style.pointerEvents = 'auto';
       modal.style.zIndex = '99999';
       modal.classList.add('active');
-      const sInput = document.getElementById('sync-input-space-id');
       if (sInput) setTimeout(() => sInput.focus(), 80);
     },
 
@@ -3157,29 +3156,15 @@
         localStorage.removeItem('todolist_jy_pin');
         cloudSync.spaceId = '';
         cloudSync.pin = '';
+        const sInput = document.getElementById('sync-input-space-id');
+        const pInput = document.getElementById('sync-input-pin');
+        if (sInput) sInput.value = '';
+        if (pInput) pInput.value = '';
         cloudSync.updateUIStatus();
         UI.closeCloudModal();
         try { sounds.playDelete(); } catch (err) {}
         UI.showToast('동기화가 해제되고 다이어리가 안전하게 잠겼어요 🔒', 'info');
         UI.renderTasks();
-      });
-    }
-
-    const resetMasterCredsBtn = document.getElementById('btn-reset-master-creds');
-    if (resetMasterCredsBtn) {
-      resetMasterCredsBtn.addEventListener('click', () => {
-        if (confirm('기존 저장된 계정/비밀번호를 초기화하고 새로 등록할 수 있도록 설정할까요?')) {
-          localStorage.removeItem('todolist_jy_master_creds');
-          localStorage.removeItem('todolist_jy_space_id');
-          localStorage.removeItem('todolist_jy_pin');
-          cloudSync.spaceId = '';
-          cloudSync.pin = '';
-          const sInput = document.getElementById('sync-input-space-id');
-          const pInput = document.getElementById('sync-input-pin');
-          if (sInput) { sInput.value = 'on3257'; sInput.focus(); }
-          if (pInput) { pInput.value = ''; }
-          UI.showToast('계정이 초기화되었어요. 새 아이디와 비밀번호를 입력해 등록해 주세요! ✨', 'info');
-        }
       });
     }
 
