@@ -3564,3 +3564,43 @@ body::after {
   box-shadow: 0 12px 28px rgba(255, 107, 139, 0.5);
 }
 
+/* ==========================================================================
+   Category Drag & Drop Styles
+   ========================================================================== */
+.category-drag-item {
+  cursor: grab;
+  transition: transform 0.15s ease, background 0.15s ease, border 0.15s ease;
+  user-select: none;
+}
+
+.category-drag-item:active {
+  cursor: grabbing;
+}
+
+.category-drag-handle {
+  opacity: 0.35;
+  cursor: grab;
+  margin-right: 2px;
+  font-size: 0.85rem;
+  transition: opacity 0.15s ease;
+}
+
+.category-drag-item:hover .category-drag-handle {
+  opacity: 0.85;
+}
+
+.category-drag-item.dragging {
+  opacity: 0.45;
+  background: var(--primary-light) !important;
+  border-radius: var(--radius-md);
+  transform: scale(0.98);
+}
+
+.category-drag-item.drag-over-top {
+  border-top: 2.5px solid var(--primary) !important;
+}
+
+.category-drag-item.drag-over-bottom {
+  border-bottom: 2.5px solid var(--primary) !important;
+}
+

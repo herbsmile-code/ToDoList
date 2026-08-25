@@ -329,9 +329,9 @@
 
       if (isLogged) {
         if (statusIcon) statusIcon.textContent = '🟢';
-        if (statusText) statusText.textContent = `${this.spaceId} (동기화중)`;
+        if (statusText) statusText.textContent = '동기화중';
         if (banner) banner.style.display = 'block';
-        if (displayKey) displayKey.textContent = `아이디: ${this.spaceId} | 2단계 보안 연결됨 ✨`;
+        if (displayKey) displayKey.textContent = '🟢 2단계 보안 실시간 동기화 연결됨 ✨';
         if (lockedScreen) lockedScreen.style.display = 'none';
       } else {
         if (statusIcon) statusIcon.textContent = '☁️';
@@ -2521,6 +2521,74 @@
         UI.openCloudModal();
       }
     });
+
+    // Category Drag & Drop Reordering (카테고리 드래그 순서 변경)
+    const catNavList = document.getElementById('category-nav-list');
+    if (catNavList) {
+      let draggedCatId = null;
+
+      catNavList.addEventListener('dragstart', (e) => {
+        const item = e.target.closest('.category-drag-item');
+        if (!item) return;
+        draggedCatId = item.dataset.catId;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', draggedCatId);
+      });
+
+      catNavList.addEventListener('dragend', (e) => {
+        const item = e.target.closest('.category-drag-item');
+        if (item) item.classList.remove('dragging');
+        document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+      });
+
+      catNavList.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const targetItem = e.target.closest('.category-drag-item');
+        if (!targetItem || targetItem.dataset.catId === draggedCatId) return;
+
+        const rect = targetItem.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+
+        if (e.clientY < midY) {
+          targetItem.classList.add('drag-over-top');
+        } else {
+          targetItem.classList.add('drag-over-bottom');
+        }
+      });
+
+      catNavList.addEventListener('dragleave', (e) => {
+        const targetItem = e.target.closest('.category-drag-item');
+        if (targetItem) {
+          targetItem.classList.remove('drag-over-top', 'drag-over-bottom');
+        }
+      });
+
+      catNavList.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const targetItem = e.target.closest('.category-drag-item');
+        if (!targetItem || !draggedCatId) return;
+        const targetCatId = targetItem.dataset.catId;
+        if (targetCatId === draggedCatId) return;
+
+        const fromIdx = store.categories.findIndex(c => c.id === draggedCatId);
+        const toIdx = store.categories.findIndex(c => c.id === targetCatId);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const [movedCat] = store.categories.splice(fromIdx, 1);
+          const rect = targetItem.getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          const insertIdx = (e.clientY < midY) ? toIdx : toIdx + 1;
+          store.categories.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, movedCat);
+          store.save();
+          UI.renderSidebar();
+          UI.showToast('카테고리 순서가 변경되었어요! 🏷️✨', 'info');
+        }
+        draggedCatId = null;
+        document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+      });
+    }
 
     // Modals & Triggers
     const openTaskBtn = document.getElementById('btn-open-task-modal');
