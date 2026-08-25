@@ -356,12 +356,12 @@
             const remoteUpdated = data.updatedAt || 0;
             if (force || remoteUpdated > this.lastSyncedUpdatedAt) {
               this.lastSyncedUpdatedAt = remoteUpdated;
-              store.tasks = normalizeArray(data.tasks);
+              store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
               if (data.categories) store.categories = normalizeArray(data.categories);
-              if (data.wishlist) store.wishlist = normalizeArray(data.wishlist);
-              if (data.notes) store.notes = normalizeArray(data.notes);
+              if (data.wishlist) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
+              if (data.notes) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
               if (data.honeymoonData) store.honeymoonData = data.honeymoonData;
-              if (data.ledgerFiles) store.ledgerFiles = normalizeArray(data.ledgerFiles);
+              if (data.ledgerFiles) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
               store.saveLocalOnly();
               UI.renderTasks();
             }
@@ -471,125 +471,17 @@
     { id: 'cafe', name: '카페 & 힐링 ☕', color: '#ffa94d' }
   ];
 
-  const INITIAL_DEMO_TASKS = [
-    {
-      id: 'task-1',
-      title: '상반기 재충전 힐링 연차 여행',
-      type: 'vacation',
-      description: '제주도 3박 4일 푹 쉬고 오기 🌊',
-      status: 'todo',
-      priority: 'high',
-      category: 'personal',
-      dueDate: '2026-08-14',
-      pinned: false,
-      subtasks: [],
-      createdAt: Date.now() - 3600000 * 24 * 10
-    },
-    {
-      id: 'task-2',
-      title: '치과 정기검진 및 스케일링 예약',
-      type: 'half-off',
-      description: '오후 2시 치과 진료 후 오후 반차 활용 ✨',
-      status: 'todo',
-      priority: 'urgent',
-      category: 'personal',
-      dueDate: TODAY_STR,
-      pinned: true,
-      subtasks: [],
-      createdAt: Date.now() - 3600000 * 5
-    },
-    {
-      id: 'task-3',
-      title: '🌸 상큼한 아침 스트레칭 & 비타민 챙겨먹기',
-      type: 'todo',
-      description: '물 한잔 마시고 10분 가볍게 스트레칭하기 ✨',
-      status: 'completed',
-      priority: 'high',
-      category: 'routine',
-      dueDate: TODAY_STR,
-      pinned: true,
-      subtasks: [
-        { id: 's1', title: '미온수 한 컵 마시기', completed: true },
-        { id: 's2', title: '영양제 챙겨먹기', completed: true }
-      ],
-      createdAt: Date.now() - 3600000 * 5,
-      completedAt: Date.now() - 3600000 * 2
-    },
-    {
-      id: 'task-4',
-      title: '신혼 가계부 7월 결산 & 8월 예산 검토',
-      type: 'schedule',
-      description: '영호 & 진영 7월 급여 및 집세/공과금 결산 완료',
-      status: 'in-progress',
-      priority: 'medium',
-      category: 'work',
-      dueDate: TODAY_STR,
-      pinned: false,
-      subtasks: [],
-      createdAt: Date.now() - 3600000 * 3
-    }
-  ];
+  const INITIAL_DEMO_TASKS = [];
+  const INITIAL_DEMO_WISHLIST = [];
+  const INITIAL_DEMO_NOTES = [];
+  const INITIAL_LEDGER_FILES = [];
 
-  const INITIAL_DEMO_WISHLIST = [
-    {
-      id: 'wish-1',
-      title: '아이패드 에어 M2 (스타라이트) 💖',
-      category: 'shop',
-      cost: '890,000원',
-      url: 'https://apple.com/kr',
-      memo: '다이어리 꾸미기랑 인강 공부용으로 꼭 데려오기! ✨',
-      completed: false,
-      createdAt: Date.now() - 3600000 * 10
-    },
-    {
-      id: 'wish-2',
-      title: '제주도 서귀포 감성 독채 풀빌라 힐링 여행 ✈️',
-      category: 'travel',
-      cost: '3박 4일 일정',
-      url: '',
-      memo: '바다 보면서 귤차 마시고 푹 쉬고 오기 🌊🍊',
-      completed: false,
-      createdAt: Date.now() - 3600000 * 8
-    },
-    {
-      id: 'wish-3',
-      title: '성수동 런던 베이글 뮤지엄 브릭레인 샌드위치 🍰',
-      category: 'food',
-      cost: '약 25,000원',
-      url: '',
-      memo: '오픈런해서 크림치즈 베이글 따뜻하게 먹기 🥯☕',
-      completed: true,
-      completedAt: Date.now() - 3600000 * 2,
-      createdAt: Date.now() - 3600000 * 6
-    }
-  ];
-
-  const INITIAL_DEMO_NOTES = [
-    {
-      id: 'note-1',
-      content: '🌸 오늘 퇴근길에 올리브영 들러서 립밤 사기!\n+ 다이소에서 다이어리 스티커 구경하기 ✨',
-      color: 'pink',
-      createdAt: Date.now() - 3600000 * 3
-    },
-    {
-      id: 'note-2',
-      content: '💡 이번 주말 브런치 카페: 햇살 잘 드는 테라스 자리로 예약하기 ☕🥐',
-      color: 'yellow',
-      createdAt: Date.now() - 3600000 * 6
-    },
-    {
-      id: 'note-3',
-      content: '🎯 8월 목표:\n매일 스트레칭 10분, 물 1.5L 마시기 💧',
-      color: 'mint',
-      createdAt: Date.now() - 3600000 * 9
-    },
-    {
-      id: 'note-4',
-      content: '🛒 7월 가계부 최종 결산:\n• 수익총계(I47): 6,075,570원\n• 고정지출계: 649,070원\n• 변동지출계(I35): 6,415,336원\n• 지출총계(I46): 7,064,406원',
-      color: 'gray',
-      createdAt: Date.now() - 3600000 * 12
-    }
-  ];
+  const MOCK_DEMO_IDS = new Set([
+    'task-1', 'task-2', 'task-3', 'task-4',
+    'wish-1', 'wish-2', 'wish-3',
+    'note-1', 'note-2', 'note-3', 'note-4',
+    'ledger-file-1'
+  ]);
 
   // 2026 Honeymoon Ledger Real Structure (A열: 구분, B열: 항목, I열: 7월)
   const INITIAL_HONEYMOON_DATA = {
@@ -625,10 +517,6 @@
     },
     7: {
       // User's EXACT I-column (7월) Real Values:
-      // A3,A4: 영호 3,385,776 / 진영 2,689,794 -> 수익총계(I47) = 6,075,570
-      // A6~A11: 집세/공과금 계 = 649,070
-      // I35: 변동지출 계 = 6,415,336
-      // I46: 지출 총계 = 7,064,406 (649,070 + 6,415,336)
       income: {
         total: 6075570,
         items: [
@@ -658,10 +546,10 @@
           { name: '교통 & 유류비', amount: 300000 }
         ]
       },
-      extraIncome: 0, // I45: 부수입의 계
-      savingsAccount: 0, // I41: 저축 계
-      totalExpense: 7064406, // I46: 지출 총계 (649,070 + 6,415,336)
-      totalIncome: 6075570 // I47: 수익 총계
+      extraIncome: 0,
+      savingsAccount: 0,
+      totalExpense: 7064406,
+      totalIncome: 6075570
     },
     // 8~12월: 미작성 (0원)
     8: { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } },
@@ -670,18 +558,6 @@
     11: { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } },
     12: { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } }
   };
-
-  const INITIAL_LEDGER_FILES = [
-    {
-      id: 'ledger-file-1',
-      name: '2026년_신혼가계부_연간정리.xlsx',
-      size: 54800,
-      month: 7,
-      amount: 7064406,
-      note: '2026년 신혼가계부 7월 결산 (급여 607.5만, 집세 64.9만, 변동지출 641.5만, 총지출 706.4만)',
-      createdAt: Date.now() - 3600000 * 24 * 2
-    }
-  ];
 
   // =========================================================================
   // 5. Store Engine
@@ -721,35 +597,83 @@
         return;
       }
 
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          this.tasks = parsed.tasks || [];
-          if (parsed.categories && parsed.categories.length) {
-            this.categories = parsed.categories;
-          }
-          this.wishlist = parsed.wishlist || INITIAL_DEMO_WISHLIST;
-          this.notes = parsed.notes || INITIAL_DEMO_NOTES;
-          this.honeymoonData = parsed.honeymoonData || JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
-          this.ledgerFiles = parsed.ledgerFiles || INITIAL_LEDGER_FILES;
-        } else {
-          this.tasks = [...INITIAL_DEMO_TASKS];
-          this.wishlist = [...INITIAL_DEMO_WISHLIST];
-          this.notes = [...INITIAL_DEMO_NOTES];
-          this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
-          this.ledgerFiles = [...INITIAL_LEDGER_FILES];
-        }
+      // Collect real user items from all possible legacy storage keys
+      let combinedTasks = [];
+      let combinedWishlist = [];
+      let combinedNotes = [];
+      let combinedLedgerFiles = [];
+      let userCategories = null;
 
+      const keysToCheck = [
+        STORAGE_KEY,
+        'todolist_jy_data_v38', 'todolist_jy_data_v37', 'todolist_jy_data_v36', 'todolist_jy_data_v35',
+        'todolist_jy_data_v34', 'todolist_jy_data_v33', 'todolist_jy_data_v30', 'todolist_jy_data_v20',
+        'todolist_jy_data', 'todolist_jy_tasks'
+      ];
+
+      keysToCheck.forEach(k => {
+        try {
+          const raw = localStorage.getItem(k);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+
+          // If raw was just an array of tasks
+          if (Array.isArray(parsed)) {
+            parsed.forEach(t => {
+              if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !combinedTasks.some(x => x.id === t.id)) {
+                combinedTasks.push(t);
+              }
+            });
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            if (Array.isArray(parsed.tasks)) {
+              parsed.tasks.forEach(t => {
+                if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !combinedTasks.some(x => x.id === t.id)) {
+                  combinedTasks.push(t);
+                }
+              });
+            }
+            if (Array.isArray(parsed.wishlist)) {
+              parsed.wishlist.forEach(w => {
+                if (w && w.id && !MOCK_DEMO_IDS.has(w.id) && !combinedWishlist.some(x => x.id === w.id)) {
+                  combinedWishlist.push(w);
+                }
+              });
+            }
+            if (Array.isArray(parsed.notes)) {
+              parsed.notes.forEach(n => {
+                if (n && n.id && !MOCK_DEMO_IDS.has(n.id) && !combinedNotes.some(x => x.id === n.id)) {
+                  combinedNotes.push(n);
+                }
+              });
+            }
+            if (Array.isArray(parsed.ledgerFiles)) {
+              parsed.ledgerFiles.forEach(f => {
+                if (f && f.id && !MOCK_DEMO_IDS.has(f.id) && !combinedLedgerFiles.some(x => x.id === f.id)) {
+                  combinedLedgerFiles.push(f);
+                }
+              });
+            }
+            if (!userCategories && Array.isArray(parsed.categories) && parsed.categories.length) {
+              userCategories = parsed.categories;
+            }
+          }
+        } catch (err) {}
+      });
+
+      this.tasks = combinedTasks;
+      this.wishlist = combinedWishlist;
+      this.notes = combinedNotes;
+      this.ledgerFiles = combinedLedgerFiles;
+      this.categories = userCategories || DEFAULT_CATEGORIES;
+      this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
+
+      try {
         const streakRaw = localStorage.getItem(STREAK_KEY);
         if (streakRaw) this.streak = JSON.parse(streakRaw);
-      } catch (e) {
-        this.tasks = [...INITIAL_DEMO_TASKS];
-        this.wishlist = [...INITIAL_DEMO_WISHLIST];
-        this.notes = [...INITIAL_DEMO_NOTES];
-        this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
-        this.ledgerFiles = [...INITIAL_LEDGER_FILES];
-      }
+      } catch (e) {}
+
+      // Save migrated clean data immediately
+      this.saveLocalOnly();
     }
 
     saveLocalOnly() {
@@ -3249,15 +3173,15 @@
     const resetDemoBtn = document.getElementById('btn-reset-demo');
     if (resetDemoBtn) {
       resetDemoBtn.addEventListener('click', () => {
-        if (confirm('모든 데이터를 예쁜 데모 데이터로 초기화할까요?')) {
-          store.tasks = [...INITIAL_DEMO_TASKS];
+        if (confirm('모든 예시 데이터를 비우고 깨끗한 상태로 초기화할까요?')) {
+          store.tasks = [];
           store.categories = DEFAULT_CATEGORIES;
-          store.wishlist = [...INITIAL_DEMO_WISHLIST];
-          store.notes = [...INITIAL_DEMO_NOTES];
+          store.wishlist = [];
+          store.notes = [];
+          store.ledgerFiles = [];
           store.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
-          store.ledgerFiles = [...INITIAL_LEDGER_FILES];
           store.save();
-          UI.showToast('데모 데이터로 초기화되었어요! ✨', 'info');
+          UI.showToast('예시 목록이 모두 정리되었어요! ✨', 'info');
           UI.renderTasks();
           const st = document.getElementById('settings-modal');
           if (st) st.classList.remove('active');
