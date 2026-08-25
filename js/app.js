@@ -328,7 +328,16 @@
         return { success: false, message: '아이디와 비밀번호를 모두 입력해 주세요 🌸' };
       }
 
-      const sKey = this.sanitizeKey(spaceId);
+      const inputId = spaceId.trim().toLowerCase();
+      // Dedicated Single Master Account Check: only 'on3257' is allowed!
+      if (inputId !== 'on3257') {
+        return { 
+          success: false, 
+          message: '⚠️ 등록되지 않은 아이디입니다! 오직 전용 아이디(on3257)로만 접근할 수 있어요 🔒' 
+        };
+      }
+
+      const sKey = 'on3257';
       const hashed = await this.hashPin(pin);
       const authUrl = `${this.activeUrl}/auth_registry/${sKey}.json`;
 
@@ -337,17 +346,20 @@
         if (res.ok) {
           const registered = await res.json();
           if (registered && registered.pinHash) {
-            // Already registered on Cloud: verify pin hash
+            // Already registered on Cloud: pin hash MUST match
             if (registered.pinHash !== hashed) {
-              return { success: false, message: '⚠️ 비밀번호가 일치하지 않아요! (해당 아이디로 등록된 기존 비밀번호를 입력해 주세요)' };
+              return { 
+                success: false, 
+                message: '⚠️ 비밀번호가 일치하지 않습니다! (기존 설정한 비밀번호를 입력해 주세요 🔒)' 
+              };
             }
           } else {
-            // Not registered yet on Cloud: Register this spaceId + pinHash
+            // First time registering on3257 on cloud
             await fetch(authUrl, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                spaceId: spaceId,
+                spaceId: 'on3257',
                 pinHash: hashed,
                 registeredAt: Date.now()
               })
@@ -359,9 +371,9 @@
       }
 
       // Login success
-      this.spaceId = spaceId;
+      this.spaceId = 'on3257';
       this.pin = pin;
-      localStorage.setItem('todolist_jy_space_id', spaceId);
+      localStorage.setItem('todolist_jy_space_id', 'on3257');
       localStorage.setItem('todolist_jy_pin', pin);
 
       this.updateUIStatus();
