@@ -305,6 +305,71 @@
       this.updateUIStatus();
     }
 
+    async hashPin(pin) {
+      if (window.crypto && window.crypto.subtle) {
+        try {
+          const msgBuffer = new TextEncoder().encode(pin + '_salt_jy_2026');
+          const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        } catch (e) {}
+      }
+      let hash = 0;
+      const str = pin + '_salt_jy_2026';
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return 'h_' + Math.abs(hash).toString(16);
+    }
+
+    async verifyAndLogin(spaceId, pin) {
+      if (!spaceId || !pin) {
+        return { success: false, message: '아이디와 비밀번호를 모두 입력해 주세요 🌸' };
+      }
+
+      const sKey = this.sanitizeKey(spaceId);
+      const hashed = await this.hashPin(pin);
+      const authUrl = `${this.activeUrl}/auth_registry/${sKey}.json`;
+
+      try {
+        const res = await fetch(authUrl);
+        if (res.ok) {
+          const registered = await res.json();
+          if (registered && registered.pinHash) {
+            // Already registered on Cloud: verify pin hash
+            if (registered.pinHash !== hashed) {
+              return { success: false, message: '⚠️ 비밀번호가 일치하지 않아요! (해당 아이디로 등록된 기존 비밀번호를 입력해 주세요)' };
+            }
+          } else {
+            // Not registered yet on Cloud: Register this spaceId + pinHash
+            await fetch(authUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                spaceId: spaceId,
+                pinHash: hashed,
+                registeredAt: Date.now()
+              })
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Cloud Auth fetch warning:', err);
+      }
+
+      // Login success
+      this.spaceId = spaceId;
+      this.pin = pin;
+      localStorage.setItem('todolist_jy_space_id', spaceId);
+      localStorage.setItem('todolist_jy_pin', pin);
+
+      this.updateUIStatus();
+      await this.fetchLatestFromCloud(true);
+      this.startRealtimePolling();
+      return { success: true };
+    }
+
     sanitizeKey(str) {
       if (!str) return 'anonymous';
       return encodeURIComponent(str.trim().toLowerCase()).replace(/\./g, '%2E').replace(/\$/g, '%24').replace(/\[/g, '%5B').replace(/\]/g, '%5D').replace(/#/g, '%23').replace(/\//g, '%2F');
@@ -3089,47 +3154,38 @@
       }
     });
 
-    // 2-Step Cloud Sync Form Submit
+    // 2-Step Cloud Sync Form Submit (Cloud-wide Master Verification)
     const syncForm = document.getElementById('sync-2step-form');
     if (syncForm) {
-      syncForm.addEventListener('submit', (e) => {
+      syncForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const submitBtn = syncForm.querySelector('button[type="submit"]');
+        const origBtnText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '⏳ 2단계 보안 계정 검증 중...';
+        }
+
         try {
           const sInput = document.getElementById('sync-input-space-id');
           const pInput = document.getElementById('sync-input-pin');
           const sId = sInput ? sInput.value.trim() : '';
           const pin = pInput ? pInput.value.trim() : '';
+
           if (!sId || !pin) {
             UI.showToast('아이디와 비밀번호를 모두 입력해 주세요 🌸', 'danger');
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
             return;
           }
 
-          // Master Credentials Verification (기존 등록 계정만 로그인 허용)
-          const MASTER_KEY = 'todolist_jy_master_creds';
-          let masterCreds = null;
-          try {
-            const raw = localStorage.getItem(MASTER_KEY);
-            if (raw) masterCreds = JSON.parse(raw);
-          } catch (e) {}
-
-          if (masterCreds && masterCreds.spaceId) {
-            // Already registered master account exists: MUST match exactly
-            if (masterCreds.spaceId !== sId || masterCreds.pin !== pin) {
-              try { sounds.playDelete(); } catch (err) {}
-              UI.showToast('⚠️ 아이디 또는 비밀번호가 일치하지 않아요! (등록된 기존 계정으로 입력해 주세요)', 'danger');
-              return;
-            }
-          } else {
-            // First time registration: save current credentials as master account
-            localStorage.setItem(MASTER_KEY, JSON.stringify({ spaceId: sId, pin: pin }));
+          const result = await cloudSync.verifyAndLogin(sId, pin);
+          if (!result.success) {
+            try { sounds.playDelete(); } catch (err) {}
+            UI.showToast(result.message || '⚠️ 비밀번호가 일치하지 않아요!', 'danger');
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
+            return;
           }
 
-          localStorage.setItem('todolist_jy_space_id', sId);
-          localStorage.setItem('todolist_jy_pin', pin);
-          cloudSync.spaceId = sId;
-          cloudSync.pin = pin;
-
-          cloudSync.updateUIStatus();
           UI.closeCloudModal();
 
           try { sounds.playAdd(); } catch (err) {}
@@ -3138,13 +3194,16 @@
           UI.showToast('동기화 로그인 성공! 잠금이 해제되었어요 💖', 'success');
           UI.renderTasks();
 
-          // Run sync operations safely in background
-          cloudSync.pushTasksToCloud();
-          cloudSync.fetchLatestFromCloud(true);
-          cloudSync.startRealtimePolling();
+          // Push local state to cloud safely
+          await cloudSync.pushTasksToCloud();
         } catch (err) {
           console.error('syncForm submit error:', err);
           UI.showToast('동기화 처리 오류: ' + (err.message || err), 'danger');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnText;
+          }
         }
       });
     }
