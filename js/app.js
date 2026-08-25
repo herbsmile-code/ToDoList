@@ -335,10 +335,9 @@
         if (lockedScreen) lockedScreen.style.display = 'none';
       } else {
         if (statusIcon) statusIcon.textContent = '☁️';
-        if (statusText) statusText.textContent = '동기화 (잠김)';
+        if (statusText) statusText.textContent = '동기화';
         if (banner) banner.style.display = 'none';
-        if (lockedScreen) lockedScreen.style.display = 'flex';
-        views.forEach(v => { if (v) v.style.display = 'none'; });
+        if (lockedScreen) lockedScreen.style.display = 'none';
       }
     }
 
@@ -1466,6 +1465,12 @@
         if (tasksForDay.length === 0) {
           chipsHTML = `<span class="weekly-row-empty">등록된 일정이 없어요 🌱</span>`;
         } else {
+          chipsHTML = tasksForDay.map(task => {
+            const isDone = task.status === 'completed';
+            const isSpecial = (task.type === 'half-off' || task.type === 'vacation');
+            const chipStyle = isSpecial
+              ? 'background: linear-gradient(135deg, #fff3bf, #ffd43b); color: #8c5300; font-weight: 800; border: 1px solid #fab005;'
+              : '';
             const isImportant = (task.priority === 'urgent' || task.priority === 'high');
             const star = isImportant ? '⭐ ' : '';
             const chipLabel = task.type === 'half-off' ? `${star}🌿 반차` : (task.type === 'vacation' ? `${star}🌴 휴가` : `${star}${escapeHTML(task.title)}`);
@@ -2976,23 +2981,38 @@
     if (syncForm) {
       syncForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const sId = document.getElementById('sync-input-space-id').value.trim();
-        const pin = document.getElementById('sync-input-pin').value.trim();
-        if (!sId || !pin) return;
+        try {
+          const sInput = document.getElementById('sync-input-space-id');
+          const pInput = document.getElementById('sync-input-pin');
+          const sId = sInput ? sInput.value.trim() : '';
+          const pin = pInput ? pInput.value.trim() : '';
+          if (!sId || !pin) {
+            UI.showToast('아이디와 비밀번호를 모두 입력해 주세요 🌸', 'danger');
+            return;
+          }
 
-        localStorage.setItem('todolist_jy_space_id', sId);
-        localStorage.setItem('todolist_jy_pin', pin);
-        cloudSync.spaceId = sId;
-        cloudSync.pin = pin;
+          localStorage.setItem('todolist_jy_space_id', sId);
+          localStorage.setItem('todolist_jy_pin', pin);
+          cloudSync.spaceId = sId;
+          cloudSync.pin = pin;
 
-        cloudSync.fetchLatestFromCloud(true);
-        cloudSync.startRealtimePolling();
-        cloudSync.updateUIStatus();
-        UI.closeCloudModal();
-        sounds.playAdd();
-        confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
-        UI.showToast(`'${sId}' 님 환영해요! 잠금이 해제되고 동기화가 연결되었어요 💖`, 'success');
-        UI.renderTasks();
+          cloudSync.updateUIStatus();
+          UI.closeCloudModal();
+
+          try { sounds.playAdd(); } catch (err) {}
+          try { confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50); } catch (err) {}
+
+          UI.showToast(`'${sId}' 님 환영해요! 실시간 동기화가 활성화되었어요 💖`, 'success');
+          UI.renderTasks();
+
+          // Run sync operations safely in background
+          cloudSync.pushTasksToCloud();
+          cloudSync.fetchLatestFromCloud(true);
+          cloudSync.startRealtimePolling();
+        } catch (err) {
+          console.error('syncForm submit error:', err);
+          UI.showToast('동기화 처리 오류: ' + (err.message || err), 'danger');
+        }
       });
     }
 
