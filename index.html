@@ -1052,7 +1052,13 @@
           <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem; font-size: 0.92rem; margin-top: 0.25rem;">
             🔐 2단계 보안 연결 & 동기화 시작
           </button>
-          <span style="font-size: 0.74rem; color: var(--text-dim); text-align: center;">* 스마트폰과 회사 PC에 동일한 아이디와 비밀번호를 입력하면 즉시 연결됩니다.</span>
+          
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.25rem; font-size: 0.76rem;">
+            <span style="color: var(--text-dim);">* 스마트폰과 PC에 동일한 계정 입력 시 연동</span>
+            <button type="button" id="btn-reset-master-creds" style="background: none; border: none; color: var(--primary); font-size: 0.76rem; cursor: pointer; text-decoration: underline;">
+              🔑 계정/비밀번호 재설정
+            </button>
+          </div>
         </form>
       </div>
       <div class="modal-actions">
@@ -1255,7 +1261,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=4.5"></script>
-  <script src="js/treasure.js?v=4.5"></script>
+  <script src="js/app.js?v=4.6"></script>
+  <script src="js/treasure.js?v=4.6"></script>
 </body>
 </html>

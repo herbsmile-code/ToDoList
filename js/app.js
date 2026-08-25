@@ -3165,6 +3165,24 @@
       });
     }
 
+    const resetMasterCredsBtn = document.getElementById('btn-reset-master-creds');
+    if (resetMasterCredsBtn) {
+      resetMasterCredsBtn.addEventListener('click', () => {
+        if (confirm('기존 저장된 계정/비밀번호를 초기화하고 새로 등록할 수 있도록 설정할까요?')) {
+          localStorage.removeItem('todolist_jy_master_creds');
+          localStorage.removeItem('todolist_jy_space_id');
+          localStorage.removeItem('todolist_jy_pin');
+          cloudSync.spaceId = '';
+          cloudSync.pin = '';
+          const sInput = document.getElementById('sync-input-space-id');
+          const pInput = document.getElementById('sync-input-pin');
+          if (sInput) { sInput.value = 'on3257'; sInput.focus(); }
+          if (pInput) { pInput.value = ''; }
+          UI.showToast('계정이 초기화되었어요. 새 아이디와 비밀번호를 입력해 등록해 주세요! ✨', 'info');
+        }
+      });
+    }
+
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
