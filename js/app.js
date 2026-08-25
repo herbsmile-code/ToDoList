@@ -2037,7 +2037,10 @@
 
     openCloudModal() {
       const modal = document.getElementById('cloud-modal');
-      if (!modal) return;
+      if (!modal) {
+        console.error('cloud-modal element not found!');
+        return;
+      }
       if (!cloudSync.spaceId) {
         const sInput = document.getElementById('sync-input-space-id');
         const pInput = document.getElementById('sync-input-pin');
@@ -2046,19 +2049,31 @@
       }
       cloudSync.updateUIStatus();
       modal.style.display = 'flex';
+      modal.style.opacity = '1';
+      modal.style.visibility = 'visible';
+      modal.style.pointerEvents = 'auto';
+      modal.style.zIndex = '99999';
       modal.classList.add('active');
       const sInput = document.getElementById('sync-input-space-id');
-      if (sInput) setTimeout(() => sInput.focus(), 50);
+      if (sInput) setTimeout(() => sInput.focus(), 80);
     },
 
     closeCloudModal() {
       const modal = document.getElementById('cloud-modal');
       if (modal) {
         modal.style.display = 'none';
+        modal.style.opacity = '0';
+        modal.style.visibility = 'hidden';
+        modal.style.pointerEvents = 'none';
         modal.classList.remove('active');
       }
     }
   };
+
+  // Expose to global window for immediate and resilient access
+  window.UI = UI;
+  window.openCloudModal = () => UI.openCloudModal();
+  window.closeCloudModal = () => UI.closeCloudModal();
 
   // =========================================================================
   // 7. Standard Honeymoon Template Generator & Smart Forward-Fill Excel Parser
@@ -2493,6 +2508,12 @@
       // Standard Template Download Button Click
       if (e.target.closest('#btn-download-ledger-template') || e.target.closest('[data-action="download-template"]')) {
         downloadStandardHoneymoonExcelTemplate();
+      }
+
+      // Cloud Sync Button Click Delegation
+      if (e.target.closest('#btn-cloud-status') || e.target.closest('#btn-locked-login') || e.target.closest('[data-action="open-cloud"]')) {
+        e.preventDefault();
+        UI.openCloudModal();
       }
     });
 
