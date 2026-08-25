@@ -295,7 +295,6 @@
       this.activeUrl = localStorage.getItem('todolist_jy_active_rtdb_url') || 'https://todolist-jy-default-rtdb.firebaseio.com';
       this.syncTimer = null;
       this.lastSyncedUpdatedAt = 0;
-      this.init();
     }
 
     init() {
@@ -3209,6 +3208,7 @@
       if (icon) icon.textContent = savedTheme === 'dark' ? '🌙' : '🌸';
 
       bindEvents();
+      cloudSync.init();
       UI.renderTasks();
     } catch (err) {
       console.error('initApp fatal error:', err);

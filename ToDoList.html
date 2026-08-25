@@ -26,11 +26,16 @@
         const box = document.getElementById('debug-error-banner') || (function() {
           const el = document.createElement('div');
           el.id = 'debug-error-banner';
-          el.style.cssText = 'position:fixed; top:12px; left:50%; transform:translateX(-50%); background:#e03131; color:#fff; padding:12px 24px; border-radius:12px; z-index:999999; font-size:13px; font-weight:bold; box-shadow:0 8px 25px rgba(0,0,0,0.35); max-width:90vw; word-break:break-all; text-align:center;';
+          el.style.cssText = 'position:fixed; top:12px; left:50%; transform:translateX(-50%); background:#e03131; color:#fff; padding:12px 24px; border-radius:12px; z-index:999999; font-size:13px; font-weight:bold; box-shadow:0 8px 25px rgba(0,0,0,0.35); max-width:90vw; word-break:break-all; text-align:center; cursor:pointer;';
           (document.body || document.documentElement).appendChild(el);
           return el;
         })();
-        box.innerHTML = '⚠️ 스크립트 실행 오류: ' + (e.message || e.error) + '<br><span style="font-size:11px; opacity:0.85;">' + (e.filename ? e.filename.split('/').pop() : '') + ':' + e.lineno + '</span>';
+        const errMsg = (e.message || (e.error && e.error.message) || e.error || '알 수 없는 스크립트 에러');
+        const fileLine = (e.filename ? e.filename.split('/').pop() : '') + ':' + (e.lineno || 0);
+        box.innerHTML = '⚠️ 스크립트 실행 오류: ' + errMsg + '<br><span style="font-size:11px; opacity:0.85;">(' + fileLine + ')</span>';
+        box.onclick = function() {
+          alert('에러 상세 정보:\n' + errMsg + '\n파일: ' + (e.filename || 'unknown') + '\n줄번호: ' + e.lineno + '\n스택:\n' + (e.error ? e.error.stack : 'No stack'));
+        };
       } catch (err) {}
     });
   </script>
@@ -1249,7 +1254,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=3.9"></script>
-  <script src="js/treasure.js?v=3.9"></script>
+  <script src="js/app.js?v=4.0"></script>
+  <script src="js/treasure.js?v=4.0"></script>
 </body>
 </html>
