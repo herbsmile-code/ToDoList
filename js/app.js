@@ -338,8 +338,7 @@
         if (statusIcon) statusIcon.textContent = '☁️';
         if (statusText) statusText.textContent = '동기화';
         if (banner) banner.style.display = 'none';
-        if (lockedScreen) lockedScreen.style.display = 'flex';
-        views.forEach(v => { if (v) v.style.display = 'none'; });
+        if (lockedScreen) lockedScreen.style.display = 'none';
       }
     }
 
@@ -588,15 +587,6 @@
     }
 
     load() {
-      const isLogged = !!(localStorage.getItem('todolist_jy_space_id') && localStorage.getItem('todolist_jy_pin'));
-      if (!isLogged) {
-        this.tasks = [];
-        this.wishlist = [];
-        this.notes = [];
-        this.ledgerFiles = [];
-        return;
-      }
-
       // Collect real user items from all possible legacy storage keys
       let combinedTasks = [];
       let combinedWishlist = [];
@@ -1007,22 +997,6 @@
     },
 
     async renderSidebar() {
-      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
-
-      if (!isLogged) {
-        const counts = ['all', 'upcoming', 'overdue', 'pinned', 'completed', 'notes', 'ledger', 'wishlist', 'vault'];
-        counts.forEach(k => {
-          const el = document.getElementById(`nav-count-${k}`);
-          if (el) el.textContent = '🔒';
-        });
-
-        const catContainer = document.getElementById('category-nav-list');
-        if (catContainer) {
-          catContainer.innerHTML = `<li style="padding: 0.85rem 0.5rem; font-size: 0.82rem; color: var(--text-dim); text-align: center;">🔐 로그인 시 표시됩니다</li>`;
-        }
-        return;
-      }
-
       const stats = store.getStats();
       const counts = {
         all: store.tasks.length,
@@ -1157,18 +1131,6 @@
       const emptyState = document.getElementById('empty-state');
       const lockedScreen = document.getElementById('locked-privacy-screen');
       const mobileBar = document.getElementById('mobile-category-bar');
-
-      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
-
-      if (!isLogged) {
-        if (lockedScreen) lockedScreen.style.display = 'flex';
-        [tasksView, filesView, wishView, notesView, ledgerView, calMView, calWView].forEach(v => {
-          if (v) v.style.display = 'none';
-        });
-        if (mobileBar) mobileBar.style.display = 'none';
-        this.renderSidebar();
-        return;
-      }
 
       if (lockedScreen) lockedScreen.style.display = 'none';
 
