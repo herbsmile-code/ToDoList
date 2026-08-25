@@ -230,6 +230,22 @@
         </div>
 
         <!-- ===================================================================
+             LOCKED PRIVACY SCREEN (동기화 로그인 시에만 잠금 해제되는 비밀 화면)
+             =================================================================== -->
+        <div id="locked-privacy-screen" class="locked-screen-card" style="display: none;">
+          <div class="locked-icon-bubble">🔒</div>
+          <h2 class="locked-title">나만의 비밀 다이어리 & 플래너 🌸</h2>
+          <p class="locked-desc">
+            이 다이어리는 <strong>2단계 보안 실시간 동기화(로그인)</strong>로 안전하게 보호되고 있어요.<br>
+            스마트폰과 PC 어디서든 나만의 아이디와 비밀번호로 로그인하여 잠금을 해제해 보세요 ✨
+          </p>
+          <button type="button" id="btn-locked-login" class="btn btn-primary locked-btn-login">
+            <span>🔐</span>
+            <span>동기화 로그인 / 잠금 해제 💖</span>
+          </button>
+        </div>
+
+        <!-- ===================================================================
              SECTION 1: Normal Tasks View (List & Kanban)
              =================================================================== -->
         <div id="tasks-view-container" style="display: flex; flex-direction: column; gap: 1.25rem;">
