@@ -344,59 +344,47 @@
       // 1. Cloud Auth Registry Check (중앙 클라우드 실시간 검증)
       const authUrl = `${this.activeUrl}/auth_registry/${sKey}.json`;
       let cloudRegistered = null;
-      let cloudAccessible = false;
+      let cloudSuccess = false;
 
       try {
         const res = await fetch(authUrl);
         if (res.ok) {
           cloudRegistered = await res.json();
-          cloudAccessible = true;
-        } else if (res.status === 401) {
-          console.warn('Firebase 401 Permission Denied - please set Firebase rules to { ".read": true, ".write": true }');
+          cloudSuccess = true;
         }
       } catch (err) {
-        console.warn('Cloud Auth check error:', err);
+        console.warn('Cloud Auth check warning:', err);
       }
 
       // 2. 검증 분기
-      if (cloudAccessible && cloudRegistered && cloudRegistered.pinHash) {
-        // 클라우드에 등록된 비밀번호가 있는 경우 엄격하게 비교
+      if (cloudSuccess && cloudRegistered && cloudRegistered.pinHash) {
+        // 이미 클라우드에 등록된 비밀번호가 있는 경우 엄격하게 비교
         if (cloudRegistered.pinHash !== hashed) {
-          return { 
-            success: false, 
-            message: '⚠️ 비밀번호가 일치하지 않습니다! (앱/회사/집 공통 비밀번호를 입력해주세요) 🔒' 
-          };
-        }
-      } else {
-        // 로컬에 등록된 해시와 비교 (클라우드 미등록 시 2차 보조)
-        const localMasterHash = localStorage.getItem(LOCAL_HASH_KEY);
-        if (localMasterHash && localMasterHash !== hashed) {
           return { 
             success: false, 
             message: '⚠️ 비밀번호가 일치하지 않습니다! 🔒' 
           };
         }
-
-        // 최초 등록이거나 초기화 상태인 경우: 이 비밀번호를 정식 비밀번호로 클라우드와 로컬에 등록!
-        if (cloudAccessible) {
-          try {
-            await fetch(authUrl, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                spaceId: 'on3257',
-                pinHash: hashed,
-                registeredAt: Date.now()
-              })
-            });
-          } catch (e) {}
+      } else {
+        // 클라우드에 아직 등록되지 않은 경우 (최초 등록 or 초기화 상태):
+        // 지금 입력한 비밀번호를 새로운 마스터 비밀번호로 클라우드에 영구 등록!
+        try {
+          await fetch(authUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              spaceId: 'on3257',
+              pinHash: hashed,
+              registeredAt: Date.now()
+            })
+          });
+        } catch (e) {
+          console.warn('Failed to register initial pin on cloud:', e);
         }
       }
 
-      // Save master hash locally
+      // 3. 로컬 스토리지 해시 및 로그인 세션 저장
       localStorage.setItem(LOCAL_HASH_KEY, hashed);
-
-      // Login success: bind to on3257 and cleanPin
       this.spaceId = 'on3257';
       this.pin = cleanPin;
       localStorage.setItem('todolist_jy_space_id', 'on3257');
