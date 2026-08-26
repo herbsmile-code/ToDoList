@@ -409,10 +409,10 @@
     }
 
     async resetAllCloudAndLocal() {
-      const isConfirmed = confirm("⚠️ 정말로 모든 데이터와 비밀번호를 완전히 초기화하시겠습니까?
+      const isConfirmed = confirm(`⚠️ 정말로 모든 데이터와 비밀번호를 완전히 초기화하시겠습니까?
 
 - 클라우드와 기기에 저장된 모든 할 일, 메모, 가계부, 위시리스트가 삭제됩니다.
-- 초기화 후 새로운 비밀번호로 처음부터 다시 등록할 수 있습니다.");
+- 초기화 후 새로운 비밀번호로 처음부터 다시 등록할 수 있습니다.`);
       if (!isConfirmed) return;
 
       const secondCheck = prompt("정말 초기화를 진행하려면 '초기화'를 입력해주세요:");
