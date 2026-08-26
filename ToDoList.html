@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=6.8">
-  <link rel="stylesheet" href="css/animations.css?v=6.8">
+  <link rel="stylesheet" href="css/style.css?v=6.9">
+  <link rel="stylesheet" href="css/animations.css?v=6.9">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -72,15 +72,15 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v6.8)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v6.9)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v6.8</span>
+          <span>v6.9</span>
         </button>
 
-        <!-- Cloud Sync Status Badge -->
+        <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
         <button id="btn-cloud-status" class="btn" style="padding: 0.45rem 0.85rem; font-size: 0.8rem; background: rgba(0,0,0,0.04); color: var(--text-muted); cursor: pointer;" title="클라우드 동기화 설정" onclick="if(window.openCloudModal){window.openCloudModal();}else{const m=document.getElementById('cloud-modal');if(m){m.style.display='flex';m.style.opacity='1';m.style.visibility='visible';m.classList.add('active');}}">
           <span id="cloud-status-icon">☁️</span>
-          <span id="cloud-status-text">동기화</span>
+          <span id="cloud-status-text">비동기화</span>
         </button>
         <button id="btn-sound-toggle" class="btn-icon" title="효과음 켜기/끄기" aria-label="사운드 토글">
           <span class="icon">🔊</span>
@@ -1057,8 +1057,9 @@
           </div>
           <input type="file" id="photo-file-input" accept="image/*" style="display: none;">
 
-          <!-- Photo Zoom & Rotation Control Bar -->
-          <div id="photo-adjust-toolbar" style="display: none; margin-top: 0.65rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.65rem 0.85rem; flex-direction: column; gap: 0.45rem;">
+          <!-- Photo Zoom, Brightness & Rotation Control Bar -->
+          <div id="photo-adjust-toolbar" style="display: none; margin-top: 0.65rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.65rem 0.85rem; flex-direction: column; gap: 0.55rem;">
+            <!-- Row 1: Zoom Slider & 90° Rotate -->
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
               <div style="display: flex; align-items: center; gap: 0.4rem; flex: 1;">
                 <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-main); white-space: nowrap;">🔍 줌(크기):</span>
@@ -1066,7 +1067,16 @@
                 <span id="photo-zoom-val" style="font-size: 0.76rem; color: var(--primary); font-weight: 800; min-width: 36px;">100%</span>
               </div>
               <button type="button" id="btn-photo-rotate" class="btn btn-sm" style="padding: 4px 8px; font-size: 0.74rem; background: rgba(0,0,0,0.06); color: var(--text-main); white-space: nowrap;" title="90도 회전">🔄 90°</button>
-              <button type="button" id="btn-photo-reset-pos" class="btn btn-sm" style="padding: 4px 8px; font-size: 0.74rem; background: rgba(0,0,0,0.06); color: var(--text-main); white-space: nowrap;" title="위치/줌 초기화">↺ 리셋</button>
+            </div>
+
+            <!-- Row 2: Brightness Slider & Reset Button -->
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; border-top: 1px dashed var(--border-subtle); padding-top: 0.45rem;">
+              <div style="display: flex; align-items: center; gap: 0.4rem; flex: 1;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-main); white-space: nowrap;">☀️ 밝기 조절:</span>
+                <input type="range" id="photo-brightness-slider" min="60" max="170" step="1" value="100" style="flex: 1; accent-color: #f59f00; cursor: pointer;">
+                <span id="photo-brightness-val" style="font-size: 0.76rem; color: #f59f00; font-weight: 800; min-width: 36px;">100%</span>
+              </div>
+              <button type="button" id="btn-photo-reset-pos" class="btn btn-sm" style="padding: 4px 8px; font-size: 0.74rem; background: rgba(0,0,0,0.06); color: var(--text-main); white-space: nowrap;" title="위치/줌/밝기 초기화">↺ 리셋</button>
             </div>
           </div>
         </div>
@@ -1412,7 +1422,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=6.8"></script>
-  <script src="js/treasure.js?v=6.8"></script>
+  <script src="js/app.js?v=6.9"></script>
+  <script src="js/treasure.js?v=6.9"></script>
 </body>
 </html>

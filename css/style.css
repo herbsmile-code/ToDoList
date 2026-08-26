@@ -2914,11 +2914,21 @@ body::after {
 .dot-sky { background: #d0ebff; }
 .dot-gray { background: #ced4da; }
 
-/* Notes Grid & Cards */
+/* Notes View Container & Grid (모바일 부드러운 스크롤 보장) */
+#notes-view-container {
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+  overflow-y: visible !important;
+  width: 100%;
+}
+
 .notes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 1.25rem;
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding-bottom: 2.5rem;
 }
 
 .note-card {
@@ -2932,6 +2942,9 @@ body::after {
   min-height: 160px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   border: 1px solid rgba(0, 0, 0, 0.06);
+  touch-action: pan-y !important;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .note-card:hover {
@@ -4150,6 +4163,30 @@ body::after {
   .mobile-nav-btn.active {
     color: var(--primary);
     background: rgba(255, 107, 139, 0.08);
+  }
+
+  /* Mobile Notes Grid & Smooth Touch Scroll Enhancement */
+  #notes-view-container {
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .notes-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.95rem;
+    padding-bottom: 3.5rem !important;
+    touch-action: pan-y !important;
+  }
+
+  .note-card {
+    min-height: auto;
+    transform: none !important;
+    padding: 1rem 1.15rem;
+    touch-action: pan-y !important;
+  }
+
+  .note-composer-card {
+    padding: 0.85rem 1rem;
   }
 }
 

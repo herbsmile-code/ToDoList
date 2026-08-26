@@ -549,13 +549,13 @@
 
       if (isLogged) {
         if (statusIcon) statusIcon.textContent = '🔒';
-        if (statusText) statusText.textContent = 'E2EE동기화';
+        if (statusText) statusText.textContent = '동기화';
         if (banner) banner.style.display = 'block';
-        if (displayKey) displayKey.textContent = '🛡️ AES-256 E2EE 종단간 암호화 실시간 연결됨 ✨';
+        if (displayKey) displayKey.textContent = '🛡️ 종단간 암호화 실시간 연결됨 ✨';
         if (lockedScreen) lockedScreen.style.display = 'none';
       } else {
         if (statusIcon) statusIcon.textContent = '☁️';
-        if (statusText) statusText.textContent = '동기화';
+        if (statusText) statusText.textContent = '비동기화';
         if (banner) banner.style.display = 'none';
         if (lockedScreen) lockedScreen.style.display = 'flex';
         views.forEach(v => { if (v) v.style.display = 'none'; });
@@ -2593,6 +2593,7 @@
         panX: 0,
         panY: 0,
         rotation: 0,
+        brightness: 100,
         isDragging: false,
         startX: 0,
         startY: 0
@@ -2602,6 +2603,11 @@
       const zoomVal = document.getElementById('photo-zoom-val');
       if (zoomSlider) zoomSlider.value = 1.0;
       if (zoomVal) zoomVal.textContent = '100%';
+
+      const brightSlider = document.getElementById('photo-brightness-slider');
+      const brightVal = document.getElementById('photo-brightness-val');
+      if (brightSlider) brightSlider.value = 100;
+      if (brightVal) brightVal.textContent = '100%';
 
       if (photoId) {
         const photo = store.photos.find(p => p.id === photoId);
@@ -2622,6 +2628,7 @@
         if (previewImg) {
           previewImg.src = photo.imageDataUrl;
           previewImg.style.transform = 'translate(-50%, -50%)';
+          previewImg.style.filter = 'none';
         }
         if (fixedFrameBox) fixedFrameBox.style.display = 'block';
         if (adjustToolbar) adjustToolbar.style.display = 'flex';
@@ -2634,6 +2641,7 @@
         if (previewImg) {
           previewImg.src = '';
           previewImg.style.transform = 'translate(-50%, -50%)';
+          previewImg.style.filter = 'none';
         }
         if (fixedFrameBox) fixedFrameBox.style.display = 'none';
         if (adjustToolbar) adjustToolbar.style.display = 'none';
@@ -3803,12 +3811,14 @@
     const photoFitHint = document.getElementById('photo-fit-hint');
     const photoZoomSlider = document.getElementById('photo-zoom-slider');
     const photoZoomVal = document.getElementById('photo-zoom-val');
+    const photoBrightnessSlider = document.getElementById('photo-brightness-slider');
+    const photoBrightnessVal = document.getElementById('photo-brightness-val');
     const btnPhotoRotate = document.getElementById('btn-photo-rotate');
     const btnPhotoResetPos = document.getElementById('btn-photo-reset-pos');
 
     const updatePhotoPreviewUI = () => {
       if (!window._photoEditor || !photoPreviewImg) return;
-      const { scale, panX, panY, rotation, rawImg } = window._photoEditor;
+      const { scale, panX, panY, rotation, brightness, rawImg } = window._photoEditor;
       if (!rawImg) return;
 
       const frameBox = document.getElementById('photo-fixed-frame-box');
@@ -3825,6 +3835,7 @@
       photoPreviewImg.style.maxWidth = 'none';
       photoPreviewImg.style.maxHeight = 'none';
       photoPreviewImg.style.transform = `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) rotate(${rotation}deg) scale(${scale})`;
+      photoPreviewImg.style.filter = `brightness(${brightness !== undefined ? brightness : 100}%)`;
     };
     window._updatePhotoPreviewUI = updatePhotoPreviewUI;
 
@@ -3886,6 +3897,16 @@
       });
     }
 
+    // Brightness Slider Handling
+    if (photoBrightnessSlider) {
+      photoBrightnessSlider.addEventListener('input', (e) => {
+        if (!window._photoEditor) return;
+        window._photoEditor.brightness = parseInt(e.target.value, 10);
+        if (photoBrightnessVal) photoBrightnessVal.textContent = window._photoEditor.brightness + '%';
+        updatePhotoPreviewUI();
+      });
+    }
+
     // 90° Rotation Handling
     if (btnPhotoRotate) {
       btnPhotoRotate.addEventListener('click', (e) => {
@@ -3896,7 +3917,7 @@
       });
     }
 
-    // Reset Position & Zoom Handling
+    // Reset Position, Zoom & Brightness Handling
     if (btnPhotoResetPos) {
       btnPhotoResetPos.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -3905,8 +3926,11 @@
         window._photoEditor.panX = 0;
         window._photoEditor.panY = 0;
         window._photoEditor.rotation = 0;
+        window._photoEditor.brightness = 100;
         if (photoZoomSlider) photoZoomSlider.value = 1.0;
         if (photoZoomVal) photoZoomVal.textContent = '100%';
+        if (photoBrightnessSlider) photoBrightnessSlider.value = 100;
+        if (photoBrightnessVal) photoBrightnessVal.textContent = '100%';
         updatePhotoPreviewUI();
       });
     }
@@ -3934,6 +3958,7 @@
               panX: 0,
               panY: 0,
               rotation: 0,
+              brightness: 100,
               isDragging: false,
               startX: 0,
               startY: 0
@@ -3941,6 +3966,8 @@
 
             if (photoZoomSlider) photoZoomSlider.value = 1.0;
             if (photoZoomVal) photoZoomVal.textContent = '100%';
+            if (photoBrightnessSlider) photoBrightnessSlider.value = 100;
+            if (photoBrightnessVal) photoBrightnessVal.textContent = '100%';
 
             if (photoPreviewImg) {
               photoPreviewImg.src = e.target.result;
@@ -3987,9 +4014,9 @@
       });
     }
 
-    // Export 1:1 Fixed Square Cropped / Framed Image via Canvas
+    // Export 1:1 Fixed Square Cropped / Framed Image via Canvas (with Brightness Filter)
     const generateFixedSquarePhotoDataUrl = (editorState) => {
-      const { rawImg, scale, panX, panY, rotation } = editorState;
+      const { rawImg, scale, panX, panY, rotation, brightness } = editorState;
       const size = 1080;
       const canvas = document.createElement('canvas');
       canvas.width = size;
@@ -4012,6 +4039,9 @@
       ctx.save();
       ctx.translate(size / 2 + panX * factor, size / 2 + panY * factor);
       ctx.rotate((rotation * Math.PI) / 180);
+      if (brightness !== undefined && brightness !== 100) {
+        ctx.filter = `brightness(${brightness}%)`;
+      }
       ctx.drawImage(rawImg, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.restore();
 
