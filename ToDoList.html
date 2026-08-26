@@ -14,9 +14,14 @@
   <meta name="description" content="Todolist JY - 아이폰 스타일의 아기자기하고 깔끔한 프리미엄 다이어리 플래너, 가계부, 위시리스트 & 끄적끄적 메모장">
   <title>Todolist JY 🌸 | 나만의 감성 다이어리 & 가계부 플래너</title>
   
+  <!-- Cache Prevention Headers for Instant Mobile Updates -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=6.5">
-  <link rel="stylesheet" href="css/animations.css?v=6.5">
+  <link rel="stylesheet" href="css/style.css?v=6.7">
+  <link rel="stylesheet" href="css/animations.css?v=6.7">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -66,6 +71,12 @@
       </div>
 
       <div class="header-actions">
+        <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v6.7)" onclick="window.location.reload(true);">
+          <span>🔄</span>
+          <span>v6.7</span>
+        </button>
+
         <!-- Cloud Sync Status Badge -->
         <button id="btn-cloud-status" class="btn" style="padding: 0.45rem 0.85rem; font-size: 0.8rem; background: rgba(0,0,0,0.04); color: var(--text-muted); cursor: pointer;" title="클라우드 동기화 설정" onclick="if(window.openCloudModal){window.openCloudModal();}else{const m=document.getElementById('cloud-modal');if(m){m.style.display='flex';m.style.opacity='1';m.style.visibility='visible';m.classList.add('active');}}">
           <span id="cloud-status-icon">☁️</span>
@@ -1012,29 +1023,47 @@
     </div>
   </div>
 
-  <!-- Modal: Add/Edit Photo in Polaroid Gallery -->
+  <!-- Modal: Add/Edit Photo in Polaroid Gallery (1:1 고정 틀 사진 맞춤) -->
   <div id="photo-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
-    <div class="modal-card" style="max-width: 480px;">
+    <div class="modal-card" style="max-width: 490px;">
       <div class="modal-header">
-        <h3 class="modal-title" id="photo-modal-title">📷 폴라로이드 사진 등록</h3>
+        <h3 class="modal-title" id="photo-modal-title">🖼️ 사진첩 사진 등록</h3>
         <button class="modal-close-btn" id="btn-close-photo-modal" title="닫기 (Esc)">✕</button>
       </div>
 
       <form id="photo-form">
         <input type="hidden" id="photo-edit-id" value="">
         
-        <!-- Image Preview & File Input -->
+        <!-- Image Preview & File Input (1:1 고정 틀 맞춤) -->
         <div class="form-group">
-          <label class="form-label">사진 선택 *</label>
-          <div id="photo-dropzone" style="border: 2px dashed var(--border-color); border-radius: 8px; padding: 1.25rem; text-align: center; cursor: pointer; background: rgba(0,0,0,0.02); transition: all 0.2s ease;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <label class="form-label" style="margin-bottom: 0;">사진 선택 (1:1 고정 틀 맞춤) *</label>
+            <span id="photo-fit-hint" style="font-size: 0.74rem; color: var(--primary); font-weight: 700; display: none;">✨ 액자 틀에 딱 맞춰져요</span>
+          </div>
+
+          <div id="photo-dropzone" style="border: 2px dashed var(--border-color); border-radius: 10px; padding: 1rem; text-align: center; cursor: pointer; background: rgba(0,0,0,0.02); transition: all 0.2s ease;">
             <div id="photo-preview-placeholder">
-              <div style="font-size: 2rem; margin-bottom: 0.35rem;">🖼️</div>
+              <div style="font-size: 2.2rem; margin-bottom: 0.35rem;">🖼️</div>
               <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-main);">클릭하여 사진 업로드</div>
-              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">JPG, PNG, GIF, WebP (스마트폰 촬영 사진 환영 🌸)</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">JPG, PNG, GIF, WebP (정사각형 고정 틀 맞춤 🌸)</div>
             </div>
-            <img id="photo-preview-img" style="display: none; max-height: 220px; width: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" alt="미리보기">
+
+            <!-- 1:1 Fixed Square Frame Preview -->
+            <div id="photo-fixed-frame-box" style="display: none; position: relative; width: 100%; aspect-ratio: 1 / 1; max-width: 260px; margin: 0 auto; overflow: hidden; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); background: #000;">
+              <img id="photo-preview-img" style="width: 100%; height: 100%; object-fit: cover; display: block;" alt="미리보기">
+              <div style="position: absolute; inset: 0; border: 2px dashed rgba(255,255,255,0.7); border-radius: 8px; pointer-events: none;"></div>
+            </div>
           </div>
           <input type="file" id="photo-file-input" accept="image/*" style="display: none;">
+
+          <!-- Photo Fit Controls -->
+          <div id="photo-adjust-toolbar" style="display: none; margin-top: 0.65rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.5rem 0.75rem; justify-content: space-between; align-items: center;">
+            <div style="display: flex; gap: 0.35rem;">
+              <button type="button" id="btn-photo-fit-cover" class="btn btn-sm active" style="padding: 4px 8px; font-size: 0.74rem; background: var(--primary); color: #fff;">🔲 꽉 채우기</button>
+              <button type="button" id="btn-photo-fit-contain" class="btn btn-sm" style="padding: 4px 8px; font-size: 0.74rem; background: rgba(0,0,0,0.06); color: var(--text-main);">🖼️ 전체 맞춤</button>
+            </div>
+            <button type="button" id="btn-photo-rotate" class="btn btn-sm" style="padding: 4px 8px; font-size: 0.74rem; background: rgba(0,0,0,0.06); color: var(--text-main);">🔄 90° 회전</button>
+          </div>
         </div>
 
         <!-- Date Input (Default: Today) -->
@@ -1378,7 +1407,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=6.6"></script>
-  <script src="js/treasure.js?v=6.6"></script>
+  <script src="js/app.js?v=6.7"></script>
+  <script src="js/treasure.js?v=6.7"></script>
 </body>
 </html>

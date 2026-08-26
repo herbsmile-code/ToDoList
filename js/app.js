@@ -2259,11 +2259,31 @@
     // =======================================================================
     // Wishlist Hub Engine
     // =======================================================================
+    formatWishCost(cost) {
+      if (!cost) return '';
+      const str = String(cost).trim();
+      if (!str) return '';
+      const digits = str.replace(/[^0-9]/g, '');
+      if (digits.length > 0) {
+        const num = parseInt(digits, 10);
+        const formatted = num.toLocaleString('ko-KR');
+        if (str.includes('만') && !str.includes('원')) {
+          return `${formatted}만원`;
+        }
+        if (!str.includes('원') && !str.includes('$') && !str.includes('€') && !str.includes('엔')) {
+          return `${formatted}원`;
+        }
+        return str.replace(/[0-9,]+/, formatted);
+      }
+      return str;
+    },
+
     renderWishlist() {
       const grid = document.getElementById('wishlist-grid-container');
       const emptyState = document.getElementById('wishlist-empty-state');
-      const countTotal = document.getElementById('wish-count-total');
-      const countComp = document.getElementById('wish-count-completed');
+      const countTotal = document.getElementById('wishlist-count-total');
+      const countComp = document.getElementById('wishlist-count-completed');
+
       if (!grid) return;
 
       const total = store.wishlist.length;
@@ -2293,6 +2313,7 @@
           const catInfo = catMap[wish.category] || catMap.shop;
           const createdDateStr = wish.createdAt ? new Date(wish.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric' }).replace(/\. /g, '.').replace(/\.$/, '') : '';
           const completedDateStr = (wish.completed && wish.completedAt) ? new Date(wish.completedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric' }).replace(/\. /g, '.').replace(/\.$/, '') : '';
+          const formattedCost = this.formatWishCost(wish.cost);
 
           return `
             <div class="wish-card ${wish.completed ? 'completed' : ''}" data-wish-id="${wish.id}">
@@ -2305,14 +2326,18 @@
                 </button>
               </div>
 
-              <h4 class="wish-title">${escapeHTML(wish.title)}</h4>
+              <div class="wish-title-row">
+                <h4 class="wish-title">${escapeHTML(wish.title)}</h4>
+                ${formattedCost ? `<span class="wish-cost-badge">${escapeHTML(formattedCost)}</span>` : ''}
+              </div>
 
               ${wish.memo ? `<p class="wish-memo">💬 ${escapeHTML(wish.memo)}</p>` : ''}
 
-              <div class="wish-meta-row">
-                ${wish.cost ? `<span class="wish-cost-badge">🏷️ ${escapeHTML(wish.cost)}</span>` : ''}
-                ${wish.url ? `<a href="${escapeHTML(wish.url)}" target="_blank" rel="noopener" class="wish-link-btn">🔗 바로가기</a>` : ''}
-              </div>
+              ${wish.url ? `
+                <div class="wish-meta-row" style="margin-top: 0.25rem;">
+                  <a href="${escapeHTML(wish.url)}" target="_blank" rel="noopener" class="wish-link-btn">🔗 링크 바로가기</a>
+                </div>
+              ` : ''}
 
               <div class="wish-card-actions">
                 <button type="button" class="btn-wish-toggle" data-action="toggle-wish" data-wish-id="${wish.id}">
@@ -2555,32 +2580,66 @@
       const titleEl = document.getElementById('photo-modal-title');
       const previewImg = document.getElementById('photo-preview-img');
       const previewPlaceholder = document.getElementById('photo-preview-placeholder');
+      const fixedFrameBox = document.getElementById('photo-fixed-frame-box');
+      const adjustToolbar = document.getElementById('photo-adjust-toolbar');
+      const fitHint = document.getElementById('photo-fit-hint');
       const hiddenId = document.getElementById('photo-edit-id');
       const dateInput = document.getElementById('photo-input-date');
       const captionInput = document.getElementById('photo-input-caption');
       if (!modal || !form) return;
 
       form.reset();
+      window._photoEditor = {
+        rawImg: null,
+        rawSrc: '',
+        fitMode: 'cover',
+        rotation: 0
+      };
+
+      const btnCover = document.getElementById('btn-photo-fit-cover');
+      const btnContain = document.getElementById('btn-photo-fit-contain');
+      if (btnCover) {
+        btnCover.style.background = 'var(--primary)';
+        btnCover.style.color = '#fff';
+      }
+      if (btnContain) {
+        btnContain.style.background = 'rgba(0,0,0,0.06)';
+        btnContain.style.color = 'var(--text-main)';
+      }
+
       if (photoId) {
         const photo = store.photos.find(p => p.id === photoId);
         if (!photo) return;
-        if (titleEl) titleEl.textContent = '📷 폴라로이드 사진/메모 수정';
+        if (titleEl) titleEl.textContent = '🖼️ 사진첩 사진/메모 수정';
         if (hiddenId) hiddenId.value = photo.id;
         if (dateInput) dateInput.value = photo.date || TODAY_STR;
         if (captionInput) captionInput.value = photo.caption || '';
+        
+        window._photoEditor.rawSrc = photo.imageDataUrl;
+        const img = new Image();
+        img.onload = () => { window._photoEditor.rawImg = img; };
+        img.src = photo.imageDataUrl;
+
         if (previewImg) {
           previewImg.src = photo.imageDataUrl;
-          previewImg.style.display = 'block';
+          previewImg.style.objectFit = 'cover';
+          previewImg.style.transform = 'none';
         }
+        if (fixedFrameBox) fixedFrameBox.style.display = 'block';
+        if (adjustToolbar) adjustToolbar.style.display = 'flex';
+        if (fitHint) fitHint.style.display = 'inline';
         if (previewPlaceholder) previewPlaceholder.style.display = 'none';
       } else {
-        if (titleEl) titleEl.textContent = '📷 새로운 폴라로이드 사진 등록';
+        if (titleEl) titleEl.textContent = '🖼️ 새로운 사진 걸어두기';
         if (hiddenId) hiddenId.value = '';
         if (dateInput) dateInput.value = TODAY_STR;
         if (previewImg) {
           previewImg.src = '';
-          previewImg.style.display = 'none';
+          previewImg.style.transform = 'none';
         }
+        if (fixedFrameBox) fixedFrameBox.style.display = 'none';
+        if (adjustToolbar) adjustToolbar.style.display = 'none';
+        if (fitHint) fitHint.style.display = 'none';
         if (previewPlaceholder) previewPlaceholder.style.display = 'block';
       }
 
@@ -2594,6 +2653,7 @@
         modal.style.display = 'none';
         modal.classList.remove('active');
       }
+      window._photoEditor = null;
     },
 
     openPhotoLightbox(photoId) {
@@ -3346,7 +3406,29 @@
         UI.renderWishlist();
         UI.renderSidebar();
       });
+
+      // Wishlist Cost Realtime Comma Formatter
+      const wishCostInput = document.getElementById('wish-input-cost');
+      if (wishCostInput) {
+        wishCostInput.addEventListener('input', (e) => {
+          const val = e.target.value;
+          const digits = val.replace(/[^0-9]/g, '');
+          if (digits) {
+            const num = parseInt(digits, 10);
+            e.target.value = num.toLocaleString('ko-KR') + (val.includes('원') ? '원' : '');
+          }
+        });
+      }
     }
+
+    // Wishlist Modal Triggers
+    const btnOpenWishModal = document.getElementById('btn-open-wishlist-modal');
+    if (btnOpenWishModal) {
+      btnOpenWishModal.addEventListener('click', () => UI.openWishlistModal());
+    }
+    document.querySelectorAll('[data-close-wishlist-modal]').forEach(el => {
+      el.addEventListener('click', () => UI.closeWishlistModal());
+    });
 
     // Ledger Excel Upload Form Submit
     const ledgerForm = document.getElementById('ledger-upload-form');
@@ -3705,11 +3787,69 @@
       }
     });
 
-    // Polaroid Photo Dropzone & File Input Handling
+    // Polaroid Photo Dropzone & 1:1 Frame Editor Handling
     const photoDropzone = document.getElementById('photo-dropzone');
     const photoFileInput = document.getElementById('photo-file-input');
     const photoPreviewImg = document.getElementById('photo-preview-img');
     const photoPreviewPlaceholder = document.getElementById('photo-preview-placeholder');
+    const photoFixedFrameBox = document.getElementById('photo-fixed-frame-box');
+    const photoAdjustToolbar = document.getElementById('photo-adjust-toolbar');
+    const photoFitHint = document.getElementById('photo-fit-hint');
+
+    const updatePhotoPreviewUI = () => {
+      if (!window._photoEditor || !photoPreviewImg) return;
+      const { fitMode, rotation } = window._photoEditor;
+      photoPreviewImg.style.objectFit = (fitMode === 'contain') ? 'contain' : 'cover';
+      photoPreviewImg.style.transform = `rotate(${rotation}deg)`;
+
+      const btnCover = document.getElementById('btn-photo-fit-cover');
+      const btnContain = document.getElementById('btn-photo-fit-contain');
+      if (btnCover && btnContain) {
+        if (fitMode === 'cover') {
+          btnCover.style.background = 'var(--primary)';
+          btnCover.style.color = '#fff';
+          btnContain.style.background = 'rgba(0,0,0,0.06)';
+          btnContain.style.color = 'var(--text-main)';
+        } else {
+          btnContain.style.background = 'var(--primary)';
+          btnContain.style.color = '#fff';
+          btnCover.style.background = 'rgba(0,0,0,0.06)';
+          btnCover.style.color = 'var(--text-main)';
+        }
+      }
+    };
+
+    // Fit Mode & Rotation Buttons
+    const btnFitCover = document.getElementById('btn-photo-fit-cover');
+    const btnFitContain = document.getElementById('btn-photo-fit-contain');
+    const btnRotate = document.getElementById('btn-photo-rotate');
+
+    if (btnFitCover) {
+      btnFitCover.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!window._photoEditor) return;
+        window._photoEditor.fitMode = 'cover';
+        updatePhotoPreviewUI();
+      });
+    }
+
+    if (btnFitContain) {
+      btnFitContain.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!window._photoEditor) return;
+        window._photoEditor.fitMode = 'contain';
+        updatePhotoPreviewUI();
+      });
+    }
+
+    if (btnRotate) {
+      btnRotate.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!window._photoEditor) return;
+        window._photoEditor.rotation = (window._photoEditor.rotation + 90) % 360;
+        updatePhotoPreviewUI();
+      });
+    }
 
     if (photoDropzone && photoFileInput) {
       photoDropzone.addEventListener('click', () => photoFileInput.click());
@@ -3719,38 +3859,27 @@
           UI.showToast('이미지 파일만 등록할 수 있어요 (JPG, PNG 등)', 'danger');
           return;
         }
-        
-        // Smart Client-side Canvas Resizing & Compression (1200px max, JPEG 0.82)
+
         const reader = new FileReader();
         reader.onload = (e) => {
           const img = new Image();
           img.onload = () => {
-            const maxDim = 1200;
-            let w = img.width;
-            let h = img.height;
-            if (w > maxDim || h > maxDim) {
-              if (w > h) {
-                h = Math.round((h * maxDim) / w);
-                w = maxDim;
-              } else {
-                w = Math.round((w * maxDim) / h);
-                h = maxDim;
-              }
+            if (!window._photoEditor) {
+              window._photoEditor = { rawImg: img, rawSrc: e.target.result, fitMode: 'cover', rotation: 0 };
+            } else {
+              window._photoEditor.rawImg = img;
+              window._photoEditor.rawSrc = e.target.result;
             }
-            const canvas = document.createElement('canvas');
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, w, h);
-            const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
 
             if (photoPreviewImg) {
-              photoPreviewImg.src = optimizedDataUrl;
-              photoPreviewImg.style.display = 'block';
+              photoPreviewImg.src = e.target.result;
             }
-            if (photoPreviewPlaceholder) {
-              photoPreviewPlaceholder.style.display = 'none';
-            }
+            if (photoFixedFrameBox) photoFixedFrameBox.style.display = 'block';
+            if (photoAdjustToolbar) photoAdjustToolbar.style.display = 'flex';
+            if (photoFitHint) photoFitHint.style.display = 'inline';
+            if (photoPreviewPlaceholder) photoPreviewPlaceholder.style.display = 'none';
+
+            updatePhotoPreviewUI();
           };
           img.onerror = () => {
             UI.showToast('사진을 읽는 중 문제가 발생했어요', 'danger');
@@ -3787,6 +3916,41 @@
       });
     }
 
+    // Export 1:1 Fixed Square Cropped / Framed Image via Canvas
+    const generateFixedSquarePhotoDataUrl = (imgObj, fitMode, rotation) => {
+      const size = 1080;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = (fitMode === 'contain') ? '#12151e' : '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+
+      ctx.save();
+      ctx.translate(size / 2, size / 2);
+      ctx.rotate((rotation * Math.PI) / 180);
+
+      const srcW = imgObj.naturalWidth || imgObj.width;
+      const srcH = imgObj.naturalHeight || imgObj.height;
+
+      let drawW, drawH;
+      if (fitMode === 'contain') {
+        const scale = Math.min(size / srcW, size / srcH);
+        drawW = srcW * scale;
+        drawH = srcH * scale;
+      } else {
+        const scale = Math.max(size / srcW, size / srcH);
+        drawW = srcW * scale;
+        drawH = srcH * scale;
+      }
+
+      ctx.drawImage(imgObj, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+
+      return canvas.toDataURL('image/jpeg', 0.85);
+    };
+
     // Polaroid Photo Form Submit
     const photoForm = document.getElementById('photo-form');
     if (photoForm) {
@@ -3795,10 +3959,25 @@
         const editId = document.getElementById('photo-edit-id').value;
         const dateVal = document.getElementById('photo-input-date').value || TODAY_STR;
         const captionVal = document.getElementById('photo-input-caption').value.trim();
-        const imgSrc = photoPreviewImg ? photoPreviewImg.src : '';
 
-        if (!imgSrc) {
-          UI.showToast('폴라로이드에 담을 사진을 선택해 주세요 🖼️', 'danger');
+        if (!window._photoEditor || (!window._photoEditor.rawImg && !window._photoEditor.rawSrc)) {
+          UI.showToast('사진을 선택해 주세요 🖼️', 'danger');
+          return;
+        }
+
+        let finalImageDataUrl = '';
+        if (window._photoEditor.rawImg) {
+          finalImageDataUrl = generateFixedSquarePhotoDataUrl(
+            window._photoEditor.rawImg,
+            window._photoEditor.fitMode || 'cover',
+            window._photoEditor.rotation || 0
+          );
+        } else if (photoPreviewImg && photoPreviewImg.src) {
+          finalImageDataUrl = photoPreviewImg.src;
+        }
+
+        if (!finalImageDataUrl) {
+          UI.showToast('사진을 다시 선택해 주세요 🖼️', 'danger');
           return;
         }
 
@@ -3806,17 +3985,16 @@
           store.updatePhoto(editId, {
             date: dateVal,
             caption: captionVal,
-            imageDataUrl: imgSrc
+            imageDataUrl: finalImageDataUrl
           });
-          UI.showToast('폴라로이드 사진이 수정되었어요! ✨', 'info');
+          UI.showToast('사진이 1:1 고정 틀에 맞춰 수정되었어요! ✨', 'info');
         } else {
           store.addPhoto({
             date: dateVal,
             caption: captionVal,
-            imageDataUrl: imgSrc
+            imageDataUrl: finalImageDataUrl
           });
           sounds.playAdd();
-          // Gentle confetti to avoid mobile frame flicker
           confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 18);
           UI.showToast('사진첩에 예쁘게 걸어두었어요! 🖼️💖', 'success');
         }

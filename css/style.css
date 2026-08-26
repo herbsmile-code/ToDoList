@@ -1824,6 +1824,11 @@ body::after {
     display: none;
   }
 
+  #btn-force-reload {
+    padding: 0.32rem 0.5rem;
+    font-size: 0.72rem;
+  }
+
   #btn-cloud-status {
     padding: 0.35rem 0.6rem;
     font-size: 0.74rem;
@@ -3459,13 +3464,22 @@ body::after {
 .wish-cat-tag.food { background: #ffe3e3; color: #e03131; }
 .wish-cat-tag.bucket { background: #eebefa; color: #9c36b5; }
 
+.wish-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0.15rem 0 0.35rem 0;
+}
+
 .wish-title {
-  font-size: 1.05rem;
-  font-weight: 800;
+  font-size: 0.94rem;
+  font-weight: 700;
   color: var(--text-main);
   margin: 0;
-  line-height: 1.4;
-  word-break: keep-all;
+  line-height: 1.35;
+  word-break: break-word;
+  flex: 1;
 }
 
 .wish-card.completed .wish-title {
@@ -3473,16 +3487,33 @@ body::after {
   color: var(--text-dim);
 }
 
-.wish-memo {
+.wish-cost-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 107, 139, 0.1);
+  color: var(--primary);
   font-size: 0.84rem;
+  font-weight: 800;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  letter-spacing: -0.2px;
+}
+
+.wish-memo {
+  font-size: 0.82rem;
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: keep-all;
   background: rgba(0, 0, 0, 0.02);
-  padding: 0.55rem 0.75rem;
+  padding: 0.5rem 0.7rem;
   border-radius: var(--radius-sm);
   border-left: 3px solid var(--border-color);
+  margin: 0.35rem 0;
 }
 
 .wish-meta-row {
@@ -3490,18 +3521,7 @@ body::after {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
-  font-size: 0.78rem;
-}
-
-.wish-cost-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: rgba(255, 107, 139, 0.08);
-  color: var(--primary);
-  font-weight: 700;
+  font-size: 0.76rem;
 }
 
 .wish-link-btn {
