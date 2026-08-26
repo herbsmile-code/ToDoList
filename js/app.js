@@ -1472,7 +1472,7 @@
               <span class="badge" style="${typeBadgeStyle}">${typeInfo.label}</span>
               <span class="badge ${priority.class}">${priority.label}</span>
               ${cat ? `<span class="badge badge-tag" style="background: ${cat.color}15; color: ${cat.color};">${cat.name}</span>` : ''}
-              ${dueInfo ? `<span class="badge badge-date ${dueInfo.className}">🗓️ ${dueInfo.label}</span>` : ''}
+              ${dueInfo ? `<span class="badge badge-date ${dueInfo.className}">${dueInfo.label}</span>` : ''}
             </div>
           </div>
 
@@ -1925,12 +1925,12 @@
           const dateFormatted = photo.date ? photo.date.replace(/-/g, '.') : '';
           
           return `
-            <div class="polaroid-card" style="--rot: ${rot}deg;" data-photo-id="${photo.id}">
+            <div class="polaroid-card" style="--rot: ${rot}deg;" data-photo-id="${photo.id}" draggable="true">
               <div class="polaroid-image-wrapper" data-action="view-photo-lightbox" data-photo-id="${photo.id}" title="클릭하여 크게 보기 🔍">
                 <img src="${photo.imageDataUrl}" class="polaroid-img" alt="${escapeHTML(photo.caption || '폴라로이드 사진')}" loading="lazy">
               </div>
               <div class="polaroid-caption-area">
-                <span class="polaroid-date-badge">📅 ${dateFormatted}</span>
+                <span class="polaroid-date-badge">${dateFormatted}</span>
                 <div class="polaroid-memo-text">${escapeHTML(photo.caption)}</div>
               </div>
               <div class="polaroid-actions-row">
@@ -2266,6 +2266,9 @@
 
         grid.innerHTML = filtered.map(wish => {
           const catInfo = catMap[wish.category] || catMap.shop;
+          const createdDateStr = wish.createdAt ? new Date(wish.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric' }).replace(/\. /g, '.').replace(/\.$/, '') : '';
+          const completedDateStr = (wish.completed && wish.completedAt) ? new Date(wish.completedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric' }).replace(/\. /g, '.').replace(/\.$/, '') : '';
+
           return `
             <div class="wish-card ${wish.completed ? 'completed' : ''}" data-wish-id="${wish.id}">
               ${wish.completed ? '<div class="wish-stamp-achieved">💮 DREAM CAME TRUE ✨</div>' : ''}
@@ -2290,9 +2293,11 @@
                 <button type="button" class="btn-wish-toggle" data-action="toggle-wish" data-wish-id="${wish.id}">
                   <span>${wish.completed ? '💮 달성 완료!' : '🤍 소원 달성 체크'}</span>
                 </button>
-                <span style="font-size: 0.72rem; color: var(--text-dim);">
-                  ${new Date(wish.createdAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })} 등록
-                </span>
+              </div>
+
+              <div class="wish-dates-row">
+                <span class="wish-date-item">등록: ${createdDateStr || '최근'}</span>
+                ${completedDateStr ? `<span class="wish-date-item wish-completed-date">달성: ${completedDateStr} 💮</span>` : ''}
               </div>
             </div>
           `;
@@ -2577,7 +2582,7 @@
       img.src = photo.imageDataUrl;
       if (cap) {
         const dateStr = photo.date ? photo.date.replace(/-/g, '.') : '';
-        cap.textContent = `📅 ${dateStr}  |  ${photo.caption || ''}`;
+        cap.textContent = `${dateStr}  |  ${photo.caption || ''}`;
       }
       modal.style.display = 'flex';
       modal.classList.add('active');
@@ -3673,15 +3678,43 @@
           UI.showToast('이미지 파일만 등록할 수 있어요 (JPG, PNG 등)', 'danger');
           return;
         }
+        
+        // Smart Client-side Canvas Resizing & Compression (1200px max, JPEG 0.82)
         const reader = new FileReader();
         reader.onload = (e) => {
-          if (photoPreviewImg) {
-            photoPreviewImg.src = e.target.result;
-            photoPreviewImg.style.display = 'block';
-          }
-          if (photoPreviewPlaceholder) {
-            photoPreviewPlaceholder.style.display = 'none';
-          }
+          const img = new Image();
+          img.onload = () => {
+            const maxDim = 1200;
+            let w = img.width;
+            let h = img.height;
+            if (w > maxDim || h > maxDim) {
+              if (w > h) {
+                h = Math.round((h * maxDim) / w);
+                w = maxDim;
+              } else {
+                w = Math.round((w * maxDim) / h);
+                h = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+
+            if (photoPreviewImg) {
+              photoPreviewImg.src = optimizedDataUrl;
+              photoPreviewImg.style.display = 'block';
+            }
+            if (photoPreviewPlaceholder) {
+              photoPreviewPlaceholder.style.display = 'none';
+            }
+          };
+          img.onerror = () => {
+            UI.showToast('사진을 읽는 중 문제가 발생했어요', 'danger');
+          };
+          img.src = e.target.result;
         };
         reader.readAsDataURL(file);
       };
@@ -3742,13 +3775,87 @@
             imageDataUrl: imgSrc
           });
           sounds.playAdd();
-          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+          // Gentle confetti to avoid mobile frame flicker
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 18);
           UI.showToast('사진첩에 예쁘게 걸어두었어요! 📷💖', 'success');
         }
 
         UI.closePhotoModal();
         UI.renderPhotos();
         UI.renderSidebar();
+      });
+    }
+
+    // Polaroid Drag & Drop Reordering Event Handling
+    const photosGrid = document.getElementById('photos-grid-container');
+    if (photosGrid) {
+      let draggedPhotoId = null;
+
+      photosGrid.addEventListener('dragstart', (e) => {
+        const card = e.target.closest('.polaroid-card');
+        if (!card) return;
+        draggedPhotoId = card.dataset.photoId;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', draggedPhotoId);
+      });
+
+      photosGrid.addEventListener('dragend', (e) => {
+        const card = e.target.closest('.polaroid-card');
+        if (card) card.classList.remove('dragging');
+        document.querySelectorAll('.polaroid-card').forEach(el => {
+          el.classList.remove('drag-over-left', 'drag-over-right');
+        });
+      });
+
+      photosGrid.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const targetCard = e.target.closest('.polaroid-card');
+        if (!targetCard || targetCard.dataset.photoId === draggedPhotoId) return;
+
+        const rect = targetCard.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        document.querySelectorAll('.polaroid-card').forEach(el => {
+          el.classList.remove('drag-over-left', 'drag-over-right');
+        });
+        if (e.clientX < midX) {
+          targetCard.classList.add('drag-over-left');
+        } else {
+          targetCard.classList.add('drag-over-right');
+        }
+      });
+
+      photosGrid.addEventListener('dragleave', (e) => {
+        const targetCard = e.target.closest('.polaroid-card');
+        if (targetCard) {
+          targetCard.classList.remove('drag-over-left', 'drag-over-right');
+        }
+      });
+
+      photosGrid.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const targetCard = e.target.closest('.polaroid-card');
+        if (!targetCard || !draggedPhotoId) return;
+        const targetPhotoId = targetCard.dataset.photoId;
+        if (targetPhotoId === draggedPhotoId) return;
+
+        const fromIdx = store.photos.findIndex(p => p.id === draggedPhotoId);
+        const toIdx = store.photos.findIndex(p => p.id === targetPhotoId);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const [moved] = store.photos.splice(fromIdx, 1);
+          const rect = targetCard.getBoundingClientRect();
+          const midX = rect.left + rect.width / 2;
+          const insertIdx = (e.clientX < midX) ? toIdx : toIdx + 1;
+          store.photos.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, moved);
+          store.save();
+          UI.renderPhotos();
+          UI.showToast('사진 순서가 변경되었어요! 📷✨', 'info');
+        }
+        draggedPhotoId = null;
+        document.querySelectorAll('.polaroid-card').forEach(el => {
+          el.classList.remove('drag-over-left', 'drag-over-right');
+        });
       });
     }
 

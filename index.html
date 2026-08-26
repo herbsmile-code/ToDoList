@@ -163,6 +163,7 @@
               </div>
               <span class="nav-count" id="nav-count-photos">0</span>
             </li>
+            <li class="sidebar-nav-divider"></li>
             <!-- Notes / Doodle Menu Item (끄적끄적) -->
             <li class="nav-item notes-nav-item" data-filter="notes" id="nav-filter-notes" title="자유롭게 생각을 적는 간단한 메모장">
               <div class="nav-item-left">
@@ -1056,12 +1057,14 @@
     </div>
   </div>
 
-  <!-- Modal: Photo Lightbox (크게 보기) -->
-  <div id="photo-lightbox-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10005; background: rgba(0,0,0,0.88); align-items: center; justify-content: center;">
-    <div style="position: relative; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; align-items: center; gap: 0.75rem;">
-      <button class="modal-close-btn" id="btn-close-photo-lightbox" style="position: absolute; top: -40px; right: 0; color: #fff; font-size: 1.6rem; background: transparent; border: none; cursor: pointer;" title="닫기 (Esc)">✕</button>
-      <img id="lightbox-img" class="lightbox-img-full" src="" alt="확대 사진">
-      <div id="lightbox-caption" style="color: #fff; text-align: center; font-size: 0.95rem; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.8); max-width: 600px; padding: 0.4rem 1rem; background: rgba(0,0,0,0.5); border-radius: 20px;"></div>
+  <!-- Modal: Photo Lightbox (크게 보기 - 적정 크기 뷰어) -->
+  <div id="photo-lightbox-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10005;">
+    <div class="lightbox-frame-card">
+      <button class="modal-close-btn" id="btn-close-photo-lightbox" title="닫기 (Esc)">✕</button>
+      <div class="lightbox-image-box">
+        <img id="lightbox-img" class="lightbox-img-full" src="" alt="확대 사진">
+      </div>
+      <div id="lightbox-caption" class="lightbox-caption-text"></div>
     </div>
   </div>
 
@@ -1375,7 +1378,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=6.3"></script>
-  <script src="js/treasure.js?v=6.3"></script>
+  <script src="js/app.js?v=6.4"></script>
+  <script src="js/treasure.js?v=6.4"></script>
 </body>
 </html>
