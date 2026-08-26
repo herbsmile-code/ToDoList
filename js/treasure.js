@@ -388,7 +388,7 @@ class TreasureVaultManager {
       const delBtn = e.target.closest('[data-action="delete-tr"]');
       if (delBtn) {
         const tId = delBtn.dataset.id;
-        if (tId && confirm('이 보물 노트를 삭제할까요?')) {
+        if (tId && confirm('정말 삭제하시겠습니까?')) {
           this.delete(tId);
           if (window.sounds && window.sounds.playDelete) window.sounds.playDelete();
           if (window.UI && window.UI.showToast) window.UI.showToast('보물 노트가 삭제되었어요.', 'danger');

@@ -521,8 +521,7 @@
     }
 
     getStorageKey() {
-      // Unified single space: all notes, tasks, and data are stored in a single room!
-      return `space_${this.sanitizeKey(this.spaceId)}`;
+      return `space_${this.sanitizeKey(this.spaceId)}_${this.sanitizeKey(this.pin)}`;
     }
 
     updateUIStatus() {
@@ -533,7 +532,8 @@
       const lockedScreen = document.getElementById('locked-privacy-screen');
       const views = [
         'tasks-view-container', 'files-view-container', 'wishlist-view-container',
-        'notes-view-container', 'ledger-view-container', 'calendar-month-view-container', 'calendar-week-view-container'
+        'photos-view-container', 'notes-view-container', 'ledger-view-container',
+        'calendar-month-view-container', 'calendar-week-view-container'
       ].map(id => document.getElementById(id));
 
       const isLogged = !!(this.spaceId && this.pin);
@@ -555,6 +555,7 @@
 
     renderAllViews() {
       try { UI.renderTasks(); } catch (e) {}
+      try { UI.renderPhotos(); } catch (e) {}
       try { UI.renderNotes(); } catch (e) {}
       try { UI.renderWishlist(); } catch (e) {}
       try { UI.renderLedger(); } catch (e) {}
@@ -589,6 +590,7 @@
                 if (data.tasks !== undefined) store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
                 if (data.categories !== undefined && normalizeArray(data.categories).length) store.categories = normalizeArray(data.categories);
                 if (data.wishlist !== undefined) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
+                if (data.photos !== undefined) store.photos = normalizeArray(data.photos).filter(p => p && p.id);
                 if (data.notes !== undefined) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
                 if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
                 if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
@@ -609,7 +611,7 @@
           } else if (!rawResponse) {
             // 클라우드가 비어있다면 현재 로컬 데이터를 즉시 클라우드로 암호화 업로드
             const vFiles = await this.getAllVaultFiles();
-            if (store.tasks.length > 0 || store.notes.length > 0 || store.wishlist.length > 0 || vFiles.length > 0) {
+            if (store.tasks.length > 0 || store.notes.length > 0 || store.photos.length > 0 || store.wishlist.length > 0 || vFiles.length > 0) {
               await this.pushTasksToCloud();
             }
           }
@@ -627,6 +629,7 @@
         tasks: store.tasks,
         categories: store.categories,
         wishlist: store.wishlist,
+        photos: store.photos,
         notes: store.notes,
         vaultFiles: vaultFiles,
         honeymoonData: store.honeymoonData,
@@ -732,9 +735,7 @@
   const DEFAULT_CATEGORIES = [
     { id: 'work', name: '업무 💼', color: '#ff6b8b' },
     { id: 'personal', name: '개인 🌸', color: '#b197fc' },
-    { id: 'study', name: '공부 📝', color: '#74c0fc' },
-    { id: 'routine', name: '루틴 ☀️', color: '#63e6be' },
-    { id: 'cafe', name: '카페 & 힐링 ☕', color: '#ffa94d' }
+    { id: 'schedule', name: '일정♥ 📅', color: '#f06595' }
   ];
 
   const INITIAL_DEMO_TASKS = [];
@@ -833,6 +834,7 @@
       this.tasks = [];
       this.categories = DEFAULT_CATEGORIES;
       this.wishlist = [];
+      this.photos = [];
       this.notes = [];
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.ledgerFiles = [];
@@ -857,6 +859,7 @@
       // Collect real user items from all possible legacy storage keys
       let combinedTasks = [];
       let combinedWishlist = [];
+      let combinedPhotos = [];
       let combinedNotes = [];
       let combinedLedgerFiles = [];
       let userCategories = null;
@@ -896,6 +899,13 @@
                 }
               });
             }
+            if (Array.isArray(parsed.photos)) {
+              parsed.photos.forEach(p => {
+                if (p && p.id && !combinedPhotos.some(x => x.id === p.id)) {
+                  combinedPhotos.push(p);
+                }
+              });
+            }
             if (Array.isArray(parsed.notes)) {
               parsed.notes.forEach(n => {
                 if (n && n.id && !MOCK_DEMO_IDS.has(n.id) && !combinedNotes.some(x => x.id === n.id)) {
@@ -917,11 +927,22 @@
         } catch (err) {}
       });
 
+      // Filter out deleted categories (study, routine, cafe) and ensure 'schedule' exists
+      let finalCategories = Array.isArray(userCategories) ? userCategories : DEFAULT_CATEGORIES;
+      const bannedIds = new Set(['study', 'routine', 'cafe']);
+      finalCategories = finalCategories.filter(c => c && c.id && !bannedIds.has(c.id));
+      DEFAULT_CATEGORIES.forEach(defCat => {
+        if (!finalCategories.some(c => c.id === defCat.id)) {
+          finalCategories.push(defCat);
+        }
+      });
+
       this.tasks = combinedTasks;
       this.wishlist = combinedWishlist;
+      this.photos = combinedPhotos;
       this.notes = combinedNotes;
       this.ledgerFiles = combinedLedgerFiles;
-      this.categories = userCategories || DEFAULT_CATEGORIES;
+      this.categories = finalCategories;
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
 
       try {
@@ -939,6 +960,7 @@
           tasks: this.tasks,
           categories: this.categories,
           wishlist: this.wishlist,
+          photos: this.photos,
           notes: this.notes,
           honeymoonData: this.honeymoonData,
           ledgerFiles: this.ledgerFiles,
@@ -1018,6 +1040,39 @@
       return true;
     }
 
+    // --- Photos Methods (Polaroid Gallery) ---
+    addPhoto(photoData) {
+      const rot = ((Math.random() * 5) - 2.5).toFixed(1); // -2.5deg ~ +2.5deg
+      const newPhoto = {
+        id: 'photo-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        title: (photoData.title || '').trim(),
+        caption: (photoData.caption || '').trim(),
+        date: photoData.date || TODAY_STR,
+        imageDataUrl: photoData.imageDataUrl || '',
+        rotationDeg: Number(rot),
+        createdAt: Date.now()
+      };
+      this.photos.unshift(newPhoto);
+      this.save();
+      return newPhoto;
+    }
+
+    updatePhoto(id, updates) {
+      const photo = this.photos.find(p => p.id === id);
+      if (!photo) return null;
+      Object.assign(photo, updates, { updatedAt: Date.now() });
+      this.save();
+      return photo;
+    }
+
+    deletePhoto(id) {
+      const idx = this.photos.findIndex(p => p.id === id);
+      if (idx === -1) return false;
+      this.photos.splice(idx, 1);
+      this.save();
+      return true;
+    }
+
     // --- Notes Methods ---
     addNote(content, color = 'pink') {
       const newNote = {
@@ -1029,6 +1084,14 @@
       this.notes.unshift(newNote);
       this.save();
       return newNote;
+    }
+
+    updateNote(id, updates) {
+      const note = this.notes.find(n => n.id === id);
+      if (!note) return null;
+      Object.assign(note, updates, { updatedAt: Date.now() });
+      this.save();
+      return note;
     }
 
     deleteNote(id) {
@@ -1267,7 +1330,7 @@
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
       if (!isLogged) {
-        const counts = ['all', 'upcoming', 'overdue', 'pinned', 'completed', 'notes', 'ledger', 'wishlist', 'vault'];
+        const counts = ['all', 'upcoming', 'overdue', 'pinned', 'completed', 'photos', 'notes', 'ledger', 'wishlist', 'vault'];
         counts.forEach(k => {
           const el = document.getElementById(`nav-count-${k}`);
           if (el) el.textContent = '🔒';
@@ -1287,6 +1350,7 @@
         overdue: stats.overdue,
         pinned: store.tasks.filter(t => t.pinned).length,
         completed: stats.completed,
+        photos: (store.photos || []).length,
         notes: store.notes.length,
         ledger: store.ledgerFiles.length,
         wishlist: store.wishlist.length
@@ -1405,6 +1469,7 @@
       const tasksView = document.getElementById('tasks-view-container');
       const filesView = document.getElementById('files-view-container');
       const wishView = document.getElementById('wishlist-view-container');
+      const photosView = document.getElementById('photos-view-container');
       const notesView = document.getElementById('notes-view-container');
       const ledgerView = document.getElementById('ledger-view-container');
       const calMView = document.getElementById('calendar-month-view-container');
@@ -1419,7 +1484,7 @@
 
       if (!isLogged) {
         if (lockedScreen) lockedScreen.style.display = 'flex';
-        [tasksView, filesView, wishView, notesView, ledgerView, calMView, calWView].forEach(v => {
+        [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView].forEach(v => {
           if (v) v.style.display = 'none';
         });
         if (mobileBar) mobileBar.style.display = 'none';
@@ -1431,7 +1496,7 @@
       if (mobileBar) mobileBar.style.display = 'flex';
 
       // Hide all views initially
-      [tasksView, filesView, wishView, notesView, ledgerView, calMView, calWView].forEach(v => {
+      [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView].forEach(v => {
         if (v) v.style.display = 'none';
       });
 
@@ -1440,7 +1505,7 @@
         const action = btn.dataset.mobileNav;
         if (store.activeFilter === action) {
           btn.classList.add('active');
-        } else if (!['vault', 'wishlist', 'notes', 'ledger', 'calendar-month', 'calendar-week'].includes(store.activeFilter) && action === 'tasks') {
+        } else if (!['vault', 'wishlist', 'photos', 'notes', 'ledger', 'calendar-month', 'calendar-week'].includes(store.activeFilter) && action === 'tasks') {
           btn.classList.add('active');
         } else {
           btn.classList.remove('active');
@@ -1459,6 +1524,14 @@
       if (store.activeFilter === 'calendar-week') {
         if (calWView) calWView.style.display = 'flex';
         this.renderCalendarWeek();
+        this.renderSidebar();
+        return;
+      }
+
+      // 3.0. 📷 폴라로이드 사진첩 (Photos) View
+      if (store.activeFilter === 'photos') {
+        if (photosView) photosView.style.display = 'flex';
+        this.renderPhotos();
         this.renderSidebar();
         return;
       }
@@ -1806,7 +1879,55 @@
     },
 
     // =======================================================================
-    // 끄적끄적 (Quick Notes / Memo) Engine (Gray color support)
+    // 📷 폴라로이드 사진첩 (Polaroid Photo Gallery) Engine
+    // =======================================================================
+    renderPhotos() {
+      const grid = document.getElementById('photos-grid-container');
+      const emptyState = document.getElementById('photos-empty-state');
+      const countEl = document.getElementById('photos-count-total');
+      if (!grid) return;
+
+      const total = (store.photos || []).length;
+      if (countEl) countEl.textContent = total;
+
+      if (total === 0) {
+        grid.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'flex';
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+
+        grid.innerHTML = store.photos.map(photo => {
+          const rot = photo.rotationDeg !== undefined ? photo.rotationDeg : 0;
+          const dateFormatted = photo.date ? photo.date.replace(/-/g, '.') : '';
+          
+          return `
+            <div class="polaroid-card" style="--rot: ${rot}deg;" data-photo-id="${photo.id}">
+              <div class="polaroid-image-wrapper" data-action="view-photo-lightbox" data-photo-id="${photo.id}" title="클릭하여 크게 보기 🔍">
+                <img src="${photo.imageDataUrl}" class="polaroid-img" alt="${escapeHTML(photo.caption || '폴라로이드 사진')}" loading="lazy">
+              </div>
+              <div class="polaroid-caption-area">
+                <span class="polaroid-date-badge">📅 ${dateFormatted}</span>
+                <div class="polaroid-memo-text">${escapeHTML(photo.caption)}</div>
+              </div>
+              <div class="polaroid-actions-row">
+                <button type="button" class="polaroid-btn" data-action="view-photo-lightbox" data-photo-id="${photo.id}" title="크게 보기">
+                  🔍
+                </button>
+                <button type="button" class="polaroid-btn" data-action="edit-photo" data-photo-id="${photo.id}" title="사진/메모 수정">
+                  ✏️
+                </button>
+                <button type="button" class="polaroid-btn delete" data-action="delete-photo" data-photo-id="${photo.id}" title="사진 삭제">
+                  🗑️
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    },
+
+    // =======================================================================
+    // 끄적끄적 (Quick Notes / Memo) Engine (Gray color support & Edit button)
     // =======================================================================
     renderNotes() {
       const grid = document.getElementById('notes-grid-container');
@@ -1834,9 +1955,14 @@
               <div class="note-card-body">${escapeHTML(note.content)}</div>
               <div class="note-card-footer">
                 <span>🕒 ${dateStr}</span>
-                <button type="button" class="note-card-delete-btn" data-action="delete-note" data-note-id="${note.id}" title="메모 삭제">
-                  🗑️
-                </button>
+                <div class="note-actions-bar">
+                  <button type="button" class="note-btn" data-action="edit-note" data-note-id="${note.id}" title="메모 수정">
+                    ✏️
+                  </button>
+                  <button type="button" class="note-btn" data-action="delete-note" data-note-id="${note.id}" title="메모 삭제">
+                    🗑️
+                  </button>
+                </div>
               </div>
             </div>
           `;
@@ -2266,7 +2392,7 @@
       row.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${completed ? 'checked' : ''}>
         <input type="text" class="checklist-item-input" value="${escapeHTML(title)}" placeholder="하위 체크 항목 입력..." data-sub-id="${subId}">
-        <button type="button" class="task-action-btn delete-btn" title="삭제" onclick="this.parentElement.remove()">✕</button>
+        <button type="button" class="task-action-btn delete-btn" title="삭제" onclick="if(confirm('정말 삭제하시겠습니까?')) this.parentElement.remove()">✕</button>
       `;
       list.appendChild(row);
     },
@@ -2365,6 +2491,105 @@
         modal.style.opacity = '0';
         modal.style.visibility = 'hidden';
         modal.style.pointerEvents = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openPhotoModal(photoId = null) {
+      const modal = document.getElementById('photo-modal');
+      const form = document.getElementById('photo-form');
+      const titleEl = document.getElementById('photo-modal-title');
+      const previewImg = document.getElementById('photo-preview-img');
+      const previewPlaceholder = document.getElementById('photo-preview-placeholder');
+      const hiddenId = document.getElementById('photo-edit-id');
+      const dateInput = document.getElementById('photo-input-date');
+      const captionInput = document.getElementById('photo-input-caption');
+      if (!modal || !form) return;
+
+      form.reset();
+      if (photoId) {
+        const photo = store.photos.find(p => p.id === photoId);
+        if (!photo) return;
+        if (titleEl) titleEl.textContent = '📷 폴라로이드 사진/메모 수정';
+        if (hiddenId) hiddenId.value = photo.id;
+        if (dateInput) dateInput.value = photo.date || TODAY_STR;
+        if (captionInput) captionInput.value = photo.caption || '';
+        if (previewImg) {
+          previewImg.src = photo.imageDataUrl;
+          previewImg.style.display = 'block';
+        }
+        if (previewPlaceholder) previewPlaceholder.style.display = 'none';
+      } else {
+        if (titleEl) titleEl.textContent = '📷 새로운 폴라로이드 사진 등록';
+        if (hiddenId) hiddenId.value = '';
+        if (dateInput) dateInput.value = TODAY_STR;
+        if (previewImg) {
+          previewImg.src = '';
+          previewImg.style.display = 'none';
+        }
+        if (previewPlaceholder) previewPlaceholder.style.display = 'block';
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    },
+
+    closePhotoModal() {
+      const modal = document.getElementById('photo-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openPhotoLightbox(photoId) {
+      const photo = store.photos.find(p => p.id === photoId);
+      if (!photo) return;
+      const modal = document.getElementById('photo-lightbox-modal');
+      const img = document.getElementById('lightbox-img');
+      const cap = document.getElementById('lightbox-caption');
+      if (!modal || !img) return;
+
+      img.src = photo.imageDataUrl;
+      if (cap) {
+        const dateStr = photo.date ? photo.date.replace(/-/g, '.') : '';
+        cap.textContent = `📅 ${dateStr}  |  ${photo.caption || ''}`;
+      }
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    },
+
+    closePhotoLightbox() {
+      const modal = document.getElementById('photo-lightbox-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openEditNoteModal(noteId) {
+      const note = store.notes.find(n => n.id === noteId);
+      if (!note) return;
+      const modal = document.getElementById('edit-note-modal');
+      const idInput = document.getElementById('edit-note-id');
+      const contentInput = document.getElementById('edit-note-content');
+      if (!modal || !contentInput) return;
+
+      if (idInput) idInput.value = note.id;
+      contentInput.value = note.content || '';
+
+      const colorRadio = document.querySelector(`input[name="edit-note-color"][value="${note.color || 'pink'}"]`);
+      if (colorRadio) colorRadio.checked = true;
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      setTimeout(() => contentInput.focus(), 60);
+    },
+
+    closeEditNoteModal() {
+      const modal = document.getElementById('edit-note-modal');
+      if (modal) {
+        modal.style.display = 'none';
         modal.classList.remove('active');
       }
     }
@@ -3231,7 +3456,7 @@
       // 4. Task Delete
       if (target.closest('[data-action="delete"]')) {
         const card = target.closest('.task-card');
-        if (card && confirm('정말 이 일정을 삭제할까요? 🗑️')) {
+        if (card && confirm('정말 삭제하시겠습니까?')) {
           store.deleteTask(card.dataset.id);
           sounds.playDelete();
           UI.showToast('일정이 삭제되었어요', 'danger');
@@ -3246,11 +3471,45 @@
         UI.openTaskModal(null, dateStr);
       }
 
-      // 6. Delete Note
+      // 6.0. Photos: Lightbox View
+      if (target.closest('[data-action="view-photo-lightbox"]')) {
+        const btn = target.closest('[data-action="view-photo-lightbox"]');
+        const photoId = btn.dataset.photoId;
+        UI.openPhotoLightbox(photoId);
+      }
+
+      // 6.1. Photos: Edit Photo
+      if (target.closest('[data-action="edit-photo"]')) {
+        const btn = target.closest('[data-action="edit-photo"]');
+        const photoId = btn.dataset.photoId;
+        UI.openPhotoModal(photoId);
+      }
+
+      // 6.2. Photos: Delete Photo
+      if (target.closest('[data-action="delete-photo"]')) {
+        const btn = target.closest('[data-action="delete-photo"]');
+        const photoId = btn.dataset.photoId;
+        if (confirm('정말 삭제하시겠습니까?')) {
+          store.deletePhoto(photoId);
+          sounds.playDelete();
+          UI.showToast('사진이 삭제되었어요', 'danger');
+          UI.renderPhotos();
+          UI.renderSidebar();
+        }
+      }
+
+      // 6.3. Edit Note Modal Open
+      if (target.closest('[data-action="edit-note"]')) {
+        const btn = target.closest('[data-action="edit-note"]');
+        const noteId = btn.dataset.noteId;
+        UI.openEditNoteModal(noteId);
+      }
+
+      // 6.4. Delete Note
       if (target.closest('[data-action="delete-note"]')) {
         const btn = target.closest('[data-action="delete-note"]');
         const noteId = btn.dataset.noteId;
-        if (confirm('이 끄적끄적 메모를 삭제할까요? 🗑️')) {
+        if (confirm('정말 삭제하시겠습니까?')) {
           store.deleteNote(noteId);
           sounds.playDelete();
           UI.showToast('메모가 삭제되었어요', 'danger');
@@ -3284,7 +3543,7 @@
       if (target.closest('[data-action="delete-ledger"]')) {
         const btn = target.closest('[data-action="delete-ledger"]');
         const ledgerId = btn.dataset.ledgerId;
-        if (confirm('이 가계부 파일을 삭제할까요? 🗑️')) {
+        if (confirm('정말 삭제하시겠습니까?')) {
           store.deleteLedgerFile(ledgerId);
           sounds.playDelete();
           UI.showToast('가계부 파일이 삭제되었어요', 'danger');
@@ -3312,7 +3571,7 @@
       if (target.closest('[data-action="delete-wish"]')) {
         const btn = target.closest('[data-action="delete-wish"]');
         const wishId = btn.dataset.wishId;
-        if (confirm('이 위시 항목을 삭제할까요? 🗑️')) {
+        if (confirm('정말 삭제하시겠습니까?')) {
           store.deleteWish(wishId);
           sounds.playDelete();
           UI.showToast('위시 항목이 삭제되었어요', 'danger');
@@ -3345,7 +3604,7 @@
       if (target.closest('[data-action="delete-file"]')) {
         const btn = target.closest('[data-action="delete-file"]');
         const fileId = btn.dataset.fileId;
-        if (confirm('보관된 파일을 삭제할까요? 🗑️')) {
+        if (confirm('정말 삭제하시겠습니까?')) {
           cloudSync.deleteVaultFile(fileId).then(() => {
             sounds.playDelete();
             UI.showToast('파일이 삭제되었어요', 'danger');
@@ -3354,7 +3613,139 @@
           });
         }
       }
+
+      // 13. Open Add Photo Modal Triggers
+      if (target.closest('#btn-open-add-photo-modal') || target.closest('#btn-photos-empty-add')) {
+        UI.openPhotoModal();
+      }
+
+      // 14. Close Photo Modal Triggers
+      if (target.closest('#btn-close-photo-modal') || target.closest('#btn-cancel-photo-modal')) {
+        UI.closePhotoModal();
+      }
+
+      // 15. Close Lightbox Trigger
+      if (target.closest('#btn-close-photo-lightbox') || target.id === 'photo-lightbox-modal') {
+        UI.closePhotoLightbox();
+      }
+
+      // 16. Close Edit Note Modal Triggers
+      if (target.closest('#btn-close-edit-note-modal') || target.closest('#btn-cancel-edit-note-modal')) {
+        UI.closeEditNoteModal();
+      }
     });
+
+    // Polaroid Photo Dropzone & File Input Handling
+    const photoDropzone = document.getElementById('photo-dropzone');
+    const photoFileInput = document.getElementById('photo-file-input');
+    const photoPreviewImg = document.getElementById('photo-preview-img');
+    const photoPreviewPlaceholder = document.getElementById('photo-preview-placeholder');
+
+    if (photoDropzone && photoFileInput) {
+      photoDropzone.addEventListener('click', () => photoFileInput.click());
+
+      const processPhotoFile = (file) => {
+        if (!file || !file.type.startsWith('image/')) {
+          UI.showToast('이미지 파일만 등록할 수 있어요 (JPG, PNG 등)', 'danger');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (photoPreviewImg) {
+            photoPreviewImg.src = e.target.result;
+            photoPreviewImg.style.display = 'block';
+          }
+          if (photoPreviewPlaceholder) {
+            photoPreviewPlaceholder.style.display = 'none';
+          }
+        };
+        reader.readAsDataURL(file);
+      };
+
+      photoFileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          processPhotoFile(e.target.files[0]);
+        }
+      });
+
+      photoDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        photoDropzone.style.borderColor = 'var(--primary)';
+        photoDropzone.style.background = 'rgba(255, 107, 139, 0.08)';
+      });
+
+      photoDropzone.addEventListener('dragleave', () => {
+        photoDropzone.style.borderColor = 'var(--border-color)';
+        photoDropzone.style.background = 'rgba(0,0,0,0.02)';
+      });
+
+      photoDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        photoDropzone.style.borderColor = 'var(--border-color)';
+        photoDropzone.style.background = 'rgba(0,0,0,0.02)';
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          processPhotoFile(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    // Polaroid Photo Form Submit
+    const photoForm = document.getElementById('photo-form');
+    if (photoForm) {
+      photoForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const editId = document.getElementById('photo-edit-id').value;
+        const dateVal = document.getElementById('photo-input-date').value || TODAY_STR;
+        const captionVal = document.getElementById('photo-input-caption').value.trim();
+        const imgSrc = photoPreviewImg ? photoPreviewImg.src : '';
+
+        if (!imgSrc) {
+          UI.showToast('폴라로이드에 담을 사진을 선택해 주세요 🖼️', 'danger');
+          return;
+        }
+
+        if (editId) {
+          store.updatePhoto(editId, {
+            date: dateVal,
+            caption: captionVal,
+            imageDataUrl: imgSrc
+          });
+          UI.showToast('폴라로이드 사진이 수정되었어요! ✨', 'info');
+        } else {
+          store.addPhoto({
+            date: dateVal,
+            caption: captionVal,
+            imageDataUrl: imgSrc
+          });
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+          UI.showToast('사진첩에 예쁘게 걸어두었어요! 📷💖', 'success');
+        }
+
+        UI.closePhotoModal();
+        UI.renderPhotos();
+        UI.renderSidebar();
+      });
+    }
+
+    // Edit Quick Note Form Submit
+    const editNoteForm = document.getElementById('edit-note-form');
+    if (editNoteForm) {
+      editNoteForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const noteId = document.getElementById('edit-note-id').value;
+        const content = document.getElementById('edit-note-content').value.trim();
+        const checkedColor = document.querySelector('input[name="edit-note-color"]:checked');
+        const color = checkedColor ? checkedColor.value : 'pink';
+
+        if (!content) return;
+
+        store.updateNote(noteId, { content, color });
+        UI.closeEditNoteModal();
+        UI.showToast('메모가 수정되었어요! 📝✨', 'info');
+        UI.renderNotes();
+      });
+    }
 
     // 2-Step Cloud Sync Form Submit (Cloud-wide Master Verification)
     const syncForm = document.getElementById('sync-2step-form');
@@ -3462,6 +3853,9 @@
         UI.renderTasks();
       } else if (e.key === 'Escape') {
         UI.closeTaskModal();
+        UI.closePhotoModal();
+        UI.closePhotoLightbox();
+        UI.closeEditNoteModal();
         UI.closeWishlistModal();
         UI.closeLedgerModal();
         UI.closeFileUploadModal();
@@ -3525,6 +3919,7 @@
           tasks: store.tasks,
           categories: store.categories,
           wishlist: store.wishlist,
+          photos: store.photos,
           notes: store.notes,
           honeymoonData: store.honeymoonData,
           ledgerFiles: store.ledgerFiles,
@@ -3555,6 +3950,7 @@
               store.tasks = data.tasks;
               if (Array.isArray(data.categories)) store.categories = data.categories;
               if (Array.isArray(data.wishlist)) store.wishlist = data.wishlist;
+              if (Array.isArray(data.photos)) store.photos = data.photos;
               if (Array.isArray(data.notes)) store.notes = data.notes;
               if (data.honeymoonData) store.honeymoonData = data.honeymoonData;
               if (Array.isArray(data.ledgerFiles)) store.ledgerFiles = data.ledgerFiles;
@@ -3575,10 +3971,11 @@
     const resetDemoBtn = document.getElementById('btn-reset-demo');
     if (resetDemoBtn) {
       resetDemoBtn.addEventListener('click', () => {
-        if (confirm('모든 예시 데이터를 비우고 깨끗한 상태로 초기화할까요?')) {
+        if (confirm('정말 삭제하시겠습니까?')) {
           store.tasks = [];
           store.categories = DEFAULT_CATEGORIES;
           store.wishlist = [];
+          store.photos = [];
           store.notes = [];
           store.ledgerFiles = [];
           store.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));

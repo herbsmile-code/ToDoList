@@ -160,8 +160,16 @@
             <!-- Dynamically populated categories -->
           </ul>
           
-          <!-- Extra Features: Notes, Ledger, Wishlist & File Vault -->
+          <!-- Extra Features: Photos, Notes, Ledger, Wishlist & File Vault -->
           <ul class="nav-list" style="margin-top: 0.65rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
+            <!-- Photos / Polaroid Gallery Menu Item (사진첩) -->
+            <li class="nav-item photos-nav-item" data-filter="photos" id="nav-filter-photos" title="폴라로이드 감성 사진 & 추억 보관함">
+              <div class="nav-item-left">
+                <span>📷</span>
+                <span>사진첩</span>
+              </div>
+              <span class="nav-count" id="nav-count-photos">0</span>
+            </li>
             <!-- Notes / Doodle Menu Item (끄적끄적) -->
             <li class="nav-item notes-nav-item" data-filter="notes" id="nav-filter-notes" title="자유롭게 생각을 적는 간단한 메모장">
               <div class="nav-item-left">
@@ -236,6 +244,7 @@
           <button type="button" class="mobile-cat-pill" data-filter="calendar-month">🗓️ 월별달력</button>
           <button type="button" class="mobile-cat-pill" data-filter="calendar-week">📅 주간달력</button>
           <button type="button" class="mobile-cat-pill active" data-filter="all">🌸 전체</button>
+          <button type="button" class="mobile-cat-pill" data-filter="photos">📷 사진첩</button>
           <button type="button" class="mobile-cat-pill" data-filter="notes">✏️ 끄적끄적</button>
           <button type="button" class="mobile-cat-pill" data-filter="ledger">💰 가계부</button>
           <button type="button" class="mobile-cat-pill" data-filter="wishlist">🎁 위시</button>
@@ -453,6 +462,35 @@
           <!-- Weekly Horizontal Rows Container -->
           <div class="weekly-horizontal-container" id="weekly-board-grid">
             <!-- Dynamically populated 7 horizontal day rows -->
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             SECTION 3.5: 사진첩 (Polaroid Photo Gallery) View
+             =================================================================== -->
+        <div id="photos-view-container" style="display: none; flex-direction: column; gap: 1.25rem;">
+          <div class="photos-header-row">
+            <div class="photos-title-group">
+              <h1 class="photos-main-title">📷 사진첩 (Photo Gallery)</h1>
+              <span class="photos-count-badge">총 <strong id="photos-count-total">0</strong>장</span>
+            </div>
+            <button type="button" id="btn-open-add-photo-modal" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
+              <span>+</span>
+              <span>새 사진 추가</span>
+            </button>
+          </div>
+
+          <!-- Polaroid Photos Grid -->
+          <div class="photos-grid" id="photos-grid-container">
+            <!-- Dynamically populated polaroid cards -->
+          </div>
+
+          <!-- Photos Empty State -->
+          <div id="photos-empty-state" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">📷</div>
+            <h3>아직 등록된 사진이 없어요</h3>
+            <p>소중한 순간, 일상의 사진과 감성 메모를 폴라로이드처럼 예쁘게 남겨보세요 💖</p>
+            <button type="button" class="btn btn-primary" id="btn-photos-empty-add">+ 첫 사진 등록하기</button>
           </div>
         </div>
 
@@ -984,6 +1022,96 @@
     </div>
   </div>
 
+  <!-- Modal: Add/Edit Photo in Polaroid Gallery -->
+  <div id="photo-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="photo-modal-title">📷 폴라로이드 사진 등록</h3>
+        <button class="modal-close-btn" id="btn-close-photo-modal" title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="photo-form">
+        <input type="hidden" id="photo-edit-id" value="">
+        
+        <!-- Image Preview & File Input -->
+        <div class="form-group">
+          <label class="form-label">사진 선택 *</label>
+          <div id="photo-dropzone" style="border: 2px dashed var(--border-color); border-radius: 8px; padding: 1.25rem; text-align: center; cursor: pointer; background: rgba(0,0,0,0.02); transition: all 0.2s ease;">
+            <div id="photo-preview-placeholder">
+              <div style="font-size: 2rem; margin-bottom: 0.35rem;">🖼️</div>
+              <div style="font-weight: 600; font-size: 0.88rem; color: var(--text-main);">클릭하여 사진 업로드</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">JPG, PNG, GIF, WebP (스마트폰 촬영 사진 환영 🌸)</div>
+            </div>
+            <img id="photo-preview-img" style="display: none; max-height: 220px; width: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" alt="미리보기">
+          </div>
+          <input type="file" id="photo-file-input" accept="image/*" style="display: none;">
+        </div>
+
+        <!-- Date Input (Default: Today) -->
+        <div class="form-group">
+          <label class="form-label" for="photo-input-date">기록 날짜 *</label>
+          <input type="date" id="photo-input-date" class="form-input" required>
+        </div>
+
+        <!-- Caption / Memo Input -->
+        <div class="form-group">
+          <label class="form-label" for="photo-input-caption">폴라로이드 메모 (간단 메모) *</label>
+          <textarea id="photo-input-caption" class="form-textarea" placeholder="사진 아래에 들어갈 감성 메모를 적어주세요... (예: 성수동 카페에서 맛있는 라떼 ☕)" rows="3" required></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" id="btn-cancel-photo-modal">취소</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-photo">사진첩에 걸어두기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Photo Lightbox (크게 보기) -->
+  <div id="photo-lightbox-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10005; background: rgba(0,0,0,0.88); align-items: center; justify-content: center;">
+    <div style="position: relative; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; align-items: center; gap: 0.75rem;">
+      <button class="modal-close-btn" id="btn-close-photo-lightbox" style="position: absolute; top: -40px; right: 0; color: #fff; font-size: 1.6rem; background: transparent; border: none; cursor: pointer;" title="닫기 (Esc)">✕</button>
+      <img id="lightbox-img" class="lightbox-img-full" src="" alt="확대 사진">
+      <div id="lightbox-caption" style="color: #fff; text-align: center; font-size: 0.95rem; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.8); max-width: 600px; padding: 0.4rem 1rem; background: rgba(0,0,0,0.5); border-radius: 20px;"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Quick Note (끄적끄적 메모 수정) -->
+  <div id="edit-note-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
+    <div class="modal-card" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="modal-title">✏️ 끄적끄적 메모 수정</h3>
+        <button class="modal-close-btn" id="btn-close-edit-note-modal" title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="edit-note-form">
+        <input type="hidden" id="edit-note-id" value="">
+        
+        <div class="form-group">
+          <label class="form-label" for="edit-note-content">메모 내용 *</label>
+          <textarea id="edit-note-content" class="form-textarea" placeholder="메모 내용을 수정하세요..." rows="4" required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">메모지 색상</label>
+          <div class="note-color-picker" id="edit-note-color-picker" title="메모지 색상 선택">
+            <label class="color-dot-label"><input type="radio" name="edit-note-color" value="pink"><span class="color-dot dot-pink" title="체리 핑크"></span></label>
+            <label class="color-dot-label"><input type="radio" name="edit-note-color" value="yellow"><span class="color-dot dot-yellow" title="레몬 옐로우"></span></label>
+            <label class="color-dot-label"><input type="radio" name="edit-note-color" value="mint"><span class="color-dot dot-mint" title="파스텔 민트"></span></label>
+            <label class="color-dot-label"><input type="radio" name="edit-note-color" value="lavender"><span class="color-dot dot-lavender" title="라벤더 퍼플"></span></label>
+            <label class="color-dot-label"><input type="radio" name="edit-note-color" value="sky"><span class="color-dot dot-sky" title="스카이 블루"></span></label>
+            <label class="color-dot-label"><input type="radio" name="edit-note-color" value="gray"><span class="color-dot dot-gray" title="모던 쿨 그레이"></span></label>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" id="btn-cancel-edit-note-modal">취소</button>
+          <button type="submit" class="btn btn-primary">수정 완료 ✨</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal: Upload File to Vault -->
   <div id="upload-file-modal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card" style="max-width: 480px;">
@@ -1258,7 +1386,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=6.1"></script>
-  <script src="js/treasure.js?v=5.3"></script>
+  <script src="js/app.js?v=6.2"></script>
+  <script src="js/treasure.js?v=6.2"></script>
 </body>
 </html>
