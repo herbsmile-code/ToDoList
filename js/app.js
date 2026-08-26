@@ -592,6 +592,10 @@
                 if (data.notes !== undefined) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
                 if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
                 if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
+                if (Array.isArray(data.vaultFiles)) {
+                  await this.saveVaultFiles(data.vaultFiles);
+                  try { UI.renderFilesVault(); } catch (e) {}
+                }
                 
                 store.saveLocalOnly();
                 this.renderAllViews();
@@ -604,7 +608,8 @@
             }
           } else if (!rawResponse) {
             // 클라우드가 비어있다면 현재 로컬 데이터를 즉시 클라우드로 암호화 업로드
-            if (store.tasks.length > 0 || store.notes.length > 0 || store.wishlist.length > 0) {
+            const vFiles = await this.getAllVaultFiles();
+            if (store.tasks.length > 0 || store.notes.length > 0 || store.wishlist.length > 0 || vFiles.length > 0) {
               await this.pushTasksToCloud();
             }
           }
@@ -617,11 +622,13 @@
     async pushTasksToCloud() {
       if (!this.spaceId || !this.pin) return;
       const key = this.getStorageKey();
+      const vaultFiles = await this.getAllVaultFiles();
       const rawPayload = {
         tasks: store.tasks,
         categories: store.categories,
         wishlist: store.wishlist,
         notes: store.notes,
+        vaultFiles: vaultFiles,
         honeymoonData: store.honeymoonData,
         ledgerFiles: store.ledgerFiles,
         updatedAt: Date.now()
@@ -680,6 +687,7 @@
             const files = await this.getAllVaultFiles();
             files.unshift(fileItem);
             await this.saveVaultFiles(files);
+            await this.pushTasksToCloud();
             resolve(fileItem);
           } catch (err) {
             reject(err);
@@ -709,6 +717,7 @@
       const files = await this.getAllVaultFiles();
       const filtered = files.filter(f => f.id !== fileId);
       await this.saveVaultFiles(filtered);
+      await this.pushTasksToCloud();
     }
   }
 
