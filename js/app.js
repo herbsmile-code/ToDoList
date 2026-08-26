@@ -460,18 +460,18 @@
             const remoteUpdated = data.updatedAt || 0;
             if (force || remoteUpdated > this.lastSyncedUpdatedAt) {
               this.lastSyncedUpdatedAt = remoteUpdated;
-              if (Array.isArray(data.tasks)) store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
-              if (Array.isArray(data.categories) && data.categories.length) store.categories = normalizeArray(data.categories);
-              if (Array.isArray(data.wishlist)) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
-              if (Array.isArray(data.notes)) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
-              if (data.honeymoonData) store.honeymoonData = data.honeymoonData;
-              if (Array.isArray(data.ledgerFiles)) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
+              if (data.tasks !== undefined) store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
+              if (data.categories !== undefined && normalizeArray(data.categories).length) store.categories = normalizeArray(data.categories);
+              if (data.wishlist !== undefined) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
+              if (data.notes !== undefined) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
+              if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
+              if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
               
               store.saveLocalOnly();
               this.renderAllViews();
             }
-          } else {
-            // 클라우드가 비어있고 로컬에 메모/데이터가 있다면 클라우드로 즉시 업로드!
+          } else if (!data) {
+            // 클라우드가 비어있다면 현재 로컬 데이터를 즉시 클라우드로 업로드
             if (store.tasks.length > 0 || store.notes.length > 0 || store.wishlist.length > 0) {
               await this.pushTasksToCloud();
             }
