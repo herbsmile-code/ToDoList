@@ -761,7 +761,7 @@
   const DEFAULT_CATEGORIES = [
     { id: 'work', name: '업무 💼', color: '#ff6b8b' },
     { id: 'personal', name: '개인 🌸', color: '#b197fc' },
-    { id: 'schedule', name: '일정♥ 📅', color: '#f06595' }
+    { id: 'schedule', name: '일정', color: '#f06595' }
   ];
 
   const INITIAL_DEMO_TASKS = [];
@@ -957,6 +957,10 @@
       let finalCategories = Array.isArray(userCategories) ? userCategories : DEFAULT_CATEGORIES;
       const bannedIds = new Set(['study', 'routine', 'cafe']);
       finalCategories = finalCategories.filter(c => c && c.id && !bannedIds.has(c.id));
+      finalCategories.forEach(c => {
+        if (c.id === 'schedule') c.name = '일정';
+        else if (c.name) c.name = c.name.replace('♥', '').trim();
+      });
       DEFAULT_CATEGORIES.forEach(defCat => {
         if (!finalCategories.some(c => c.id === defCat.id)) {
           finalCategories.push(defCat);
@@ -2326,10 +2330,7 @@
                 </button>
               </div>
 
-              <div class="wish-title-row">
-                <h4 class="wish-title">${escapeHTML(wish.title)}</h4>
-                ${formattedCost ? `<span class="wish-cost-badge">${escapeHTML(formattedCost)}</span>` : ''}
-              </div>
+              <h4 class="wish-title">${escapeHTML(wish.title)}</h4>
 
               ${wish.memo ? `<p class="wish-memo">💬 ${escapeHTML(wish.memo)}</p>` : ''}
 
@@ -2343,11 +2344,7 @@
                 <button type="button" class="btn-wish-toggle" data-action="toggle-wish" data-wish-id="${wish.id}">
                   <span>${wish.completed ? '💮 달성 완료!' : '🤍 소원 달성 체크'}</span>
                 </button>
-              </div>
-
-              <div class="wish-dates-row">
-                <span class="wish-date-item">등록: ${createdDateStr || '최근'}</span>
-                ${completedDateStr ? `<span class="wish-date-item wish-completed-date">달성: ${completedDateStr} 💮</span>` : ''}
+                ${formattedCost ? `<span class="wish-cost-badge">🏷️ ${escapeHTML(formattedCost)}</span>` : ''}
               </div>
             </div>
           `;
@@ -2592,50 +2589,51 @@
       window._photoEditor = {
         rawImg: null,
         rawSrc: '',
-        fitMode: 'cover',
-        rotation: 0
+        scale: 1.0,
+        panX: 0,
+        panY: 0,
+        rotation: 0,
+        isDragging: false,
+        startX: 0,
+        startY: 0
       };
 
-      const btnCover = document.getElementById('btn-photo-fit-cover');
-      const btnContain = document.getElementById('btn-photo-fit-contain');
-      if (btnCover) {
-        btnCover.style.background = 'var(--primary)';
-        btnCover.style.color = '#fff';
-      }
-      if (btnContain) {
-        btnContain.style.background = 'rgba(0,0,0,0.06)';
-        btnContain.style.color = 'var(--text-main)';
-      }
+      const zoomSlider = document.getElementById('photo-zoom-slider');
+      const zoomVal = document.getElementById('photo-zoom-val');
+      if (zoomSlider) zoomSlider.value = 1.0;
+      if (zoomVal) zoomVal.textContent = '100%';
 
       if (photoId) {
         const photo = store.photos.find(p => p.id === photoId);
         if (!photo) return;
-        if (titleEl) titleEl.textContent = '🖼️ 사진첩 사진/메모 수정';
+        if (titleEl) titleEl.textContent = '📸 사진첩 사진/메모 수정';
         if (hiddenId) hiddenId.value = photo.id;
         if (dateInput) dateInput.value = photo.date || TODAY_STR;
         if (captionInput) captionInput.value = photo.caption || '';
         
         window._photoEditor.rawSrc = photo.imageDataUrl;
         const img = new Image();
-        img.onload = () => { window._photoEditor.rawImg = img; };
+        img.onload = () => {
+          window._photoEditor.rawImg = img;
+          if (window._updatePhotoPreviewUI) window._updatePhotoPreviewUI();
+        };
         img.src = photo.imageDataUrl;
 
         if (previewImg) {
           previewImg.src = photo.imageDataUrl;
-          previewImg.style.objectFit = 'cover';
-          previewImg.style.transform = 'none';
+          previewImg.style.transform = 'translate(-50%, -50%)';
         }
         if (fixedFrameBox) fixedFrameBox.style.display = 'block';
         if (adjustToolbar) adjustToolbar.style.display = 'flex';
         if (fitHint) fitHint.style.display = 'inline';
         if (previewPlaceholder) previewPlaceholder.style.display = 'none';
       } else {
-        if (titleEl) titleEl.textContent = '🖼️ 새로운 사진 걸어두기';
+        if (titleEl) titleEl.textContent = '📸 새로운 사진 걸어두기';
         if (hiddenId) hiddenId.value = '';
         if (dateInput) dateInput.value = TODAY_STR;
         if (previewImg) {
           previewImg.src = '';
-          previewImg.style.transform = 'none';
+          previewImg.style.transform = 'translate(-50%, -50%)';
         }
         if (fixedFrameBox) fixedFrameBox.style.display = 'none';
         if (adjustToolbar) adjustToolbar.style.display = 'none';
@@ -3716,7 +3714,15 @@
           UI.showToast('소원 달성 축하해요! 💮 꿈이 이루어졌어요 ✨', 'success');
         }
         UI.renderWishlist();
+        if (wish && wish.completed) {
+          const card = document.querySelector(`.wish-card[data-wish-id="${wishId}"]`);
+          if (card) {
+            const stamp = card.querySelector('.wish-stamp-achieved');
+            if (stamp) stamp.classList.add('just-stamped');
+          }
+        }
         UI.renderSidebar();
+        return;
       }
 
       // 10. Wishlist Delete
@@ -3787,7 +3793,7 @@
       }
     });
 
-    // Polaroid Photo Dropzone & 1:1 Frame Editor Handling
+    // Polaroid Photo Dropzone & Interactive 1:1 Frame Editor Handling
     const photoDropzone = document.getElementById('photo-dropzone');
     const photoFileInput = document.getElementById('photo-file-input');
     const photoPreviewImg = document.getElementById('photo-preview-img');
@@ -3795,55 +3801,94 @@
     const photoFixedFrameBox = document.getElementById('photo-fixed-frame-box');
     const photoAdjustToolbar = document.getElementById('photo-adjust-toolbar');
     const photoFitHint = document.getElementById('photo-fit-hint');
+    const photoZoomSlider = document.getElementById('photo-zoom-slider');
+    const photoZoomVal = document.getElementById('photo-zoom-val');
+    const btnPhotoRotate = document.getElementById('btn-photo-rotate');
+    const btnPhotoResetPos = document.getElementById('btn-photo-reset-pos');
 
     const updatePhotoPreviewUI = () => {
       if (!window._photoEditor || !photoPreviewImg) return;
-      const { fitMode, rotation } = window._photoEditor;
-      photoPreviewImg.style.objectFit = (fitMode === 'contain') ? 'contain' : 'cover';
-      photoPreviewImg.style.transform = `rotate(${rotation}deg)`;
+      const { scale, panX, panY, rotation, rawImg } = window._photoEditor;
+      if (!rawImg) return;
 
-      const btnCover = document.getElementById('btn-photo-fit-cover');
-      const btnContain = document.getElementById('btn-photo-fit-contain');
-      if (btnCover && btnContain) {
-        if (fitMode === 'cover') {
-          btnCover.style.background = 'var(--primary)';
-          btnCover.style.color = '#fff';
-          btnContain.style.background = 'rgba(0,0,0,0.06)';
-          btnContain.style.color = 'var(--text-main)';
-        } else {
-          btnContain.style.background = 'var(--primary)';
-          btnContain.style.color = '#fff';
-          btnCover.style.background = 'rgba(0,0,0,0.06)';
-          btnCover.style.color = 'var(--text-main)';
-        }
-      }
+      const frameBox = document.getElementById('photo-fixed-frame-box');
+      const frameW = (frameBox && frameBox.clientWidth) ? frameBox.clientWidth : 270;
+
+      const srcW = rawImg.naturalWidth || rawImg.width;
+      const srcH = rawImg.naturalHeight || rawImg.height;
+      const baseScale = Math.max(frameW / srcW, frameW / srcH);
+      const displayW = srcW * baseScale;
+      const displayH = srcH * baseScale;
+
+      photoPreviewImg.style.width = displayW + 'px';
+      photoPreviewImg.style.height = displayH + 'px';
+      photoPreviewImg.style.maxWidth = 'none';
+      photoPreviewImg.style.maxHeight = 'none';
+      photoPreviewImg.style.transform = `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) rotate(${rotation}deg) scale(${scale})`;
     };
+    window._updatePhotoPreviewUI = updatePhotoPreviewUI;
 
-    // Fit Mode & Rotation Buttons
-    const btnFitCover = document.getElementById('btn-photo-fit-cover');
-    const btnFitContain = document.getElementById('btn-photo-fit-contain');
-    const btnRotate = document.getElementById('btn-photo-rotate');
+    // Interactive Drag to Pan (Mouse & Touch)
+    if (photoFixedFrameBox) {
+      const onDragStart = (clientX, clientY) => {
+        if (!window._photoEditor || !window._photoEditor.rawImg) return;
+        window._photoEditor.isDragging = true;
+        window._photoEditor.startX = clientX - window._photoEditor.panX;
+        window._photoEditor.startY = clientY - window._photoEditor.panY;
+        photoFixedFrameBox.style.cursor = 'grabbing';
+      };
 
-    if (btnFitCover) {
-      btnFitCover.addEventListener('click', (e) => {
-        e.stopPropagation();
+      const onDragMove = (clientX, clientY) => {
+        if (!window._photoEditor || !window._photoEditor.isDragging) return;
+        window._photoEditor.panX = clientX - window._photoEditor.startX;
+        window._photoEditor.panY = clientY - window._photoEditor.startY;
+        updatePhotoPreviewUI();
+      };
+
+      const onDragEnd = () => {
         if (!window._photoEditor) return;
-        window._photoEditor.fitMode = 'cover';
+        window._photoEditor.isDragging = false;
+        if (photoFixedFrameBox) photoFixedFrameBox.style.cursor = 'grab';
+      };
+
+      photoFixedFrameBox.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        onDragStart(e.clientX, e.clientY);
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (window._photoEditor && window._photoEditor.isDragging) {
+          onDragMove(e.clientX, e.clientY);
+        }
+      });
+      window.addEventListener('mouseup', onDragEnd);
+
+      photoFixedFrameBox.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches[0]) {
+          onDragStart(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: false });
+      photoFixedFrameBox.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches[0] && window._photoEditor && window._photoEditor.isDragging) {
+          e.preventDefault();
+          onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: false });
+      photoFixedFrameBox.addEventListener('touchend', onDragEnd);
+    }
+
+    // Zoom Slider Handling
+    if (photoZoomSlider) {
+      photoZoomSlider.addEventListener('input', (e) => {
+        if (!window._photoEditor) return;
+        window._photoEditor.scale = parseFloat(e.target.value);
+        if (photoZoomVal) photoZoomVal.textContent = Math.round(window._photoEditor.scale * 100) + '%';
         updatePhotoPreviewUI();
       });
     }
 
-    if (btnFitContain) {
-      btnFitContain.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!window._photoEditor) return;
-        window._photoEditor.fitMode = 'contain';
-        updatePhotoPreviewUI();
-      });
-    }
-
-    if (btnRotate) {
-      btnRotate.addEventListener('click', (e) => {
+    // 90° Rotation Handling
+    if (btnPhotoRotate) {
+      btnPhotoRotate.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!window._photoEditor) return;
         window._photoEditor.rotation = (window._photoEditor.rotation + 90) % 360;
@@ -3851,8 +3896,26 @@
       });
     }
 
+    // Reset Position & Zoom Handling
+    if (btnPhotoResetPos) {
+      btnPhotoResetPos.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!window._photoEditor) return;
+        window._photoEditor.scale = 1.0;
+        window._photoEditor.panX = 0;
+        window._photoEditor.panY = 0;
+        window._photoEditor.rotation = 0;
+        if (photoZoomSlider) photoZoomSlider.value = 1.0;
+        if (photoZoomVal) photoZoomVal.textContent = '100%';
+        updatePhotoPreviewUI();
+      });
+    }
+
     if (photoDropzone && photoFileInput) {
-      photoDropzone.addEventListener('click', () => photoFileInput.click());
+      photoDropzone.addEventListener('click', (e) => {
+        if (e.target.closest('#photo-fixed-frame-box') || e.target.closest('#photo-adjust-toolbar')) return;
+        photoFileInput.click();
+      });
 
       const processPhotoFile = (file) => {
         if (!file || !file.type.startsWith('image/')) {
@@ -3864,12 +3927,20 @@
         reader.onload = (e) => {
           const img = new Image();
           img.onload = () => {
-            if (!window._photoEditor) {
-              window._photoEditor = { rawImg: img, rawSrc: e.target.result, fitMode: 'cover', rotation: 0 };
-            } else {
-              window._photoEditor.rawImg = img;
-              window._photoEditor.rawSrc = e.target.result;
-            }
+            window._photoEditor = {
+              rawImg: img,
+              rawSrc: e.target.result,
+              scale: 1.0,
+              panX: 0,
+              panY: 0,
+              rotation: 0,
+              isDragging: false,
+              startX: 0,
+              startY: 0
+            };
+
+            if (photoZoomSlider) photoZoomSlider.value = 1.0;
+            if (photoZoomVal) photoZoomVal.textContent = '100%';
 
             if (photoPreviewImg) {
               photoPreviewImg.src = e.target.result;
@@ -3917,38 +3988,34 @@
     }
 
     // Export 1:1 Fixed Square Cropped / Framed Image via Canvas
-    const generateFixedSquarePhotoDataUrl = (imgObj, fitMode, rotation) => {
+    const generateFixedSquarePhotoDataUrl = (editorState) => {
+      const { rawImg, scale, panX, panY, rotation } = editorState;
       const size = 1080;
       const canvas = document.createElement('canvas');
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext('2d');
 
-      ctx.fillStyle = (fitMode === 'contain') ? '#12151e' : '#ffffff';
+      ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, size, size);
 
+      const frameBox = document.getElementById('photo-fixed-frame-box');
+      const frameW = (frameBox && frameBox.clientWidth) ? frameBox.clientWidth : 270;
+      const factor = size / frameW;
+
+      const srcW = rawImg.naturalWidth || rawImg.width;
+      const srcH = rawImg.naturalHeight || rawImg.height;
+      const baseScale = Math.max(frameW / srcW, frameW / srcH);
+      const drawW = srcW * baseScale * factor * scale;
+      const drawH = srcH * baseScale * factor * scale;
+
       ctx.save();
-      ctx.translate(size / 2, size / 2);
+      ctx.translate(size / 2 + panX * factor, size / 2 + panY * factor);
       ctx.rotate((rotation * Math.PI) / 180);
-
-      const srcW = imgObj.naturalWidth || imgObj.width;
-      const srcH = imgObj.naturalHeight || imgObj.height;
-
-      let drawW, drawH;
-      if (fitMode === 'contain') {
-        const scale = Math.min(size / srcW, size / srcH);
-        drawW = srcW * scale;
-        drawH = srcH * scale;
-      } else {
-        const scale = Math.max(size / srcW, size / srcH);
-        drawW = srcW * scale;
-        drawH = srcH * scale;
-      }
-
-      ctx.drawImage(imgObj, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.drawImage(rawImg, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.restore();
 
-      return canvas.toDataURL('image/jpeg', 0.85);
+      return canvas.toDataURL('image/jpeg', 0.88);
     };
 
     // Polaroid Photo Form Submit
@@ -3961,23 +4028,19 @@
         const captionVal = document.getElementById('photo-input-caption').value.trim();
 
         if (!window._photoEditor || (!window._photoEditor.rawImg && !window._photoEditor.rawSrc)) {
-          UI.showToast('사진을 선택해 주세요 🖼️', 'danger');
+          UI.showToast('사진을 선택해 주세요 📸', 'danger');
           return;
         }
 
         let finalImageDataUrl = '';
         if (window._photoEditor.rawImg) {
-          finalImageDataUrl = generateFixedSquarePhotoDataUrl(
-            window._photoEditor.rawImg,
-            window._photoEditor.fitMode || 'cover',
-            window._photoEditor.rotation || 0
-          );
+          finalImageDataUrl = generateFixedSquarePhotoDataUrl(window._photoEditor);
         } else if (photoPreviewImg && photoPreviewImg.src) {
           finalImageDataUrl = photoPreviewImg.src;
         }
 
         if (!finalImageDataUrl) {
-          UI.showToast('사진을 다시 선택해 주세요 🖼️', 'danger');
+          UI.showToast('사진을 다시 선택해 주세요 📸', 'danger');
           return;
         }
 
@@ -3996,7 +4059,7 @@
           });
           sounds.playAdd();
           confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 18);
-          UI.showToast('사진첩에 예쁘게 걸어두었어요! 🖼️💖', 'success');
+          UI.showToast('사진첩에 예쁘게 걸어두었어요! 📸💖', 'success');
         }
 
         UI.closePhotoModal();

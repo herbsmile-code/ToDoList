@@ -3434,7 +3434,10 @@ body::after {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 4px 12px rgba(255, 107, 139, 0.25);
   pointer-events: none;
-  animation: stampPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.wish-stamp-achieved.just-stamped {
+  animation: stampPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 @keyframes stampPop {
@@ -3464,22 +3467,13 @@ body::after {
 .wish-cat-tag.food { background: #ffe3e3; color: #e03131; }
 .wish-cat-tag.bucket { background: #eebefa; color: #9c36b5; }
 
-.wish-title-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.6rem;
-  margin: 0.15rem 0 0.35rem 0;
-}
-
 .wish-title {
-  font-size: 0.94rem;
+  font-size: 0.96rem;
   font-weight: 700;
   color: var(--text-main);
-  margin: 0;
+  margin: 0.15rem 0 0.35rem 0;
   line-height: 1.35;
   word-break: break-word;
-  flex: 1;
 }
 
 .wish-card.completed .wish-title {
@@ -3914,7 +3908,7 @@ body::after {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* --- Photo Lightbox Frame Card (적정 크기 감성 뷰어 - 안티 플리커 적용) --- */
+/* --- Photo Lightbox Frame Card (1:1 고정 액자 규격 뷰어 - 안티 플리커 적용) --- */
 #photo-lightbox-modal {
   background: rgba(0, 0, 0, 0.88) !important;
   backdrop-filter: none !important;
@@ -3934,8 +3928,8 @@ body::after {
   display: flex;
   flex-direction: column;
   align-items: center;
-  max-width: min(90vw, 640px);
-  max-height: 86vh;
+  width: min(88vw, 440px);
+  max-width: 440px;
   margin: auto;
   border: 1px solid rgba(0, 0, 0, 0.08);
   transform: translateZ(0) !important;
@@ -3951,7 +3945,7 @@ body::after {
 
 .lightbox-image-box {
   width: 100%;
-  max-height: 60vh;
+  aspect-ratio: 1 / 1; /* 완벽한 1:1 고정 액자 틀 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3963,11 +3957,9 @@ body::after {
 }
 
 .lightbox-img-full {
-  max-width: 100%;
-  max-height: 60vh;
-  width: auto;
-  height: auto;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* 고정 틀에 꽉 찬 완벽한 폴라로이드 사진 */
   display: block;
   image-rendering: -webkit-optimize-contrast;
 }
