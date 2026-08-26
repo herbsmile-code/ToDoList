@@ -391,6 +391,9 @@
       localStorage.setItem('todolist_jy_pin', cleanPin);
 
       this.updateUIStatus();
+      // 1. 현재 로컬에 작성된 메모/할 일이 있다면 클라우드로 즉시 자동 업로드
+      await this.pushTasksToCloud();
+      // 2. 클라우드 최신 데이터와 동기화 및 전 화면 리렌더링
       await this.fetchLatestFromCloud(true);
       this.startRealtimePolling();
       return { success: true, message: '🎉 로그인 및 실시간 동기화 연결 완료!' };
@@ -434,6 +437,16 @@
       }
     }
 
+    renderAllViews() {
+      try { UI.renderTasks(); } catch (e) {}
+      try { UI.renderNotes(); } catch (e) {}
+      try { UI.renderWishlist(); } catch (e) {}
+      try { UI.renderLedger(); } catch (e) {}
+      try { UI.renderCalendarMonth(); } catch (e) {}
+      try { UI.renderCalendarWeek(); } catch (e) {}
+      try { UI.renderSidebar(); } catch (e) {}
+    }
+
     async fetchLatestFromCloud(force = false) {
       if (!this.spaceId || !this.pin) return;
       const key = this.getStorageKey();
@@ -443,18 +456,24 @@
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
-          if (data && data.tasks) {
+          if (data && typeof data === 'object') {
             const remoteUpdated = data.updatedAt || 0;
             if (force || remoteUpdated > this.lastSyncedUpdatedAt) {
               this.lastSyncedUpdatedAt = remoteUpdated;
-              store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
-              if (data.categories) store.categories = normalizeArray(data.categories);
-              if (data.wishlist) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
-              if (data.notes) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
+              if (Array.isArray(data.tasks)) store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
+              if (Array.isArray(data.categories) && data.categories.length) store.categories = normalizeArray(data.categories);
+              if (Array.isArray(data.wishlist)) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
+              if (Array.isArray(data.notes)) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
               if (data.honeymoonData) store.honeymoonData = data.honeymoonData;
-              if (data.ledgerFiles) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
+              if (Array.isArray(data.ledgerFiles)) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
+              
               store.saveLocalOnly();
-              UI.renderTasks();
+              this.renderAllViews();
+            }
+          } else {
+            // 클라우드가 비어있고 로컬에 메모/데이터가 있다면 클라우드로 즉시 업로드!
+            if (store.tasks.length > 0 || store.notes.length > 0 || store.wishlist.length > 0) {
+              await this.pushTasksToCloud();
             }
           }
         }
@@ -493,7 +512,19 @@
       if (this.syncTimer) clearInterval(this.syncTimer);
       this.syncTimer = setInterval(() => {
         this.fetchLatestFromCloud(false);
-      }, 5000);
+      }, 4000);
+
+      // 모바일 앱/화면 복귀 시 즉시 동기화
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && this.spaceId && this.pin) {
+          this.fetchLatestFromCloud(true);
+        }
+      });
+      window.addEventListener('focus', () => {
+        if (this.spaceId && this.pin) {
+          this.fetchLatestFromCloud(true);
+        }
+      });
     }
 
     async saveFileToVault(fileObj, note = '') {
