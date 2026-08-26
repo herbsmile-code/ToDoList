@@ -107,3 +107,13 @@
 .task-card:nth-child(6) { animation-delay: 0.18s; }
 .task-card:nth-child(7) { animation-delay: 0.21s; }
 .task-card:nth-child(8) { animation-delay: 0.24s; }
+
+/* Disable entry animations on mobile to prevent flickering on view switch */
+@media (max-width: 768px) {
+  .animate-fade-in,
+  .task-card {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

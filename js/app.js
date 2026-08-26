@@ -1413,12 +1413,35 @@
         }).join('');
       }
 
-      // Highlight active nav item
+      this.updateNavHighlight();
+    },
+
+    updateNavHighlight() {
+      // 1. Sidebar Nav
       document.querySelectorAll('.nav-item').forEach(item => {
         if (item.dataset.filter === store.activeFilter) {
           item.classList.add('active');
         } else {
           item.classList.remove('active');
+        }
+      });
+
+      // 2. Mobile Bottom Nav (위시, 가계부, 메모, 사진첩)
+      document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+        const action = btn.dataset.mobileNav;
+        if (store.activeFilter === action) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      // 3. Mobile Category Pills
+      document.querySelectorAll('.mobile-cat-pill').forEach(pill => {
+        if (pill.dataset.filter === store.activeFilter) {
+          pill.classList.add('active');
+        } else {
+          pill.classList.remove('active');
         }
       });
     },
@@ -1509,86 +1532,81 @@
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
       if (!isLogged) {
-        if (lockedScreen) lockedScreen.style.display = 'flex';
+        if (lockedScreen && lockedScreen.style.display !== 'flex') lockedScreen.style.display = 'flex';
         [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView].forEach(v => {
-          if (v) v.style.display = 'none';
+          if (v && v.style.display !== 'none') v.style.display = 'none';
         });
-        if (mobileBar) mobileBar.style.display = 'none';
-        this.renderSidebar();
+        if (mobileBar && mobileBar.style.display !== 'none') mobileBar.style.display = 'none';
+        this.updateNavHighlight();
         return;
       }
 
-      if (lockedScreen) lockedScreen.style.display = 'none';
-      if (mobileBar) mobileBar.style.display = 'flex';
+      if (lockedScreen && lockedScreen.style.display !== 'none') lockedScreen.style.display = 'none';
+      if (mobileBar && mobileBar.style.display !== 'flex') mobileBar.style.display = 'flex';
 
-      // Hide all views initially
+      // Atomic Target View Switching (Zero-flicker layout persistence)
+      const filter = store.activeFilter;
+      let targetView = tasksView;
+      if (filter === 'calendar-month') targetView = calMView;
+      else if (filter === 'calendar-week') targetView = calWView;
+      else if (filter === 'photos') targetView = photosView;
+      else if (filter === 'notes') targetView = notesView;
+      else if (filter === 'ledger') targetView = ledgerView;
+      else if (filter === 'wishlist') targetView = wishView;
+      else if (filter === 'vault') targetView = filesView;
+      else targetView = tasksView;
+
       [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView].forEach(v => {
-        if (v) v.style.display = 'none';
-      });
-
-      // Update Mobile Nav
-      document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
-        const action = btn.dataset.mobileNav;
-        if (store.activeFilter === action) {
-          btn.classList.add('active');
-        } else {
-          btn.classList.remove('active');
+        if (v) {
+          if (v === targetView) {
+            if (v.style.display !== 'flex') v.style.display = 'flex';
+          } else {
+            if (v.style.display !== 'none') v.style.display = 'none';
+          }
         }
       });
 
+      this.updateNavHighlight();
+
       // 1. Calendar Monthly View
-      if (store.activeFilter === 'calendar-month') {
-        if (calMView) calMView.style.display = 'flex';
+      if (filter === 'calendar-month') {
         this.renderCalendarMonth();
-        this.renderSidebar();
         return;
       }
 
       // 2. Calendar Weekly View (Horizontal)
-      if (store.activeFilter === 'calendar-week') {
-        if (calWView) calWView.style.display = 'flex';
+      if (filter === 'calendar-week') {
         this.renderCalendarWeek();
-        this.renderSidebar();
         return;
       }
 
       // 3.0. 📷 폴라로이드 사진첩 (Photos) View
-      if (store.activeFilter === 'photos') {
-        if (photosView) photosView.style.display = 'flex';
+      if (filter === 'photos') {
         this.renderPhotos();
-        this.renderSidebar();
         return;
       }
 
       // 3. 끄적끄적 (Notes) View
-      if (store.activeFilter === 'notes') {
-        if (notesView) notesView.style.display = 'flex';
+      if (filter === 'notes') {
         this.renderNotes();
-        this.renderSidebar();
         return;
       }
 
       // 4. 💍 2026년 신혼 가계부 View
-      if (store.activeFilter === 'ledger') {
-        if (ledgerView) ledgerView.style.display = 'flex';
+      if (filter === 'ledger') {
         this.renderLedger();
-        this.renderSidebar();
         return;
       }
 
       // 5. Wishlist View
-      if (store.activeFilter === 'wishlist') {
-        if (wishView) wishView.style.display = 'flex';
+      if (filter === 'wishlist') {
         this.renderWishlist();
-        this.renderSidebar();
         return;
       }
 
       // 6. File Vault View
-      if (store.activeFilter === 'vault') {
-        if (filesView) filesView.style.display = 'flex';
+      if (filter === 'vault') {
         this.renderFilesVault();
-        this.renderSidebar();
         return;
       }
 
@@ -3036,8 +3054,13 @@
           UI.openCloudModal();
           return;
         }
-        store.activeFilter = navItem.dataset.filter;
-        UI.renderTasks();
+        const newFilter = navItem.dataset.filter;
+        if (store.activeFilter !== newFilter) {
+          store.activeFilter = newFilter;
+          window.scrollTo({ top: 0, behavior: 'instant' });
+          UI.renderTasks();
+        }
+        return;
       }
 
       const mobileNavBtn = e.target.closest('.mobile-nav-btn');
@@ -3047,8 +3070,13 @@
           UI.openCloudModal();
           return;
         }
-        store.activeFilter = mobileNavBtn.dataset.mobileNav;
-        UI.renderTasks();
+        const newFilter = mobileNavBtn.dataset.mobileNav;
+        if (store.activeFilter !== newFilter) {
+          store.activeFilter = newFilter;
+          window.scrollTo({ top: 0, behavior: 'instant' });
+          UI.renderTasks();
+        }
+        return;
       }
 
       const mobilePill = e.target.closest('.mobile-cat-pill');
@@ -3058,8 +3086,13 @@
           UI.openCloudModal();
           return;
         }
-        store.activeFilter = mobilePill.dataset.filter;
-        UI.renderTasks();
+        const newFilter = mobilePill.dataset.filter;
+        if (store.activeFilter !== newFilter) {
+          store.activeFilter = newFilter;
+          window.scrollTo({ top: 0, behavior: 'instant' });
+          UI.renderTasks();
+        }
+        return;
       }
 
       // Ledger Month Tab Click
