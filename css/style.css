@@ -1756,6 +1756,11 @@ body::after {
   .modal-overlay {
     align-items: flex-end;
     padding: 0;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(0, 0, 0, 0.65) !important;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
   }
 
   .modal-card {
@@ -3889,20 +3894,34 @@ body::after {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* --- Photo Lightbox Frame Card (적정 크기 감성 뷰어) --- */
+/* --- Photo Lightbox Frame Card (적정 크기 감성 뷰어 - 안티 플리커 적용) --- */
+#photo-lightbox-modal {
+  background: rgba(0, 0, 0, 0.88) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1rem !important;
+  z-index: 10005 !important;
+}
+
 .lightbox-frame-card {
   position: relative;
   background: #ffffff;
-  padding: 16px 16px 20px 16px;
+  padding: 14px 14px 18px 14px;
   border-radius: 12px;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
   align-items: center;
-  max-width: min(88vw, 680px);
-  max-height: 88vh;
-  animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  max-width: min(90vw, 640px);
+  max-height: 86vh;
+  margin: auto;
   border: 1px solid rgba(0, 0, 0, 0.08);
+  transform: translateZ(0) !important;
+  -webkit-transform: translateZ(0) !important;
+  backface-visibility: hidden !important;
+  -webkit-backface-visibility: hidden !important;
 }
 
 [data-theme="dark"] .lightbox-frame-card {
@@ -3912,33 +3931,36 @@ body::after {
 
 .lightbox-image-box {
   width: 100%;
-  max-height: 65vh;
+  max-height: 60vh;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   border-radius: 6px;
   background: #0f1117;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .lightbox-img-full {
   max-width: 100%;
-  max-height: 65vh;
+  max-height: 60vh;
   width: auto;
   height: auto;
   object-fit: contain;
   display: block;
+  image-rendering: -webkit-optimize-contrast;
 }
 
 .lightbox-caption-text {
-  margin-top: 12px;
+  margin-top: 10px;
   color: var(--text-main);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 600;
   text-align: center;
   max-width: 100%;
   word-break: break-word;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 /* --- Wishlist Dates Row --- */

@@ -1426,10 +1426,17 @@
         }
       });
 
-      // 2. Mobile Bottom Nav (위시, 가계부, 메모, 사진첩)
+      // 2. Mobile Bottom Nav (모든할일, 위시, 메모, 사진첩)
+      const isCustomView = ['wishlist', 'photos', 'notes', 'ledger', 'vault', 'calendar-month', 'calendar-week'].includes(store.activeFilter);
       document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
         const action = btn.dataset.mobileNav;
-        if (store.activeFilter === action) {
+        if (action === 'all') {
+          if (!isCustomView) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        } else if (store.activeFilter === action) {
           btn.classList.add('active');
         } else {
           btn.classList.remove('active');
@@ -2597,6 +2604,7 @@
       const cap = document.getElementById('lightbox-caption');
       if (!modal || !img) return;
 
+      img.decoding = 'async';
       img.src = photo.imageDataUrl;
       if (cap) {
         const dateStr = photo.date ? photo.date.replace(/-/g, '.') : '';
@@ -3810,7 +3818,7 @@
           sounds.playAdd();
           // Gentle confetti to avoid mobile frame flicker
           confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 18);
-          UI.showToast('사진첩에 예쁘게 걸어두었어요! 📷💖', 'success');
+          UI.showToast('사진첩에 예쁘게 걸어두었어요! 🖼️💖', 'success');
         }
 
         UI.closePhotoModal();
@@ -3883,7 +3891,7 @@
           store.photos.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, moved);
           store.save();
           UI.renderPhotos();
-          UI.showToast('사진 순서가 변경되었어요! 📷✨', 'info');
+          UI.showToast('사진 순서가 변경되었어요! 🖼️✨', 'info');
         }
         draggedPhotoId = null;
         document.querySelectorAll('.polaroid-card').forEach(el => {

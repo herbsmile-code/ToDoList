@@ -158,7 +158,7 @@
             <!-- Photos / Polaroid Gallery Menu Item (사진첩) -->
             <li class="nav-item photos-nav-item" data-filter="photos" id="nav-filter-photos" title="폴라로이드 감성 사진 & 추억 보관함">
               <div class="nav-item-left">
-                <span>📷</span>
+                <span>🖼️</span>
                 <span>사진첩</span>
               </div>
               <span class="nav-count" id="nav-count-photos">0</span>
@@ -237,7 +237,7 @@
         <div class="mobile-category-bar" id="mobile-category-bar">
           <button type="button" class="mobile-cat-pill" data-filter="calendar-month">🗓️ 월별달력</button>
           <button type="button" class="mobile-cat-pill active" data-filter="all">🌸 전체</button>
-          <button type="button" class="mobile-cat-pill" data-filter="photos">📷 사진첩</button>
+          <button type="button" class="mobile-cat-pill" data-filter="photos">🖼️ 사진첩</button>
           <button type="button" class="mobile-cat-pill" data-filter="notes">📝 끄적끄적</button>
           <button type="button" class="mobile-cat-pill" data-filter="ledger">💍 가계부</button>
           <button type="button" class="mobile-cat-pill" data-filter="wishlist">🎁 위시</button>
@@ -464,7 +464,7 @@
         <div id="photos-view-container" style="display: none; flex-direction: column; gap: 1.25rem;">
           <div class="photos-header-row">
             <div class="photos-title-group">
-              <h1 class="photos-main-title">📷 사진첩</h1>
+              <h1 class="photos-main-title">🖼️ 사진첩</h1>
               <span class="photos-count-badge">총 <strong id="photos-count-total">0</strong>장</span>
             </div>
             <button type="button" id="btn-open-add-photo-modal" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
@@ -480,7 +480,7 @@
 
           <!-- Photos Empty State -->
           <div id="photos-empty-state" class="empty-state" style="display: none;">
-            <div class="empty-state-icon">📷</div>
+            <div class="empty-state-icon">🖼️</div>
             <h3>아직 등록된 사진이 없어요</h3>
             <p>소중한 순간, 일상의 사진과 감성 메모를 폴라로이드처럼 예쁘게 남겨보세요 💖</p>
             <button type="button" class="btn btn-primary" id="btn-photos-empty-add">+ 첫 사진 등록하기</button>
@@ -805,22 +805,22 @@
       </main>
     </div>
 
-    <!-- iOS Mobile Floating Bottom Navigation Bar (위시, 가계부, 메모, 사진첩) -->
+    <!-- iOS Mobile Floating Bottom Navigation Bar (모든할일, 위시, 메모, 사진첩) -->
     <nav class="mobile-bottom-nav">
+      <button type="button" class="mobile-nav-btn active" data-mobile-nav="all">
+        <span class="nav-icon">📋</span>
+        <span>모든할일</span>
+      </button>
       <button type="button" class="mobile-nav-btn" data-mobile-nav="wishlist">
         <span class="nav-icon">🎁</span>
         <span>위시</span>
-      </button>
-      <button type="button" class="mobile-nav-btn" data-mobile-nav="ledger">
-        <span class="nav-icon">💍</span>
-        <span>가계부</span>
       </button>
       <button type="button" class="mobile-nav-btn" data-mobile-nav="notes">
         <span class="nav-icon">📝</span>
         <span>메모</span>
       </button>
       <button type="button" class="mobile-nav-btn" data-mobile-nav="photos">
-        <span class="nav-icon">📷</span>
+        <span class="nav-icon">🖼️</span>
         <span>사진첩</span>
       </button>
     </nav>
@@ -1378,7 +1378,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=6.5"></script>
-  <script src="js/treasure.js?v=6.5"></script>
+  <script src="js/app.js?v=6.6"></script>
+  <script src="js/treasure.js?v=6.6"></script>
 </body>
 </html>
