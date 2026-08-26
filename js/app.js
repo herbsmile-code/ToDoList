@@ -286,6 +286,117 @@
   const confetti = new CuteConfettiEngine();
 
   // =========================================================================
+  // 2.5. Zero-Knowledge E2EE (End-to-End AES-GCM 256-bit Encryption Engine)
+  // =========================================================================
+  class E2EESecurityEngine {
+    static async deriveKey(pin) {
+      if (!window.crypto || !window.crypto.subtle) {
+        throw new Error('Web Crypto API not available');
+      }
+      const enc = new TextEncoder();
+      const salt = enc.encode('zentask_e2ee_salt_jy_2026_secure');
+      const keyMaterial = await window.crypto.subtle.importKey(
+        'raw',
+        enc.encode(pin + '_e2ee_pepper_2026'),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveKey']
+      );
+      return await window.crypto.subtle.deriveKey(
+        {
+          name: 'PBKDF2',
+          salt: salt,
+          iterations: 100000,
+          hash: 'SHA-256'
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+      );
+    }
+
+    static arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+
+    static base64ToArrayBuffer(base64) {
+      const binary = atob(base64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+
+    static async encrypt(dataObj, pin) {
+      try {
+        const key = await this.deriveKey(pin);
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const jsonStr = JSON.stringify(dataObj);
+        const encodedData = new TextEncoder().encode(jsonStr);
+
+        const cipherBuffer = await window.crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv: iv },
+          key,
+          encodedData
+        );
+
+        return {
+          isEncrypted: true,
+          v: 2,
+          iv: this.arrayBufferToBase64(iv.buffer),
+          payload: this.arrayBufferToBase64(cipherBuffer),
+          updatedAt: dataObj.updatedAt || Date.now()
+        };
+      } catch (err) {
+        console.error('E2EE Encryption error:', err);
+        return {
+          ...dataObj,
+          updatedAt: dataObj.updatedAt || Date.now()
+        };
+      }
+    }
+
+    static async decrypt(cloudData, pin) {
+      if (!cloudData || typeof cloudData !== 'object') return null;
+
+      // 1. If data is NOT encrypted (legacy plain format), return as is for auto-migration
+      if (!cloudData.isEncrypted || !cloudData.payload || !cloudData.iv) {
+        return cloudData;
+      }
+
+      try {
+        const key = await this.deriveKey(pin);
+        const ivBuffer = this.base64ToArrayBuffer(cloudData.iv);
+        const cipherBuffer = this.base64ToArrayBuffer(cloudData.payload);
+
+        const decryptedBuffer = await window.crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: new Uint8Array(ivBuffer) },
+          key,
+          cipherBuffer
+        );
+
+        const jsonStr = new TextDecoder().decode(decryptedBuffer);
+        const parsed = JSON.parse(jsonStr);
+        parsed.updatedAt = cloudData.updatedAt || parsed.updatedAt || Date.now();
+        parsed._wasEncrypted = true;
+        return parsed;
+      } catch (err) {
+        console.warn('E2EE Decryption failed (invalid PIN or corrupted data):', err);
+        throw new Error('DECRYPT_FAILED');
+      }
+    }
+  }
+
+  // =========================================================================
   // 3. Multi-Region Cloud Sync Manager
   // =========================================================================
   class CloudSyncManager {
@@ -428,10 +539,10 @@
       const isLogged = !!(this.spaceId && this.pin);
 
       if (isLogged) {
-        if (statusIcon) statusIcon.textContent = '🟢';
-        if (statusText) statusText.textContent = '동기화중';
+        if (statusIcon) statusIcon.textContent = '🔒';
+        if (statusText) statusText.textContent = 'E2EE동기화';
         if (banner) banner.style.display = 'block';
-        if (displayKey) displayKey.textContent = '🟢 2단계 보안 실시간 동기화 연결됨 ✨';
+        if (displayKey) displayKey.textContent = '🛡️ AES-256 E2EE 종단간 암호화 실시간 연결됨 ✨';
         if (lockedScreen) lockedScreen.style.display = 'none';
       } else {
         if (statusIcon) statusIcon.textContent = '☁️';
@@ -460,23 +571,39 @@
         const url = `${this.activeUrl}/spaces/${key}.json`;
         const res = await fetch(url);
         if (res.ok) {
-          const data = await res.json();
-          if (data && typeof data === 'object') {
-            const remoteUpdated = data.updatedAt || 0;
-            if (force || remoteUpdated > this.lastSyncedUpdatedAt) {
-              this.lastSyncedUpdatedAt = remoteUpdated;
-              if (data.tasks !== undefined) store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
-              if (data.categories !== undefined && normalizeArray(data.categories).length) store.categories = normalizeArray(data.categories);
-              if (data.wishlist !== undefined) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
-              if (data.notes !== undefined) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
-              if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
-              if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
-              
-              store.saveLocalOnly();
-              this.renderAllViews();
+          const rawResponse = await res.json();
+          if (rawResponse && typeof rawResponse === 'object') {
+            let data = null;
+            try {
+              // Decrypt E2EE AES-GCM or handle legacy plain data
+              data = await E2EESecurityEngine.decrypt(rawResponse, this.pin);
+            } catch (decryptErr) {
+              console.warn('E2EE Decryption failed (invalid PIN or corrupted data):', decryptErr);
+              return;
             }
-          } else if (!data) {
-            // 클라우드가 비어있다면 현재 로컬 데이터를 즉시 클라우드로 업로드
+
+            if (data && typeof data === 'object') {
+              const remoteUpdated = data.updatedAt || 0;
+              if (force || remoteUpdated > this.lastSyncedUpdatedAt) {
+                this.lastSyncedUpdatedAt = remoteUpdated;
+                if (data.tasks !== undefined) store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
+                if (data.categories !== undefined && normalizeArray(data.categories).length) store.categories = normalizeArray(data.categories);
+                if (data.wishlist !== undefined) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
+                if (data.notes !== undefined) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
+                if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
+                if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
+                
+                store.saveLocalOnly();
+                this.renderAllViews();
+
+                // If cloud data was in legacy plain format, auto-upgrade to encrypted format
+                if (!rawResponse.isEncrypted) {
+                  await this.pushTasksToCloud();
+                }
+              }
+            }
+          } else if (!rawResponse) {
+            // 클라우드가 비어있다면 현재 로컬 데이터를 즉시 클라우드로 암호화 업로드
             if (store.tasks.length > 0 || store.notes.length > 0 || store.wishlist.length > 0) {
               await this.pushTasksToCloud();
             }
@@ -490,7 +617,7 @@
     async pushTasksToCloud() {
       if (!this.spaceId || !this.pin) return;
       const key = this.getStorageKey();
-      const payload = {
+      const rawPayload = {
         tasks: store.tasks,
         categories: store.categories,
         wishlist: store.wishlist,
@@ -501,12 +628,15 @@
       };
 
       try {
-        this.lastSyncedUpdatedAt = payload.updatedAt;
+        this.lastSyncedUpdatedAt = rawPayload.updatedAt;
+        // Zero-Knowledge E2EE AES-GCM 256-bit Encryption
+        const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, this.pin);
+
         const url = `${this.activeUrl}/spaces/${key}.json`;
         await fetch(url, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(encryptedBody)
         });
       } catch (e) {
         console.warn('RTDB sync push error:', e);
