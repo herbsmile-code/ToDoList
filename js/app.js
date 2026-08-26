@@ -292,7 +292,12 @@
     constructor() {
       this.spaceId = localStorage.getItem('todolist_jy_space_id') || '';
       this.pin = localStorage.getItem('todolist_jy_pin') || '';
-      this.activeUrl = localStorage.getItem('todolist_jy_active_rtdb_url') || 'https://todolist-jy-default-rtdb.asia-southeast1.firebasedatabase.app';
+      let savedUrl = localStorage.getItem('todolist_jy_active_rtdb_url');
+      if (!savedUrl || savedUrl.includes('todolist-jy-default-rtdb.firebaseio.com')) {
+        savedUrl = 'https://todolist-jy-default-rtdb.asia-southeast1.firebasedatabase.app';
+        localStorage.setItem('todolist_jy_active_rtdb_url', savedUrl);
+      }
+      this.activeUrl = savedUrl;
       this.syncTimer = null;
       this.lastSyncedUpdatedAt = 0;
     }
