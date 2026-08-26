@@ -396,35 +396,6 @@
       return { success: true, message: '🎉 로그인 및 실시간 동기화 연결 완료!' };
     }
 
-    async resetAllCloudAndLocal() {
-      const isConfirmed = confirm(`⚠️ 정말로 모든 데이터와 비밀번호를 완전히 초기화하시겠습니까?
-
-- 클라우드와 기기에 저장된 모든 할 일, 메모, 가계부, 위시리스트가 삭제됩니다.
-- 초기화 후 새로운 비밀번호로 처음부터 다시 등록할 수 있습니다.`);
-      if (!isConfirmed) return;
-
-      const secondCheck = prompt("정말 초기화를 진행하려면 '초기화'를 입력해주세요:");
-      if (secondCheck !== "초기화") {
-        alert("초기화가 취소되었습니다.");
-        return;
-      }
-
-      try {
-        // 1. 클라우드 데이터 삭제
-        const sKey = 'on3257';
-        await fetch(`${this.activeUrl}/auth_registry/${sKey}.json`, { method: 'DELETE' });
-        await fetch(`${this.activeUrl}/spaces/space_${sKey}.json`, { method: 'DELETE' });
-      } catch (e) {
-        console.warn("Cloud delete warning:", e);
-      }
-
-      // 2. 로컬 스토리지 전체 초기화
-      localStorage.clear();
-
-      alert("✨ 모든 데이터와 비밀번호가 완전 초기화되었습니다! 페이지를 새로고침하여 새 비밀번호를 등록해주세요.");
-      window.location.reload();
-    }
-
     sanitizeKey(str) {
       if (!str) return 'anonymous';
       return encodeURIComponent(str.trim().toLowerCase()).replace(/\./g, '%2E').replace(/\$/g, '%24').replace(/\[/g, '%5B').replace(/\]/g, '%5D').replace(/#/g, '%23').replace(/\//g, '%2F');
@@ -3265,12 +3236,6 @@
     }
 
     const disconnectSyncBtn = document.getElementById('btn-disconnect-sync');
-    const resetAllBtn = document.getElementById('btn-reset-all-cloud');
-    if (resetAllBtn) {
-      resetAllBtn.addEventListener('click', () => {
-        cloudSync.resetAllCloudAndLocal();
-      });
-    }
     if (disconnectSyncBtn) {
       disconnectSyncBtn.addEventListener('click', () => {
         localStorage.removeItem('todolist_jy_space_id');
