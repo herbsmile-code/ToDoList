@@ -292,7 +292,7 @@
     constructor() {
       this.spaceId = localStorage.getItem('todolist_jy_space_id') || '';
       this.pin = localStorage.getItem('todolist_jy_pin') || '';
-      this.activeUrl = localStorage.getItem('todolist_jy_active_rtdb_url') || 'https://todolist-jy-default-rtdb.firebaseio.com';
+      this.activeUrl = localStorage.getItem('todolist_jy_active_rtdb_url') || 'https://todolist-jy-default-rtdb.asia-southeast1.firebasedatabase.app';
       this.syncTimer = null;
       this.lastSyncedUpdatedAt = 0;
     }
@@ -329,7 +329,6 @@
       }
 
       const inputId = spaceId.trim().toLowerCase();
-      // Dedicated Single Master Account Check: only 'on3257' is allowed!
       if (inputId !== 'on3257') {
         return { 
           success: false, 
@@ -340,32 +339,47 @@
       const sKey = 'on3257';
       const cleanPin = pin.trim();
       const hashed = await this.hashPin(cleanPin);
-
-      // 1. Local Storage Master Hash Check (로컬 브라우저 1차 검증)
       const LOCAL_HASH_KEY = 'todolist_jy_master_pinhash';
-      const localMasterHash = localStorage.getItem(LOCAL_HASH_KEY);
-      if (localMasterHash && localMasterHash !== hashed) {
-        return { 
-          success: false, 
-          message: '⚠️ 비밀번호가 일치하지 않습니다! 🔒' 
-        };
-      }
 
-      // 2. Cloud Auth Registry Check (클라우드 2차 검증)
+      // 1. Cloud Auth Registry Check (중앙 클라우드 실시간 검증)
       const authUrl = `${this.activeUrl}/auth_registry/${sKey}.json`;
+      let cloudRegistered = null;
+      let cloudAccessible = false;
+
       try {
         const res = await fetch(authUrl);
         if (res.ok) {
-          const registered = await res.json();
-          if (registered && registered.pinHash) {
-            if (registered.pinHash !== hashed) {
-              return { 
-                success: false, 
-                message: '⚠️ 비밀번호가 일치하지 않습니다! 🔒' 
-              };
-            }
-          } else {
-            // Register to cloud registry on first time
+          cloudRegistered = await res.json();
+          cloudAccessible = true;
+        } else if (res.status === 401) {
+          console.warn('Firebase 401 Permission Denied - please set Firebase rules to { ".read": true, ".write": true }');
+        }
+      } catch (err) {
+        console.warn('Cloud Auth check error:', err);
+      }
+
+      // 2. 검증 분기
+      if (cloudAccessible && cloudRegistered && cloudRegistered.pinHash) {
+        // 클라우드에 등록된 비밀번호가 있는 경우 엄격하게 비교
+        if (cloudRegistered.pinHash !== hashed) {
+          return { 
+            success: false, 
+            message: '⚠️ 비밀번호가 일치하지 않습니다! (앱/회사/집 공통 비밀번호를 입력해주세요) 🔒' 
+          };
+        }
+      } else {
+        // 로컬에 등록된 해시와 비교 (클라우드 미등록 시 2차 보조)
+        const localMasterHash = localStorage.getItem(LOCAL_HASH_KEY);
+        if (localMasterHash && localMasterHash !== hashed) {
+          return { 
+            success: false, 
+            message: '⚠️ 비밀번호가 일치하지 않습니다! 🔒' 
+          };
+        }
+
+        // 최초 등록이거나 초기화 상태인 경우: 이 비밀번호를 정식 비밀번호로 클라우드와 로컬에 등록!
+        if (cloudAccessible) {
+          try {
             await fetch(authUrl, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
@@ -375,16 +389,12 @@
                 registeredAt: Date.now()
               })
             });
-          }
+          } catch (e) {}
         }
-      } catch (err) {
-        console.warn('Cloud Auth check warning:', err);
       }
 
-      // Save master hash locally if not set
-      if (!localMasterHash) {
-        localStorage.setItem(LOCAL_HASH_KEY, hashed);
-      }
+      // Save master hash locally
+      localStorage.setItem(LOCAL_HASH_KEY, hashed);
 
       // Login success: bind to on3257 and cleanPin
       this.spaceId = 'on3257';
@@ -395,7 +405,36 @@
       this.updateUIStatus();
       await this.fetchLatestFromCloud(true);
       this.startRealtimePolling();
-      return { success: true };
+      return { success: true, message: '🎉 로그인 및 실시간 동기화 연결 완료!' };
+    }
+
+    async resetAllCloudAndLocal() {
+      const isConfirmed = confirm("⚠️ 정말로 모든 데이터와 비밀번호를 완전히 초기화하시겠습니까?
+
+- 클라우드와 기기에 저장된 모든 할 일, 메모, 가계부, 위시리스트가 삭제됩니다.
+- 초기화 후 새로운 비밀번호로 처음부터 다시 등록할 수 있습니다.");
+      if (!isConfirmed) return;
+
+      const secondCheck = prompt("정말 초기화를 진행하려면 '초기화'를 입력해주세요:");
+      if (secondCheck !== "초기화") {
+        alert("초기화가 취소되었습니다.");
+        return;
+      }
+
+      try {
+        // 1. 클라우드 데이터 삭제
+        const sKey = 'on3257';
+        await fetch(`${this.activeUrl}/auth_registry/${sKey}.json`, { method: 'DELETE' });
+        await fetch(`${this.activeUrl}/spaces/space_${sKey}.json`, { method: 'DELETE' });
+      } catch (e) {
+        console.warn("Cloud delete warning:", e);
+      }
+
+      // 2. 로컬 스토리지 전체 초기화
+      localStorage.clear();
+
+      alert("✨ 모든 데이터와 비밀번호가 완전 초기화되었습니다! 페이지를 새로고침하여 새 비밀번호를 등록해주세요.");
+      window.location.reload();
     }
 
     sanitizeKey(str) {
@@ -404,7 +443,8 @@
     }
 
     getStorageKey() {
-      return `space_${this.sanitizeKey(this.spaceId)}_${this.sanitizeKey(this.pin)}`;
+      // Unified single space: all notes, tasks, and data are stored in a single room!
+      return `space_${this.sanitizeKey(this.spaceId)}`;
     }
 
     updateUIStatus() {
@@ -3237,6 +3277,12 @@
     }
 
     const disconnectSyncBtn = document.getElementById('btn-disconnect-sync');
+    const resetAllBtn = document.getElementById('btn-reset-all-cloud');
+    if (resetAllBtn) {
+      resetAllBtn.addEventListener('click', () => {
+        cloudSync.resetAllCloudAndLocal();
+      });
+    }
     if (disconnectSyncBtn) {
       disconnectSyncBtn.addEventListener('click', () => {
         localStorage.removeItem('todolist_jy_space_id');
