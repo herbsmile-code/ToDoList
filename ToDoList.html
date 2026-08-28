@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=6.9">
-  <link rel="stylesheet" href="css/animations.css?v=6.9">
+  <link rel="stylesheet" href="css/style.css?v=7.0">
+  <link rel="stylesheet" href="css/animations.css?v=7.0">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -788,7 +788,7 @@
 
           <!-- Dropzone -->
           <div class="file-upload-card" id="vault-dropzone">
-            <input type="file" id="vault-file-hidden-input" style="display: none;">
+            <input type="file" id="vault-file-hidden-input" multiple style="display: none;">
             <div class="file-upload-icon">📂</div>
             <div class="file-upload-title">이곳을 클릭하거나 파일을 끌어다 놓으세요</div>
             <div class="file-upload-desc">엑셀(.xlsx, .csv), 메모장(.txt), PDF, 이미지 등 모든 파일 지원 (집/회사 어디서나 다운로드)</div>
@@ -1348,6 +1348,11 @@
           <p>새로운 개발 지식이나 꿀팁을 등록하여 나만의 보물 지식함을 채워보세요 ✨</p>
           <button class="btn btn-primary" id="btn-tr-empty-add">+ 첫 보물 추가하기</button>
         </div>
+
+        <!-- Firebase Cloud Storage Usage Gauge & Percentage Dashboard -->
+        <div id="tr-storage-gauge-container" class="tr-storage-gauge-container">
+          <!-- Dynamically populated storage gauge & percentage bar -->
+        </div>
       </div>
     </div>
   </div>
@@ -1422,7 +1427,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=6.9"></script>
-  <script src="js/treasure.js?v=6.9"></script>
+  <script src="js/app.js?v=7.0"></script>
+  <script src="js/treasure.js?v=7.0"></script>
 </body>
 </html>

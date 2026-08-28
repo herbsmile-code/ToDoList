@@ -703,20 +703,7 @@
         const reader = new FileReader();
         reader.onload = async (e) => {
           try {
-            const fileItem = {
-              id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-              name: fileObj.name,
-              size: fileObj.size,
-              type: fileObj.type,
-              note: note || '',
-              createdAt: Date.now(),
-              dataUrl: e.target.result
-            };
-
-            const files = await this.getAllVaultFiles();
-            files.unshift(fileItem);
-            await this.saveVaultFiles(files);
-            await this.pushTasksToCloud();
+            const fileItem = store.addVaultFile(fileObj, note, e.target.result);
             resolve(fileItem);
           } catch (err) {
             reject(err);
@@ -728,25 +715,16 @@
     }
 
     async getAllVaultFiles() {
-      try {
-        const raw = localStorage.getItem('todolist_jy_vault_files');
-        return raw ? JSON.parse(raw) : [];
-      } catch (e) {
-        return [];
-      }
+      return store.vaultFiles || [];
     }
 
     async saveVaultFiles(files) {
-      try {
-        localStorage.setItem('todolist_jy_vault_files', JSON.stringify(files));
-      } catch (e) {}
+      store.vaultFiles = files || [];
+      store.saveLocalOnly();
     }
 
     async deleteVaultFile(fileId) {
-      const files = await this.getAllVaultFiles();
-      const filtered = files.filter(f => f.id !== fileId);
-      await this.saveVaultFiles(filtered);
-      await this.pushTasksToCloud();
+      store.deleteVaultFile(fileId);
     }
   }
 
@@ -862,6 +840,7 @@
       this.wishlist = [];
       this.photos = [];
       this.notes = [];
+      this.vaultFiles = [];
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.ledgerFiles = [];
       this.selectedLedgerMonth = 7; // Default to July (latest written month)
@@ -888,13 +867,14 @@
       let combinedPhotos = [];
       let combinedNotes = [];
       let combinedLedgerFiles = [];
+      let combinedVaultFiles = [];
       let userCategories = null;
 
       const keysToCheck = [
         STORAGE_KEY,
         'todolist_jy_data_v38', 'todolist_jy_data_v37', 'todolist_jy_data_v36', 'todolist_jy_data_v35',
         'todolist_jy_data_v34', 'todolist_jy_data_v33', 'todolist_jy_data_v30', 'todolist_jy_data_v20',
-        'todolist_jy_data', 'todolist_jy_tasks'
+        'todolist_jy_data', 'todolist_jy_tasks', 'todolist_jy_vault_files', 'todolist_jy_files'
       ];
 
       keysToCheck.forEach(k => {
@@ -905,11 +885,19 @@
 
           // If raw was just an array of tasks
           if (Array.isArray(parsed)) {
-            parsed.forEach(t => {
-              if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !combinedTasks.some(x => x.id === t.id)) {
-                combinedTasks.push(t);
-              }
-            });
+            if (k.includes('vault') || k.includes('files')) {
+              parsed.forEach(f => {
+                if (f && f.id && !combinedVaultFiles.some(x => x.id === f.id)) {
+                  combinedVaultFiles.push(f);
+                }
+              });
+            } else {
+              parsed.forEach(t => {
+                if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !combinedTasks.some(x => x.id === t.id)) {
+                  combinedTasks.push(t);
+                }
+              });
+            }
           } else if (typeof parsed === 'object' && parsed !== null) {
             if (Array.isArray(parsed.tasks)) {
               parsed.tasks.forEach(t => {
@@ -946,6 +934,13 @@
                 }
               });
             }
+            if (Array.isArray(parsed.vaultFiles)) {
+              parsed.vaultFiles.forEach(f => {
+                if (f && f.id && !combinedVaultFiles.some(x => x.id === f.id)) {
+                  combinedVaultFiles.push(f);
+                }
+              });
+            }
             if (!userCategories && Array.isArray(parsed.categories) && parsed.categories.length) {
               userCategories = parsed.categories;
             }
@@ -972,6 +967,7 @@
       this.photos = combinedPhotos;
       this.notes = combinedNotes;
       this.ledgerFiles = combinedLedgerFiles;
+      this.vaultFiles = combinedVaultFiles;
       this.categories = finalCategories;
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
 
@@ -992,10 +988,12 @@
           wishlist: this.wishlist,
           photos: this.photos,
           notes: this.notes,
+          vaultFiles: this.vaultFiles,
           honeymoonData: this.honeymoonData,
           ledgerFiles: this.ledgerFiles,
           updatedAt: Date.now()
         }));
+        localStorage.setItem('todolist_jy_vault_files', JSON.stringify(this.vaultFiles || []));
         localStorage.setItem(STREAK_KEY, JSON.stringify(this.streak));
       } catch (e) {}
     }
@@ -1003,6 +1001,32 @@
     save() {
       this.saveLocalOnly();
       cloudSync.pushTasksToCloud();
+    }
+
+    // --- Vault Files Methods ---
+    addVaultFile(fileObj, note = '', dataUrl = '') {
+      const newFile = {
+        id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        name: fileObj.name,
+        size: fileObj.size,
+        type: fileObj.type,
+        note: (note || '').trim(),
+        createdAt: Date.now(),
+        dataUrl: dataUrl
+      };
+      if (!this.vaultFiles) this.vaultFiles = [];
+      this.vaultFiles.unshift(newFile);
+      this.save();
+      return newFile;
+    }
+
+    deleteVaultFile(fileId) {
+      if (!this.vaultFiles) return false;
+      const idx = this.vaultFiles.findIndex(f => f.id === fileId);
+      if (idx === -1) return false;
+      this.vaultFiles.splice(idx, 1);
+      this.save();
+      return true;
     }
 
     // --- Task Methods ---
@@ -3123,6 +3147,7 @@
 
       const navItem = e.target.closest('.nav-item');
       if (navItem && navItem.dataset.filter) {
+        e.preventDefault();
         if (!isLogged) {
           UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
           UI.openCloudModal();
@@ -3130,15 +3155,17 @@
         }
         const newFilter = navItem.dataset.filter;
         if (store.activeFilter !== newFilter) {
+          const currentScrollY = window.scrollY;
           store.activeFilter = newFilter;
-          window.scrollTo({ top: 0, behavior: 'instant' });
           UI.renderTasks();
+          window.scrollTo({ top: currentScrollY, behavior: 'instant' });
         }
         return;
       }
 
       const mobileNavBtn = e.target.closest('.mobile-nav-btn');
       if (mobileNavBtn && mobileNavBtn.dataset.mobileNav) {
+        e.preventDefault();
         if (!isLogged) {
           UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
           UI.openCloudModal();
@@ -3146,15 +3173,17 @@
         }
         const newFilter = mobileNavBtn.dataset.mobileNav;
         if (store.activeFilter !== newFilter) {
+          const currentScrollY = window.scrollY;
           store.activeFilter = newFilter;
-          window.scrollTo({ top: 0, behavior: 'instant' });
           UI.renderTasks();
+          window.scrollTo({ top: currentScrollY, behavior: 'instant' });
         }
         return;
       }
 
       const mobilePill = e.target.closest('.mobile-cat-pill');
       if (mobilePill && mobilePill.dataset.filter) {
+        e.preventDefault();
         if (!isLogged) {
           UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
           UI.openCloudModal();
@@ -3162,9 +3191,10 @@
         }
         const newFilter = mobilePill.dataset.filter;
         if (store.activeFilter !== newFilter) {
+          const currentScrollY = window.scrollY;
           store.activeFilter = newFilter;
-          window.scrollTo({ top: 0, behavior: 'instant' });
           UI.renderTasks();
+          window.scrollTo({ top: currentScrollY, behavior: 'instant' });
         }
         return;
       }
@@ -3469,6 +3499,40 @@
     const ledgerHiddenInput = document.getElementById('ledger-file-hidden-input');
     if (ledgerDropzone && ledgerHiddenInput) {
       ledgerDropzone.addEventListener('click', () => ledgerHiddenInput.click());
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        ledgerDropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          ledgerDropzone.classList.add('drag-active');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        ledgerDropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          ledgerDropzone.classList.remove('drag-active');
+        }, false);
+      });
+
+      ledgerDropzone.addEventListener('drop', async (e) => {
+        const dt = e.dataTransfer;
+        const files = dt ? dt.files : null;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        try {
+          await parseHoneymoonExcelFile(file, 'auto', 0, '드롭존 엑셀 등록');
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 60);
+          UI.showToast(`'${file.name}' 신혼 가계부가 분석되어 반영되었어요! 💍📊✨`, 'success');
+          UI.renderLedger();
+          UI.renderSidebar();
+        } catch (err) {
+          UI.showToast('가계부 엑셀 분석 실패: ' + (err.message || err), 'danger');
+        }
+      });
+
       ledgerHiddenInput.addEventListener('change', async () => {
         if (!ledgerHiddenInput.files || ledgerHiddenInput.files.length === 0) return;
         const file = ledgerHiddenInput.files[0];
@@ -3482,6 +3546,7 @@
         } catch (err) {
           UI.showToast('가계부 엑셀 분석 실패', 'danger');
         }
+        ledgerHiddenInput.value = '';
       });
     }
 
@@ -4190,6 +4255,75 @@
       });
     }
 
+    // Vault Dropzone & Hidden Input
+    const dropzone = document.getElementById('vault-dropzone');
+    const hiddenFileInput = document.getElementById('vault-file-hidden-input');
+    if (dropzone && hiddenFileInput) {
+      dropzone.addEventListener('click', () => hiddenFileInput.click());
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('drag-active');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('drag-active');
+        }, false);
+      });
+
+      dropzone.addEventListener('drop', async (e) => {
+        const dt = e.dataTransfer;
+        const files = dt ? dt.files : null;
+        if (!files || files.length === 0) return;
+
+        let successCount = 0;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          try {
+            await cloudSync.saveFileToVault(file, '드래그 앤 드롭 보관');
+            successCount++;
+          } catch (err) {
+            console.error('File vault drop error:', err);
+          }
+        }
+
+        if (successCount > 0) {
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+          UI.showToast(`${successCount}개 파일이 안전하게 보관되었어요! 💾✨`, 'success');
+          UI.renderFilesVault();
+          UI.renderSidebar();
+        } else {
+          UI.showToast('파일 보관 처리 중 문제가 발생했어요', 'danger');
+        }
+      });
+
+      hiddenFileInput.addEventListener('change', async () => {
+        if (!hiddenFileInput.files || hiddenFileInput.files.length === 0) return;
+        let successCount = 0;
+        for (let i = 0; i < hiddenFileInput.files.length; i++) {
+          const file = hiddenFileInput.files[i];
+          try {
+            await cloudSync.saveFileToVault(file, '');
+            successCount++;
+          } catch (err) {}
+        }
+        hiddenFileInput.value = '';
+        if (successCount > 0) {
+          sounds.playAdd();
+          UI.showToast(`${successCount}개 파일이 보관되었어요! 💾✨`, 'success');
+          UI.renderFilesVault();
+          UI.renderSidebar();
+        }
+      });
+    }
+
     // 2-Step Cloud Sync Form Submit (Cloud-wide Master Verification)
     const syncForm = document.getElementById('sync-2step-form');
     if (syncForm) {
@@ -4333,26 +4467,6 @@
       });
     }
 
-    // Vault Dropzone & Hidden Input
-    const dropzone = document.getElementById('vault-dropzone');
-    const hiddenFileInput = document.getElementById('vault-file-hidden-input');
-    if (dropzone && hiddenFileInput) {
-      dropzone.addEventListener('click', () => hiddenFileInput.click());
-      hiddenFileInput.addEventListener('change', async () => {
-        if (!hiddenFileInput.files || hiddenFileInput.files.length === 0) return;
-        const file = hiddenFileInput.files[0];
-        try {
-          await cloudSync.saveFileToVault(file, '');
-          sounds.playAdd();
-          UI.showToast(`'${file.name}' 파일이 보관되었어요! 💾`, 'success');
-          UI.renderFilesVault();
-          UI.renderSidebar();
-        } catch (err) {
-          UI.showToast('파일 보관 실패', 'danger');
-        }
-      });
-    }
-
     // Settings Data Export & Import & Reset
     const exportBtn = document.getElementById('btn-export-data');
     if (exportBtn) {
@@ -4364,6 +4478,7 @@
           wishlist: store.wishlist,
           photos: store.photos,
           notes: store.notes,
+          vaultFiles: store.vaultFiles || [],
           honeymoonData: store.honeymoonData,
           ledgerFiles: store.ledgerFiles,
           exportedAt: new Date().toISOString()
@@ -4395,6 +4510,7 @@
               if (Array.isArray(data.wishlist)) store.wishlist = data.wishlist;
               if (Array.isArray(data.photos)) store.photos = data.photos;
               if (Array.isArray(data.notes)) store.notes = data.notes;
+              if (Array.isArray(data.vaultFiles)) store.vaultFiles = data.vaultFiles;
               if (data.honeymoonData) store.honeymoonData = data.honeymoonData;
               if (Array.isArray(data.ledgerFiles)) store.ledgerFiles = data.ledgerFiles;
               store.save();
@@ -4414,12 +4530,13 @@
     const resetDemoBtn = document.getElementById('btn-reset-demo');
     if (resetDemoBtn) {
       resetDemoBtn.addEventListener('click', () => {
-        if (confirm('정말 삭제하시겠습니까?')) {
+        if (confirm('모든 데이터를 초기화하시겠습니까?')) {
           store.tasks = [];
           store.categories = DEFAULT_CATEGORIES;
           store.wishlist = [];
           store.photos = [];
           store.notes = [];
+          store.vaultFiles = [];
           store.ledgerFiles = [];
           store.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
           store.save();
@@ -4430,6 +4547,64 @@
         }
       });
     }
+  }
+
+  // =========================================================================
+  // 8.5. Firebase Storage & Usage Calculation Engine
+  // =========================================================================
+  function calculateFirebaseStorageUsage() {
+    // Firebase Realtime Database Free Spark Plan Quota: 1 GB = 1,073,741,824 Bytes
+    const MAX_FIREBASE_SPARK_BYTES = 1024 * 1024 * 1024;
+
+    const tasksSize = new Blob([JSON.stringify(store.tasks || [])]).size;
+    const notesSize = new Blob([JSON.stringify(store.notes || [])]).size;
+    const wishlistSize = new Blob([JSON.stringify(store.wishlist || [])]).size;
+    const photosSize = new Blob([JSON.stringify(store.photos || [])]).size;
+    const ledgerSize = new Blob([JSON.stringify({ data: store.honeymoonData || {}, files: store.ledgerFiles || [] })]).size;
+    const vaultSize = new Blob([JSON.stringify(store.vaultFiles || [])]).size;
+    const categoriesSize = new Blob([JSON.stringify(store.categories || [])]).size;
+
+    let treasureSize = 0;
+    try {
+      const rawT = localStorage.getItem('zentask_treasures');
+      if (rawT) treasureSize = new Blob([rawT]).size;
+    } catch (e) {}
+
+    const totalUsedBytes = tasksSize + notesSize + wishlistSize + photosSize + ledgerSize + vaultSize + categoriesSize + treasureSize;
+    const usagePercentage = (totalUsedBytes / MAX_FIREBASE_SPARK_BYTES) * 100;
+    const remainingBytes = Math.max(0, MAX_FIREBASE_SPARK_BYTES - totalUsedBytes);
+
+    function formatBytesPrecise(bytes) {
+      if (bytes === 0) return '0 B';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+
+    return {
+      totalUsedBytes,
+      maxBytes: MAX_FIREBASE_SPARK_BYTES,
+      formattedUsed: formatBytesPrecise(totalUsedBytes),
+      formattedMax: '1.0 GB (1,024 MB)',
+      formattedRemaining: formatBytesPrecise(remainingBytes),
+      percentage: usagePercentage,
+      percentageStr: usagePercentage < 0.001 
+        ? usagePercentage.toFixed(4) + '%' 
+        : (usagePercentage < 0.01 ? usagePercentage.toFixed(3) + '%' : usagePercentage.toFixed(2) + '%'),
+      breakdown: {
+        vault: { label: '📂 파일보관함', bytes: vaultSize, formatted: formatBytesPrecise(vaultSize) },
+        photos: { label: '📸 사진첩', bytes: photosSize, formatted: formatBytesPrecise(photosSize) },
+        notes: { label: '✏️ 끄적끄적 메모', bytes: notesSize, formatted: formatBytesPrecise(notesSize) },
+        tasks: { label: '📋 할 일 & 일정', bytes: tasksSize, formatted: formatBytesPrecise(tasksSize) },
+        ledger: { label: '💰 가계부 & 엑셀', bytes: ledgerSize, formatted: formatBytesPrecise(ledgerSize) },
+        wishlist: { label: '🎁 위시리스트', bytes: wishlistSize, formatted: formatBytesPrecise(wishlistSize) },
+        treasures: { label: '💎 보물 지식', bytes: treasureSize, formatted: formatBytesPrecise(treasureSize) }
+      }
+    };
+  }
+
+  window.calculateFirebaseStorageUsage = calculateFirebaseStorageUsage;
   }
 
   // =========================================================================

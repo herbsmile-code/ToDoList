@@ -179,6 +179,7 @@ class TreasureVaultManager {
       modal.classList.add('active');
       modal.style.display = 'flex';
       this.render();
+      this.renderStorageGauge();
       if (window.sounds && window.sounds.playCelebration) {
         window.sounds.playCelebration();
       }
@@ -315,6 +316,77 @@ class TreasureVaultManager {
           </div>
         `;
       }).join('');
+    }
+
+    this.renderStorageGauge();
+  }
+
+  renderStorageGauge() {
+    const container = document.getElementById('tr-storage-gauge-container');
+    if (!container) return;
+
+    if (typeof window.calculateFirebaseStorageUsage !== 'function') {
+      container.innerHTML = '';
+      return;
+    }
+
+    const usage = window.calculateFirebaseStorageUsage();
+    // For visualization: show at least 1% if bytes > 0 so the bar visually shows
+    const displayPct = Math.min(100, Math.max(usage.totalUsedBytes > 0 ? 1 : 0, usage.percentage));
+
+    container.innerHTML = `
+      <div class="tr-storage-gauge-card">
+        <div class="tr-storage-header">
+          <div class="tr-storage-title">
+            <span class="storage-icon" style="font-size: 1.25rem;">☁️</span>
+            <div>
+              <strong>Firebase 실시간 클라우드 저장용량</strong>
+              <span class="storage-badge-live">🟢 실시간 동기화 활성</span>
+            </div>
+          </div>
+          <div class="tr-storage-actions">
+            <button type="button" class="btn-refresh-storage" id="btn-refresh-storage-gauge" title="클라우드 저장 공간 다시 계산">
+              <span>🔄</span> <span>실시간 새로고침</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="storage-bar-wrapper">
+          <div class="storage-bar-track">
+            <div class="storage-bar-fill" style="width: ${displayPct}%;"></div>
+          </div>
+        </div>
+
+        <div class="storage-meta-row">
+          <div class="storage-usage-stats">
+            <span class="usage-primary"><strong>${usage.formattedUsed}</strong> / ${usage.formattedMax}</span>
+            <span class="usage-percentage">(${usage.percentageStr} 사용 중)</span>
+          </div>
+          <div class="storage-remaining">
+            <span>남은 무료 용량: <strong>${usage.formattedRemaining}</strong></span>
+          </div>
+        </div>
+
+        <div class="storage-breakdown-chips">
+          <span class="breakdown-chip">📂 파일보관함: <strong>${usage.breakdown.vault.formatted}</strong></span>
+          <span class="breakdown-chip">📸 사진첩: <strong>${usage.breakdown.photos ? usage.breakdown.photos.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">✏️ 끄적끄적 메모: <strong>${usage.breakdown.notes.formatted}</strong></span>
+          <span class="breakdown-chip">📋 할 일/일정: <strong>${usage.breakdown.tasks.formatted}</strong></span>
+          <span class="breakdown-chip">💰 가계부: <strong>${usage.breakdown.ledger.formatted}</strong></span>
+          <span class="breakdown-chip">💎 보물 지식: <strong>${usage.breakdown.treasures.formatted}</strong></span>
+          <span class="breakdown-chip">🎁 위시리스트: <strong>${usage.breakdown.wishlist.formatted}</strong></span>
+        </div>
+      </div>
+    `;
+
+    const refreshBtn = document.getElementById('btn-refresh-storage-gauge');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.renderStorageGauge();
+        if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+        if (window.UI && window.UI.showToast) window.UI.showToast('클라우드 저장 용량을 최신 상태로 갱신했어요! ☁️✨', 'info');
+      });
     }
   }
 

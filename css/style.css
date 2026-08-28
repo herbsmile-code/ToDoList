@@ -4190,4 +4190,176 @@ body::after {
   }
 }
 
+/* --- Drag and Drop Active States for File Vault & Ledger --- */
+.file-upload-card {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.file-upload-card.drag-active {
+  border-color: var(--primary) !important;
+  background: rgba(255, 107, 139, 0.12) !important;
+  box-shadow: 0 0 25px rgba(255, 107, 139, 0.45), inset 0 0 15px rgba(255, 107, 139, 0.15) !important;
+  transform: scale(1.015);
+}
+
+[data-theme="dark"] .file-upload-card.drag-active {
+  background: rgba(247, 131, 172, 0.18) !important;
+  box-shadow: 0 0 25px rgba(247, 131, 172, 0.5), inset 0 0 15px rgba(247, 131, 172, 0.2) !important;
+}
+
+/* --- Firebase Cloud Storage Gauge Dashboard in Treasure Modal --- */
+.tr-storage-gauge-container {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1.5px dashed rgba(255, 143, 163, 0.3);
+}
+
+.tr-storage-gauge-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 240, 245, 0.85));
+  border: 1px solid rgba(255, 143, 163, 0.35);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 4px 18px rgba(255, 107, 139, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+[data-theme="dark"] .tr-storage-gauge-card {
+  background: linear-gradient(135deg, rgba(38, 30, 58, 0.95), rgba(48, 35, 68, 0.85));
+  border-color: rgba(247, 131, 172, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.tr-storage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tr-storage-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.95rem;
+}
+
+.tr-storage-title strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.storage-badge-live {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #2b8a3e;
+  background: rgba(43, 138, 62, 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: 0.4rem;
+}
+
+.btn-refresh-storage {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.85rem;
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 143, 163, 0.4);
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-refresh-storage:hover {
+  background: var(--primary-light);
+  transform: translateY(-1px);
+}
+
+.storage-bar-wrapper {
+  width: 100%;
+}
+
+.storage-bar-track {
+  width: 100%;
+  height: 12px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .storage-bar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.storage-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #63e6be 0%, #74c0fc 40%, #ff8fa3 75%, #ff6b8b 100%);
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 10px rgba(255, 107, 139, 0.5);
+}
+
+.storage-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.usage-primary strong {
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.usage-percentage {
+  margin-left: 0.35rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.storage-remaining strong {
+  color: #2b8a3e;
+}
+
+.storage-breakdown-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.breakdown-chip {
+  font-size: 0.73rem;
+  padding: 3px 9px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+  color: var(--text-muted);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .breakdown-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.breakdown-chip strong {
+  color: var(--text-main);
+  margin-left: 2px;
+}
+
+
 
