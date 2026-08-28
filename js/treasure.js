@@ -86,6 +86,8 @@ class TreasureVaultManager {
     this.treasures = [];
     this.activeCat = 'all';
     this.searchQuery = '';
+    this.currentPage = 1;
+    this.pageSize = 6;
     this.load();
     this.initDOM();
   }
@@ -263,12 +265,23 @@ class TreasureVaultManager {
     this.updateBadge();
     const grid = document.getElementById('tr-grid-container');
     const emptyState = document.getElementById('tr-empty-state');
+    const paginationContainer = document.getElementById('tr-pagination-container');
     if (!grid) return;
 
     const items = this.getFiltered();
-    if (items.length === 0) {
+    const totalItems = items.length;
+    const totalPages = Math.ceil(totalItems / this.pageSize) || 1;
+
+    if (this.currentPage > totalPages) this.currentPage = totalPages;
+    if (this.currentPage < 1) this.currentPage = 1;
+
+    if (totalItems === 0) {
       grid.innerHTML = '';
       if (emptyState) emptyState.style.display = 'flex';
+      if (paginationContainer) {
+        paginationContainer.innerHTML = '';
+        paginationContainer.style.display = 'none';
+      }
     } else {
       if (emptyState) emptyState.style.display = 'none';
       const catLabels = {
@@ -278,7 +291,10 @@ class TreasureVaultManager {
         study: '📝 내 공부 노트'
       };
 
-      grid.innerHTML = items.map(item => {
+      const startIndex = (this.currentPage - 1) * this.pageSize;
+      const pageItems = items.slice(startIndex, startIndex + this.pageSize);
+
+      grid.innerHTML = pageItems.map(item => {
         const dateStr = new Date(item.createdAt).toLocaleDateString('ko-KR', {
           year: 'numeric', month: 'short', day: 'numeric'
         });
@@ -316,6 +332,27 @@ class TreasureVaultManager {
           </div>
         `;
       }).join('');
+
+      // Render Pagination Controls (6개가 넘어가면 1, 2, 3, 4 ... 페이지 넘김 바 표시)
+      if (paginationContainer) {
+        if (totalPages > 1) {
+          paginationContainer.style.display = 'flex';
+          let pagesHtml = '';
+          pagesHtml += `<button type="button" class="tr-page-btn tr-page-prev" data-action="prev-page" ${this.currentPage === 1 ? 'disabled' : ''} title="이전 페이지">◀ 이전</button>`;
+          
+          for (let p = 1; p <= totalPages; p++) {
+            pagesHtml += `<button type="button" class="tr-page-btn ${p === this.currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`;
+          }
+
+          pagesHtml += `<button type="button" class="tr-page-btn tr-page-next" data-action="next-page" ${this.currentPage === totalPages ? 'disabled' : ''} title="다음 페이지">다음 ▶</button>`;
+          pagesHtml += `<span class="tr-page-info">(총 ${totalItems}개 중 ${startIndex + 1}~${Math.min(startIndex + this.pageSize, totalItems)}개)</span>`;
+
+          paginationContainer.innerHTML = pagesHtml;
+        } else {
+          paginationContainer.innerHTML = '';
+          paginationContainer.style.display = 'none';
+        }
+      }
     }
 
     this.renderStorageGauge();
@@ -527,8 +564,43 @@ class TreasureVaultManager {
         document.querySelectorAll('.tr-pill').forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
         this.activeCat = pill.dataset.cat || 'all';
+        this.currentPage = 1;
         this.render();
         if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+        return;
+      }
+
+      // 8. Pagination Controls Click (1, 2, 3, 4 ... 페이지 넘김)
+      const pageBtn = e.target.closest('.tr-page-btn');
+      if (pageBtn && !pageBtn.disabled) {
+        e.preventDefault();
+        const action = pageBtn.dataset.action;
+        const pageNum = pageBtn.dataset.page;
+        const totalPages = Math.ceil(this.getFiltered().length / this.pageSize) || 1;
+
+        if (action === 'prev-page') {
+          if (this.currentPage > 1) {
+            this.currentPage--;
+            this.render();
+            const modalBody = document.querySelector('.tr-modal-body');
+            if (modalBody) modalBody.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        } else if (action === 'next-page') {
+          if (this.currentPage < totalPages) {
+            this.currentPage++;
+            this.render();
+            const modalBody = document.querySelector('.tr-modal-body');
+            if (modalBody) modalBody.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        } else if (pageNum) {
+          const targetPage = parseInt(pageNum, 10);
+          if (!isNaN(targetPage) && targetPage !== this.currentPage) {
+            this.currentPage = targetPage;
+            this.render();
+            const modalBody = document.querySelector('.tr-modal-body');
+            if (modalBody) modalBody.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
         return;
       }
     });
@@ -538,6 +610,7 @@ class TreasureVaultManager {
     if (searchInp) {
       searchInp.addEventListener('input', (e) => {
         this.searchQuery = e.target.value;
+        this.currentPage = 1;
         this.render();
       });
     }
@@ -558,6 +631,7 @@ class TreasureVaultManager {
         }
 
         this.add(title, desc, code, cat);
+        this.currentPage = 1;
         if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
         if (window.confetti && window.confetti.burst) window.confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
         if (window.UI && window.UI.showToast) window.UI.showToast(`💎 보물('${title}')이 안전하게 저장되었어요!`, 'success');

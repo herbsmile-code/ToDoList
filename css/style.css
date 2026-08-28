@@ -4361,5 +4361,72 @@ body::after {
   margin-left: 2px;
 }
 
+/* --- Treasure Vault Pagination Controls (6개 초과 시 페이지 넘김) --- */
+.tr-pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 1.25rem 0 0.5rem 0;
+  flex-wrap: wrap;
+}
+
+.tr-page-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 143, 163, 0.35);
+  background: #fff;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.tr-page-btn:hover:not(:disabled) {
+  background: #fff0f3;
+  color: #ff6b8b;
+  border-color: rgba(255, 107, 139, 0.5);
+  transform: translateY(-1px);
+}
+
+.tr-page-btn.active {
+  background: linear-gradient(135deg, #ff8fa3, #ff6b8b);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(255, 107, 139, 0.4);
+}
+
+.tr-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.tr-page-info {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-left: 0.4rem;
+}
+
+[data-theme="dark"] .tr-page-btn {
+  background: rgba(48, 35, 68, 0.9);
+  border-color: rgba(247, 131, 172, 0.3);
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .tr-page-btn:hover:not(:disabled) {
+  background: rgba(247, 131, 172, 0.2);
+  color: #ff8fa3;
+}
+
+
 
 
