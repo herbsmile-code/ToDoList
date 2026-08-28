@@ -10,33 +10,34 @@ const DEFAULT_TREASURES = [
     id: 'treasure-scenario',
     title: '[실전 가이드] 1~5번 셋업 황금 사이클 & 단계별 실전 시나리오 🚀',
     category: 'setup',
-    desc: `프로젝트 시작부터 마무리까지 가장 버그 없는 완벽한 5단계 황금 사이클!
+    desc: `프로젝트 시작부터 마무리까지 가장 버그 없는 완벽한 5단계 개발 순서!
 
 1단계. 시작할 때 (환경 세팅) 👉 1번 셋업 (/setup-project)
 • 🗣️ "새 프로젝트 만들 거야. 1번 셋업 시작해줘!"
 • 초고속 UV 가상환경(.venv), .gitignore, Git 초기 상태를 1초 만에 자동 초기화.
+• 💡 환경 설정 완료 후 다음 단계인 [2번 셋업: 설계 요청 (/design-api)]으로 친절히 안내!
 
-2단계. 코딩하기 전 (설계 먼저!) 👉 5번 셋업 (/design-api)
-• 🗣️ "회원가입이랑 주문 기능 만들 건데 5번 셋업으로 먼저 설계해줘."
-• 데이터 테이블 표 구조와 API 명세서를 먼저 기획하여 엉뚱한 코딩 방지.
+2단계. 코딩하기 전 (설계 먼저!) 👉 2번 셋업 (/design-api)
+• 🗣️ "회원가입이랑 주문 기능 만들 건데 2번 셋업으로 먼저 설계해줘."
+• 데이터 테이블 표 구조와 화면/API 명세서를 먼저 기획하여 엉뚱한 코딩 방지.
 
-3단계. 나만의 전용 도구가 필요할 때 👉 2번 셋업 (/setup-skill)
-• 🗣️ "첨부한 엑셀 파일 분석하는 기능 2번 스킬로 만들어줘."
-• YAML 프론트매터와 자체 검수표를 갖춘 고품질 스킬 뚝딱 제작.
+3단계. 나만의 전용 도구가 필요할 때 👉 3번 셋업 (/setup-skill)
+• 🗣️ "첨부한 엑셀 파일 분석하는 기능 3번 스킬로 만들어줘."
+• YAML 프론트매터와 자체 검수표를 갖춘 고품질 전용 도구/스킬 뚝딱 제작.
 
-4단계. 기능 코딩이 끝났을 때 👉 3번 셋업 (/verify)
-• 🗣️ "코드 다 짰어? 3번 셋업으로 자체 검증 돌려봐!"
-• AI가 직접 프로그램을 돌려보고 에러를 스스로 고친 뒤 최종 보고.
+4단계. 기능 구현이 끝났을 때 👉 4번 셋업 (/verify)
+• 🗣️ "코드 다 짰어? 4번 셋업으로 자체 검증 돌려봐!"
+• AI가 직접 프로그램을 돌려보고 에러를 스스로 고친 뒤 최종 검증 보고.
 
-5단계. 작업 마무리 & 퇴근할 때 👉 4번 셋업 (/commit)
-• 🗣️ "오늘 작업한 거 4번 셋업으로 커밋해줘."
-• 바뀐 내용을 분석해 Conventional Git 표준 메시지로 안전하게 영구 백업.`,
+5단계. 작업 마무리 & 퇴근할 때 👉 5번 셋업 (/commit)
+• 🗣️ "오늘 작업한 거 5번 셋업으로 커밋해줘."
+• 바뀐 내용을 분석해 Conventional Git 표준 메시지로 원격 GitHub에 안전하게 영구 백업.`,
     code: `# 1~5번 셋업 호출 단축 명령어 모음
-1번 셋업: /setup-project
-5번 셋업: /design-api
-2번 셋업: /setup-skill  (또는 '2번 스킬로 만들어줘')
-3번 셋업: /verify
-4번 셋업: /commit`,
+1번 셋업: /setup-project  (1단계: 환경 세팅)
+2번 셋업: /design-api      (2단계: 설계 퍼스트)
+3번 셋업: /setup-skill     (3단계: 전용 도구/스킬)
+4번 셋업: /verify          (4단계: 자체 검증 & 테스트)
+5번 셋업: /commit          (5단계: 영구 백업 & 커밋)`,
     createdAt: Date.now()
   },
   {
@@ -59,8 +60,18 @@ const DEFAULT_TREASURES = [
     id: 'treasure-3',
     title: '[1~5번 셋업] 안티그래비티 전문 개발자 5대 셋업 체계 🚀',
     category: 'setup',
-    desc: '실무 시니어 개발자들이 가장 필수적으로 사용하는 5단계 자동화 워크플로우:\n• 1번 /setup-project: UV 파이썬 가상환경 & Git 초기화\n• 2번 /setup-skill: YAML 프론트매터 + 표준 폴더 규격 스킬 제작\n• 3번 /verify: 코드 무결성 & 테스트 자체 검증\n• 4번 /commit: Conventional Git 표준 커밋 & 안전 백업\n• 5번 /design-api: API 명세 & 데이터 모델링 퍼스트 설계',
-    code: '# 번호 또는 슬래시 명령어로 언제든 실행 가능\n/setup-project\n/setup-skill\n/verify\n/commit\n/design-api',
+    desc: `실무 시니어 개발자들이 가장 필수적으로 사용하는 5단계 순차 워크플로우:
+• 1번 /setup-project: UV 파이썬 가상환경 & Git 환경 초기화
+• 2번 /design-api: API 명세 & 데이터 모델링 퍼스트 설계
+• 3번 /setup-skill: 나만의 전용 도구 & 업무 자동화 스킬 제작
+• 4번 /verify: 코드 무결성 & 단위/통합 테스트 자체 검증
+• 5번 /commit: Conventional Git 표준 커밋 & 안전 영구 백업`,
+    code: `# 순서대로 번호 또는 슬래시 명령어로 언제든 실행 가능
+/setup-project  # 1번 (환경 세팅)
+/design-api     # 2번 (설계 퍼스트)
+/setup-skill    # 3번 (전용 도구/스킬)
+/verify         # 4번 (자체 검증)
+/commit         # 5번 (영구 백업)`,
     createdAt: Date.now() - 3600000 * 3
   },
   {
@@ -105,7 +116,9 @@ class TreasureVaultManager {
             // Update default content if matches default IDs
             const idx = parsed.findIndex(p => p.id === defT.id);
             if (idx !== -1 && !parsed[idx].userModified) {
-              parsed[idx] = defT;
+              parsed[idx].title = defT.title;
+              parsed[idx].desc = defT.desc;
+              parsed[idx].code = defT.code;
             }
           }
         });
