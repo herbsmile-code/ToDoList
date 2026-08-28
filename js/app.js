@@ -4605,7 +4605,6 @@
   }
 
   window.calculateFirebaseStorageUsage = calculateFirebaseStorageUsage;
-  }
 
   // =========================================================================
   // 9. Application Bootstrap
