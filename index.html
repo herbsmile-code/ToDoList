@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=7.5">
-  <link rel="stylesheet" href="css/animations.css?v=7.5">
+  <link rel="stylesheet" href="css/style.css?v=7.6">
+  <link rel="stylesheet" href="css/animations.css?v=7.6">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -72,9 +72,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.5)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.6)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v7.5</span>
+          <span>v7.6</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -1268,19 +1268,38 @@
       </div>
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div>
-          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">데이터 백업 (내보내기)</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">작성한 모든 할 일, 끄적끄적 메모, 가계부, 위시리스트 데이터를 JSON 파일로 다운로드합니다.</p>
-          <button type="button" id="btn-export-data" class="btn" style="width: 100%; background: var(--primary-light); color: var(--primary);">
-            💾 JSON 데이터 다운로드
+          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+            <span>☁️</span> <span>데이터 백업 (Firebase 클라우드 & PC)</span>
+          </h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            클릭 시 <strong>Firebase 클라우드에 날짜별 백업본을 생성</strong>하고, 내 컴퓨터에도 JSON 백업 파일을 저장합니다.
+          </p>
+          <button type="button" id="btn-export-data" class="btn btn-primary" style="width: 100%; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+            <span>💾</span> <span>Firebase 클라우드 백업 & PC 다운로드</span>
           </button>
         </div>
 
+        <!-- Firebase Manual Cloud Backups List -->
+        <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.85rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+            <h4 style="font-size: 0.88rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.3rem;">
+              <span>🕒</span> <span>Firebase 클라우드 백업 목록</span>
+            </h4>
+            <button type="button" id="btn-refresh-cloud-backups" class="btn btn-sm" style="padding: 2px 8px; font-size: 0.72rem; background: rgba(0,0,0,0.05);">🔄 새로고침</button>
+          </div>
+          <div id="cloud-backups-list-container" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 180px; overflow-y: auto;">
+            <div style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 0.75rem 0;">
+              Firebase 클라우드 백업 목록을 불러오는 중... ☁️
+            </div>
+          </div>
+        </div>
+
         <div>
-          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">데이터 복원 (가져오기)</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">백업한 JSON 파일을 업로드하여 복원합니다.</p>
+          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">PC 백업 파일 복원 (가져오기)</h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">컴퓨터에 저장해 둔 JSON 백업 파일을 업로드하여 복원합니다.</p>
           <input type="file" id="import-file-input" accept=".json" style="display: none;">
           <button type="button" class="btn" style="width: 100%; background: rgba(0,0,0,0.05); color: var(--text-main);" onclick="document.getElementById('import-file-input').click()">
-            📂 백업 파일 불러오기
+            📂 PC 백업 파일 불러오기
           </button>
         </div>
 
@@ -1471,7 +1490,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=7.5"></script>
-  <script src="js/treasure.js?v=7.5"></script>
+  <script src="js/app.js?v=7.6"></script>
+  <script src="js/treasure.js?v=7.6"></script>
 </body>
 </html>

@@ -726,6 +726,119 @@
     async deleteVaultFile(fileId) {
       store.deleteVaultFile(fileId);
     }
+
+    // --- Manual Cloud Backups (스냅샷 백업) ---
+    async createManualCloudBackup() {
+      if (!this.spaceId || !this.pin) {
+        throw new Error('클라우드 로그인이 필요합니다.');
+      }
+      const key = this.getStorageKey();
+      const vaultFiles = await this.getAllVaultFiles();
+      const timestamp = Date.now();
+      const dateStr = new Date(timestamp).toLocaleString('ko-KR', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+
+      const rawPayload = {
+        tasks: store.tasks || [],
+        categories: store.categories || [],
+        wishlist: store.wishlist || [],
+        photos: store.photos || [],
+        notes: store.notes || [],
+        vaultFiles: vaultFiles,
+        honeymoonData: store.honeymoonData || {},
+        ledgerFiles: store.ledgerFiles || [],
+        createdAt: timestamp,
+        backupName: `${dateStr} 백업`,
+        counts: {
+          tasks: (store.tasks || []).length,
+          notes: (store.notes || []).length,
+          photos: (store.photos || []).length,
+          vault: vaultFiles.length,
+          wishlist: (store.wishlist || []).length,
+          ledger: (store.ledgerFiles || []).length
+        }
+      };
+
+      const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, this.pin);
+      const url = `${this.activeUrl}/manual_backups/${key}/${timestamp}.json`;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(encryptedBody)
+      });
+
+      if (!res.ok) throw new Error('Firebase 백업 저장 실패');
+      return rawPayload;
+    }
+
+    async getManualCloudBackups() {
+      if (!this.spaceId || !this.pin) return [];
+      const key = this.getStorageKey();
+      try {
+        const url = `${this.activeUrl}/manual_backups/${key}.json`;
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const data = await res.json();
+        if (!data || typeof data !== 'object') return [];
+
+        const backups = [];
+        for (const [timestamp, encryptedBody] of Object.entries(data)) {
+          try {
+            const decrypted = await E2EESecurityEngine.decrypt(encryptedBody, this.pin);
+            if (decrypted && typeof decrypted === 'object') {
+              backups.push({
+                id: timestamp,
+                timestamp: Number(timestamp) || decrypted.createdAt || 0,
+                backupName: decrypted.backupName || new Date(Number(timestamp)).toLocaleString('ko-KR'),
+                counts: decrypted.counts || {
+                  tasks: (decrypted.tasks || []).length,
+                  notes: (decrypted.notes || []).length,
+                  photos: (decrypted.photos || []).length,
+                  vault: (decrypted.vaultFiles || []).length
+                }
+              });
+            }
+          } catch (e) {}
+        }
+        return backups.sort((a, b) => b.timestamp - a.timestamp);
+      } catch (e) {
+        console.warn('Failed to fetch cloud backups:', e);
+        return [];
+      }
+    }
+
+    async restoreManualCloudBackup(timestamp) {
+      if (!this.spaceId || !this.pin) throw new Error('로그인이 필요합니다.');
+      const key = this.getStorageKey();
+      const url = `${this.activeUrl}/manual_backups/${key}/${timestamp}.json`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('백업 데이터를 불러오지 못했습니다.');
+      const encryptedBody = await res.json();
+      const data = await E2EESecurityEngine.decrypt(encryptedBody, this.pin);
+
+      if (!data || typeof data !== 'object') throw new Error('올바른 백업 데이터가 아닙니다.');
+
+      if (Array.isArray(data.tasks)) store.tasks = data.tasks;
+      if (Array.isArray(data.categories)) store.categories = data.categories;
+      if (Array.isArray(data.wishlist)) store.wishlist = data.wishlist;
+      if (Array.isArray(data.photos)) store.photos = data.photos;
+      if (Array.isArray(data.notes)) store.notes = data.notes;
+      if (Array.isArray(data.vaultFiles)) store.vaultFiles = data.vaultFiles;
+      if (data.honeymoonData) store.honeymoonData = data.honeymoonData;
+      if (Array.isArray(data.ledgerFiles)) store.ledgerFiles = data.ledgerFiles;
+
+      store.save();
+      await this.pushTasksToCloud(true);
+      return data;
+    }
+
+    async deleteManualCloudBackup(timestamp) {
+      if (!this.spaceId || !this.pin) return;
+      const key = this.getStorageKey();
+      const url = `${this.activeUrl}/manual_backups/${key}/${timestamp}.json`;
+      await fetch(url, { method: 'DELETE' });
+    }
   }
 
   const cloudSync = new CloudSyncManager();
@@ -2737,6 +2850,65 @@
         modal.style.display = 'none';
         modal.classList.remove('active');
       }
+    },
+
+    async renderCloudBackupsList() {
+      const container = document.getElementById('cloud-backups-list-container');
+      if (!container) return;
+
+      if (!cloudSync.spaceId || !cloudSync.pin) {
+        container.innerHTML = `
+          <div style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 0.75rem 0;">
+            🔒 클라우드 로그인 후 백업 목록을 확인할 수 있어요.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 0.75rem 0;">
+          Firebase 클라우드 백업 목록을 불러오는 중... ☁️
+        </div>
+      `;
+
+      try {
+        const backups = await cloudSync.getManualCloudBackups();
+        if (!backups || backups.length === 0) {
+          container.innerHTML = `
+            <div style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 0.75rem 0; line-height: 1.5;">
+              생성된 클라우드 백업이 아직 없어요.<br>위의 <strong>[Firebase 클라우드 백업]</strong> 버튼을 누르면 안전하게 저장됩니다 ✨
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = backups.map(b => `
+          <div class="cloud-backup-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.55rem 0.75rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${b.backupName}
+              </div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
+                📋 일정 ${b.counts.tasks || 0}개 · ✏️ 메모 ${b.counts.notes || 0}개 · 📸 사진 ${b.counts.photos || 0}장
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <button type="button" class="btn btn-sm btn-primary" data-action="restore-cloud-backup" data-id="${b.id}" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700;">
+                복원 🔄
+              </button>
+              <button type="button" class="btn btn-sm" data-action="delete-cloud-backup" data-id="${b.id}" style="padding: 3px 6px; font-size: 0.72rem; background: rgba(0,0,0,0.05); color: var(--text-muted);" title="백업 삭제">
+                🗑️
+              </button>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `
+          <div style="font-size: 0.78rem; color: var(--p-urgent); text-align: center; padding: 0.75rem 0;">
+            백업 목록을 불러오는 중 오류가 발생했습니다.
+          </div>
+        `;
+      }
     }
   };
 
@@ -3315,7 +3487,10 @@
     const settingsBtn = document.getElementById('btn-settings-modal');
     if (settingsBtn) settingsBtn.addEventListener('click', () => {
       const modal = document.getElementById('settings-modal');
-      if (modal) modal.classList.add('active');
+      if (modal) {
+        modal.classList.add('active');
+        UI.renderCloudBackupsList();
+      }
     });
 
     const openFileBtn = document.getElementById('btn-open-file-upload');
@@ -4467,10 +4642,25 @@
       });
     }
 
-    // Settings Data Export & Import & Reset
+    // Settings Data Export (Firebase Cloud Snapshot + PC JSON Download)
     const exportBtn = document.getElementById('btn-export-data');
     if (exportBtn) {
-      exportBtn.addEventListener('click', () => {
+      exportBtn.addEventListener('click', async () => {
+        const origBtnText = exportBtn.innerHTML;
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<span>⏳</span> <span>Firebase 클라우드 백업 중...</span>';
+
+        let cloudSuccess = false;
+        try {
+          if (cloudSync.spaceId && cloudSync.pin) {
+            await cloudSync.createManualCloudBackup();
+            cloudSuccess = true;
+          }
+        } catch (e) {
+          console.warn('Manual cloud backup failed:', e);
+        }
+
+        // Also trigger PC JSON Download
         const jsonStr = JSON.stringify({
           appName: 'Todolist JY',
           tasks: store.tasks,
@@ -4491,7 +4681,73 @@
         a.download = `Todolist_JY_Backup_${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        UI.showToast('백업 파일이 다운로드되었어요! 💾', 'success');
+
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = origBtnText;
+
+        if (cloudSuccess) {
+          try { sounds.playAdd(); } catch (err) {}
+          UI.showToast('Firebase 클라우드 백업 생성 & PC 다운로드 완료! ☁️💾', 'success');
+          UI.renderCloudBackupsList();
+        } else {
+          UI.showToast('PC 백업 파일이 다운로드되었어요! 💾 (클라우드 로그인 시 Firebase에도 저장됩니다)', 'info');
+        }
+      });
+    }
+
+    // Refresh Cloud Backups Button
+    const refreshCloudBackupsBtn = document.getElementById('btn-refresh-cloud-backups');
+    if (refreshCloudBackupsBtn) {
+      refreshCloudBackupsBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        UI.renderCloudBackupsList();
+        UI.showToast('Firebase 백업 목록을 갱신했어요! 🔄', 'info');
+      });
+    }
+
+    // Cloud Backup Restore & Delete Delegation
+    const cloudBackupsContainer = document.getElementById('cloud-backups-list-container');
+    if (cloudBackupsContainer) {
+      cloudBackupsContainer.addEventListener('click', async (e) => {
+        const restoreBtn = e.target.closest('[data-action="restore-cloud-backup"]');
+        if (restoreBtn) {
+          const bId = restoreBtn.dataset.id;
+          if (!bId) return;
+          if (confirm('이 Firebase 백업 시점으로 다이어리 모든 데이터를 복원하시겠습니까? 💖\n(현재 작성된 내용이 백업본 시점으로 변경됩니다)')) {
+            try {
+              restoreBtn.disabled = true;
+              restoreBtn.textContent = '복원 중...';
+              await cloudSync.restoreManualCloudBackup(bId);
+              try { sounds.playAdd(); } catch (err) {}
+              UI.showToast('Firebase 백업에서 성공적으로 복원되었어요! 🎉💖', 'success');
+              UI.renderTasks();
+              const st = document.getElementById('settings-modal');
+              if (st) st.classList.remove('active');
+            } catch (err) {
+              UI.showToast('복원 실패: ' + (err.message || err), 'danger');
+              restoreBtn.disabled = false;
+              restoreBtn.textContent = '복원 🔄';
+            }
+          }
+          return;
+        }
+
+        const deleteBtn = e.target.closest('[data-action="delete-cloud-backup"]');
+        if (deleteBtn) {
+          const bId = deleteBtn.dataset.id;
+          if (!bId) return;
+          if (confirm('이 클라우드 백업본을 삭제하시겠습니까?')) {
+            try {
+              await cloudSync.deleteManualCloudBackup(bId);
+              try { sounds.playDelete(); } catch (err) {}
+              UI.showToast('클라우드 백업이 삭제되었어요.', 'info');
+              UI.renderCloudBackupsList();
+            } catch (err) {
+              UI.showToast('백업 삭제 실패', 'danger');
+            }
+          }
+          return;
+        }
       });
     }
 
