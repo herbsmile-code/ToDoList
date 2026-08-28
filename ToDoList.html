@@ -1272,24 +1272,24 @@
             <span>☁️</span> <span>Firebase 클라우드 백업</span>
           </h4>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-            클릭 시 <strong>Firebase 클라우드 금고에 현재 상태의 백업본을 안전하게 저장</strong>합니다. (PC 파일 다운로드 없이 클라우드에만 깔끔하게 보관됩니다 🔒)
+            클릭 시 <strong>Firebase 클라우드 금고에 현재 상태의 백업본을 덮어써서 안전하게 저장</strong>합니다. (파일 다운로드 없이 깔끔하게 클라우드에만 1개 백업본으로 보관됩니다 🔒)
           </p>
           <button type="button" id="btn-export-data" class="btn btn-primary" style="width: 100%; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
             <span>💾</span> <span>Firebase 클라우드 백업 저장하기 ☁️</span>
           </button>
         </div>
 
-        <!-- Firebase Manual Cloud Backups List -->
+        <!-- Firebase Manual Cloud Backup Status -->
         <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.85rem;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
             <h4 style="font-size: 0.88rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.3rem;">
-              <span>🕒</span> <span>Firebase 클라우드 백업 목록</span>
+              <span>🕒</span> <span>Firebase 클라우드 백업 현황</span>
             </h4>
             <button type="button" id="btn-refresh-cloud-backups" class="btn btn-sm" style="padding: 2px 8px; font-size: 0.72rem; background: rgba(0,0,0,0.05);">🔄 새로고침</button>
           </div>
-          <div id="cloud-backups-list-container" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 180px; overflow-y: auto;">
+          <div id="cloud-backups-list-container" style="display: flex; flex-direction: column; gap: 0.5rem;">
             <div style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 0.75rem 0;">
-              Firebase 클라우드 백업 목록을 불러오는 중... ☁️
+              Firebase 클라우드 백업을 불러오는 중... ☁️
             </div>
           </div>
         </div>
