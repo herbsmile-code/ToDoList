@@ -4642,55 +4642,30 @@
       });
     }
 
-    // Settings Data Export (Firebase Cloud Snapshot + PC JSON Download)
+    // Settings Data Export (Firebase Cloud Snapshot Only)
     const exportBtn = document.getElementById('btn-export-data');
     if (exportBtn) {
       exportBtn.addEventListener('click', async () => {
         const origBtnText = exportBtn.innerHTML;
         exportBtn.disabled = true;
-        exportBtn.innerHTML = '<span>⏳</span> <span>Firebase 클라우드 백업 중...</span>';
+        exportBtn.innerHTML = '<span>⏳</span> <span>Firebase 클라우드 백업 저장 중...</span>';
 
-        let cloudSuccess = false;
         try {
           if (cloudSync.spaceId && cloudSync.pin) {
             await cloudSync.createManualCloudBackup();
-            cloudSuccess = true;
+            try { sounds.playAdd(); } catch (err) {}
+            UI.showToast('Firebase 클라우드 백업이 안전하게 저장되었어요! ☁️✨', 'success');
+            UI.renderCloudBackupsList();
+          } else {
+            UI.showToast('클라우드 동기화 로그인(스페이스 ID & PIN) 후 백업할 수 있어요 🔐', 'info');
+            UI.openCloudModal();
           }
         } catch (e) {
-          console.warn('Manual cloud backup failed:', e);
-        }
-
-        // Also trigger PC JSON Download
-        const jsonStr = JSON.stringify({
-          appName: 'Todolist JY',
-          tasks: store.tasks,
-          categories: store.categories,
-          wishlist: store.wishlist,
-          photos: store.photos,
-          notes: store.notes,
-          vaultFiles: store.vaultFiles || [],
-          honeymoonData: store.honeymoonData,
-          ledgerFiles: store.ledgerFiles,
-          exportedAt: new Date().toISOString()
-        }, null, 2);
-
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Todolist_JY_Backup_${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-
-        exportBtn.disabled = false;
-        exportBtn.innerHTML = origBtnText;
-
-        if (cloudSuccess) {
-          try { sounds.playAdd(); } catch (err) {}
-          UI.showToast('Firebase 클라우드 백업 생성 & PC 다운로드 완료! ☁️💾', 'success');
-          UI.renderCloudBackupsList();
-        } else {
-          UI.showToast('PC 백업 파일이 다운로드되었어요! 💾 (클라우드 로그인 시 Firebase에도 저장됩니다)', 'info');
+          console.error('Manual cloud backup failed:', e);
+          UI.showToast('클라우드 백업 저장 실패: ' + (e.message || e), 'danger');
+        } finally {
+          exportBtn.disabled = false;
+          exportBtn.innerHTML = origBtnText;
         }
       });
     }

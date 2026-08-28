@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=7.6">
-  <link rel="stylesheet" href="css/animations.css?v=7.6">
+  <link rel="stylesheet" href="css/style.css?v=7.7">
+  <link rel="stylesheet" href="css/animations.css?v=7.7">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -72,9 +72,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.6)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.7)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v7.6</span>
+          <span>v7.7</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -1269,13 +1269,13 @@
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div>
           <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
-            <span>☁️</span> <span>데이터 백업 (Firebase 클라우드 & PC)</span>
+            <span>☁️</span> <span>Firebase 클라우드 백업</span>
           </h4>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-            클릭 시 <strong>Firebase 클라우드에 날짜별 백업본을 생성</strong>하고, 내 컴퓨터에도 JSON 백업 파일을 저장합니다.
+            클릭 시 <strong>Firebase 클라우드 금고에 현재 상태의 백업본을 안전하게 저장</strong>합니다. (PC 파일 다운로드 없이 클라우드에만 깔끔하게 보관됩니다 🔒)
           </p>
           <button type="button" id="btn-export-data" class="btn btn-primary" style="width: 100%; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
-            <span>💾</span> <span>Firebase 클라우드 백업 & PC 다운로드</span>
+            <span>💾</span> <span>Firebase 클라우드 백업 저장하기 ☁️</span>
           </button>
         </div>
 
@@ -1490,7 +1490,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=7.6"></script>
-  <script src="js/treasure.js?v=7.6"></script>
+  <script src="js/app.js?v=7.7"></script>
+  <script src="js/treasure.js?v=7.7"></script>
 </body>
 </html>
