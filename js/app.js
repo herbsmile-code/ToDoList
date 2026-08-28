@@ -4556,18 +4556,35 @@
     // Firebase Realtime Database Free Spark Plan Quota: 1 GB = 1,073,741,824 Bytes
     const MAX_FIREBASE_SPARK_BYTES = 1024 * 1024 * 1024;
 
-    const tasksSize = new Blob([JSON.stringify(store.tasks || [])]).size;
-    const notesSize = new Blob([JSON.stringify(store.notes || [])]).size;
-    const wishlistSize = new Blob([JSON.stringify(store.wishlist || [])]).size;
-    const photosSize = new Blob([JSON.stringify(store.photos || [])]).size;
-    const ledgerSize = new Blob([JSON.stringify({ data: store.honeymoonData || {}, files: store.ledgerFiles || [] })]).size;
-    const vaultSize = new Blob([JSON.stringify(store.vaultFiles || [])]).size;
-    const categoriesSize = new Blob([JSON.stringify(store.categories || [])]).size;
+    function getByteLen(obj) {
+      if (!obj) return 0;
+      try {
+        const str = (typeof obj === 'string') ? obj : JSON.stringify(obj);
+        if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str).length;
+        if (typeof Blob !== 'undefined') return new Blob([str]).size;
+        return encodeURIComponent(str).replace(/%[A-F\d]{2}/g, 'U').length;
+      } catch (e) {
+        try {
+          const str = (typeof obj === 'string') ? obj : JSON.stringify(obj);
+          return str.length;
+        } catch (e2) {
+          return 0;
+        }
+      }
+    }
+
+    const tasksSize = getByteLen(store.tasks || []);
+    const notesSize = getByteLen(store.notes || []);
+    const wishlistSize = getByteLen(store.wishlist || []);
+    const photosSize = getByteLen(store.photos || []);
+    const ledgerSize = getByteLen({ data: store.honeymoonData || {}, files: store.ledgerFiles || [] });
+    const vaultSize = getByteLen(store.vaultFiles || []);
+    const categoriesSize = getByteLen(store.categories || []);
 
     let treasureSize = 0;
     try {
       const rawT = localStorage.getItem('zentask_treasures');
-      if (rawT) treasureSize = new Blob([rawT]).size;
+      if (rawT) treasureSize = getByteLen(rawT);
     } catch (e) {}
 
     const totalUsedBytes = tasksSize + notesSize + wishlistSize + photosSize + ledgerSize + vaultSize + categoriesSize + treasureSize;

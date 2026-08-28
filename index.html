@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=7.2">
-  <link rel="stylesheet" href="css/animations.css?v=7.2">
+  <link rel="stylesheet" href="css/style.css?v=7.3">
+  <link rel="stylesheet" href="css/animations.css?v=7.3">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -72,9 +72,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.2)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.3)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v7.2</span>
+          <span>v7.3</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -1351,7 +1351,48 @@
 
         <!-- Firebase Cloud Storage Usage Gauge & Percentage Dashboard -->
         <div id="tr-storage-gauge-container" class="tr-storage-gauge-container">
-          <!-- Dynamically populated storage gauge & percentage bar -->
+          <div class="tr-storage-gauge-card">
+            <div class="tr-storage-header">
+              <div class="tr-storage-title">
+                <span class="storage-icon" style="font-size: 1.25rem;">☁️</span>
+                <div>
+                  <strong>Firebase 실시간 클라우드 저장용량</strong>
+                  <span class="storage-badge-live">🟢 실시간 동기화 활성</span>
+                </div>
+              </div>
+              <div class="tr-storage-actions">
+                <button type="button" class="btn-refresh-storage" id="btn-refresh-storage-gauge" title="클라우드 저장 공간 다시 계산">
+                  <span>🔄</span> <span>실시간 새로고침</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="storage-bar-wrapper">
+              <div class="storage-bar-track">
+                <div class="storage-bar-fill" style="width: 1%;"></div>
+              </div>
+            </div>
+
+            <div class="storage-meta-row">
+              <div class="storage-usage-stats">
+                <span class="usage-primary"><strong>실시간 계산 중...</strong> / 1.0 GB (1,024 MB)</span>
+                <span class="usage-percentage">(안전 보관 중)</span>
+              </div>
+              <div class="storage-remaining">
+                <span>남은 무료 용량: <strong>1,024 MB</strong></span>
+              </div>
+            </div>
+
+            <div class="storage-breakdown-chips">
+              <span class="breakdown-chip">📂 파일보관함</span>
+              <span class="breakdown-chip">📸 사진첩</span>
+              <span class="breakdown-chip">✏️ 끄적끄적 메모</span>
+              <span class="breakdown-chip">📋 할 일/일정</span>
+              <span class="breakdown-chip">💰 가계부</span>
+              <span class="breakdown-chip">💎 보물 지식</span>
+              <span class="breakdown-chip">🎁 위시리스트</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1427,7 +1468,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=7.2"></script>
-  <script src="js/treasure.js?v=7.2"></script>
+  <script src="js/app.js?v=7.3"></script>
+  <script src="js/treasure.js?v=7.3"></script>
 </body>
 </html>

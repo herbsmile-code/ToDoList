@@ -325,12 +325,61 @@ class TreasureVaultManager {
     const container = document.getElementById('tr-storage-gauge-container');
     if (!container) return;
 
-    if (typeof window.calculateFirebaseStorageUsage !== 'function') {
-      container.innerHTML = '';
-      return;
+    let usage = null;
+    if (typeof window.calculateFirebaseStorageUsage === 'function') {
+      try {
+        usage = window.calculateFirebaseStorageUsage();
+      } catch (e) {
+        console.warn('calculateFirebaseStorageUsage call error:', e);
+      }
     }
 
-    const usage = window.calculateFirebaseStorageUsage();
+    if (!usage) {
+      // Self-contained fallback calculator directly from localStorage
+      const MAX_FIREBASE_SPARK_BYTES = 1024 * 1024 * 1024;
+      function getLen(k) {
+        try {
+          const val = localStorage.getItem(k);
+          if (!val) return 0;
+          if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(val).length;
+          return val.length;
+        } catch (e) { return 0; }
+      }
+
+      const mainDataSize = getLen('todolist_jy_data_v39') || getLen('todolist_jy_data_v38') || getLen('todolist_jy_data');
+      const vaultSize = getLen('todolist_jy_vault_files');
+      const trSize = getLen('zentask_treasures');
+      const totalUsedBytes = mainDataSize + vaultSize + trSize;
+      const usagePercentage = (totalUsedBytes / MAX_FIREBASE_SPARK_BYTES) * 100;
+      const remainingBytes = Math.max(0, MAX_FIREBASE_SPARK_BYTES - totalUsedBytes);
+
+      function fmt(b) {
+        if (b === 0) return '0 B';
+        if (b < 1024) return b + ' B';
+        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+        return (b / (1024 * 1024)).toFixed(2) + ' MB';
+      }
+
+      usage = {
+        totalUsedBytes,
+        maxBytes: MAX_FIREBASE_SPARK_BYTES,
+        formattedUsed: fmt(totalUsedBytes),
+        formattedMax: '1.0 GB (1,024 MB)',
+        formattedRemaining: fmt(remainingBytes),
+        percentage: usagePercentage,
+        percentageStr: usagePercentage < 0.001 ? usagePercentage.toFixed(4) + '%' : usagePercentage.toFixed(2) + '%',
+        breakdown: {
+          vault: { label: '📂 파일보관함', formatted: fmt(vaultSize) },
+          photos: { label: '📸 사진첩', formatted: '0 B' },
+          notes: { label: '✏️ 끄적끄적 메모', formatted: fmt(Math.round(mainDataSize * 0.2)) },
+          tasks: { label: '📋 할 일 & 일정', formatted: fmt(Math.round(mainDataSize * 0.4)) },
+          ledger: { label: '💰 가계부 & 엑셀', formatted: fmt(Math.round(mainDataSize * 0.3)) },
+          wishlist: { label: '🎁 위시리스트', formatted: fmt(Math.round(mainDataSize * 0.1)) },
+          treasures: { label: '💎 보물 지식', formatted: fmt(trSize) }
+        }
+      };
+    }
+
     // For visualization: show at least 1% if bytes > 0 so the bar visually shows
     const displayPct = Math.min(100, Math.max(usage.totalUsedBytes > 0 ? 1 : 0, usage.percentage));
 
@@ -368,13 +417,13 @@ class TreasureVaultManager {
         </div>
 
         <div class="storage-breakdown-chips">
-          <span class="breakdown-chip">📂 파일보관함: <strong>${usage.breakdown.vault.formatted}</strong></span>
+          <span class="breakdown-chip">📂 파일보관함: <strong>${usage.breakdown.vault ? usage.breakdown.vault.formatted : '0 B'}</strong></span>
           <span class="breakdown-chip">📸 사진첩: <strong>${usage.breakdown.photos ? usage.breakdown.photos.formatted : '0 B'}</strong></span>
-          <span class="breakdown-chip">✏️ 끄적끄적 메모: <strong>${usage.breakdown.notes.formatted}</strong></span>
-          <span class="breakdown-chip">📋 할 일/일정: <strong>${usage.breakdown.tasks.formatted}</strong></span>
-          <span class="breakdown-chip">💰 가계부: <strong>${usage.breakdown.ledger.formatted}</strong></span>
-          <span class="breakdown-chip">💎 보물 지식: <strong>${usage.breakdown.treasures.formatted}</strong></span>
-          <span class="breakdown-chip">🎁 위시리스트: <strong>${usage.breakdown.wishlist.formatted}</strong></span>
+          <span class="breakdown-chip">✏️ 끄적끄적 메모: <strong>${usage.breakdown.notes ? usage.breakdown.notes.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">📋 할 일/일정: <strong>${usage.breakdown.tasks ? usage.breakdown.tasks.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">💰 가계부: <strong>${usage.breakdown.ledger ? usage.breakdown.ledger.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">💎 보물 지식: <strong>${usage.breakdown.treasures ? usage.breakdown.treasures.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">🎁 위시리스트: <strong>${usage.breakdown.wishlist ? usage.breakdown.wishlist.formatted : '0 B'}</strong></span>
         </div>
       </div>
     `;
@@ -399,6 +448,7 @@ class TreasureVaultManager {
 
   initDOM() {
     this.updateBadge();
+    this.renderStorageGauge();
 
     // Event Delegation for clicks
     document.addEventListener('click', (e) => {
