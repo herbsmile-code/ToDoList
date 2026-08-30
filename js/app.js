@@ -1571,11 +1571,11 @@
           const count = store.tasks.filter(t => t.category === cat.id).length;
           const isActive = store.activeFilter === cat.id ? 'active' : '';
           return `
-            <li class="nav-item category-drag-item ${isActive}" data-cat-id="${cat.id}" data-filter="${cat.id}" onclick="window.selectCategoryFilter('${cat.id}', event)">
+            <li class="nav-item category-drag-item ${isActive}" data-cat-id="${cat.id}" data-filter="${cat.id}" draggable="false">
               <div class="nav-item-left">
-                <span class="category-drag-handle" draggable="true" title="위아래로 드래그하여 순서 변경" onclick="event.stopPropagation()">⋮⋮</span>
+                <span class="category-drag-handle" title="위아래로 드래그하여 순서 변경">⋮⋮</span>
                 <span class="category-dot" style="background-color: ${cat.color}; color: ${cat.color};"></span>
-                <span>${cat.name}</span>
+                <span class="category-title-text">${cat.name}</span>
               </div>
               <span class="nav-count">${count}</span>
             </li>
@@ -3582,70 +3582,46 @@
       });
     }
 
-    // Sidebar & Mobile Nav Filter Delegation (with drag suppression)
+    // Sidebar & Mobile Nav Filter Event Delegation
+    let isDraggingCategory = false;
     let suppressNavClickUntil = 0;
 
-    document.addEventListener('click', (e) => {
-      if (Date.now() < suppressNavClickUntil) return;
-
-      const navItem = e.target.closest('.nav-item');
-      if (navItem && navItem.dataset.filter) {
-        const newFilter = navItem.dataset.filter;
-        window.selectCategoryFilter(newFilter);
-        return;
-      }
-
-      const mobileNavBtn = e.target.closest('.mobile-nav-btn');
-      if (mobileNavBtn && mobileNavBtn.dataset.mobileNav) {
-        const newFilter = mobileNavBtn.dataset.mobileNav;
-        window.selectCategoryFilter(newFilter);
-        return;
-      }
-
-      const mobilePill = e.target.closest('.mobile-cat-pill');
-      if (mobilePill && mobilePill.dataset.filter) {
-        const newFilter = mobilePill.dataset.filter;
-        window.selectCategoryFilter(newFilter);
-        return;
-      }
-
-      // Ledger Month Tab Click
-      const lMonthTab = e.target.closest('.l-m-tab');
-      if (lMonthTab && lMonthTab.dataset.lMonth) {
-        store.selectedLedgerMonth = Number(lMonthTab.dataset.lMonth);
-        UI.renderLedger();
-      }
-
-      // Ledger Bar Column Click
-      const lBarCol = e.target.closest('.ledger-bar-col');
-      if (lBarCol && lBarCol.dataset.lMonth) {
-        store.selectedLedgerMonth = Number(lBarCol.dataset.lMonth);
-        UI.renderLedger();
-      }
-
-      // Standard Template Download Button Click
-      if (e.target.closest('#btn-download-ledger-template') || e.target.closest('[data-action="download-template"]')) {
-        downloadStandardHoneymoonExcelTemplate();
-      }
-
-      // Cloud Sync Button Click Delegation
-      if (e.target.closest('#btn-cloud-status') || e.target.closest('#btn-locked-login') || e.target.closest('[data-action="open-cloud"]')) {
-        e.preventDefault();
-        UI.openCloudModal();
-      }
-    });
-
-    // Category Drag & Drop Reordering (카테고리 드래그 순서 변경 - 데스크톱 & 모바일 터치 지원)
+    // 1. Direct Category Navigation List Handler
     const catNavList = document.getElementById('category-nav-list');
     if (catNavList) {
       let draggedCatId = null;
       let touchTargetItem = null;
+      let touchStartY = 0;
       let touchMoved = false;
 
-      // 1. Desktop Mouse Drag & Drop (Only when dragging handle or item)
+      // Click on Category Item
+      catNavList.addEventListener('click', (e) => {
+        if (Date.now() < suppressNavClickUntil) return;
+        if (isDraggingCategory) return;
+        if (e.target.closest('.category-drag-handle')) return;
+        const item = e.target.closest('.category-drag-item');
+        if (item && item.dataset.filter) {
+          window.selectCategoryFilter(item.dataset.filter);
+        }
+      });
+
+      // Desktop: Enable draggable only when pressing down on the handle icon (⋮⋮)
+      catNavList.addEventListener('mousedown', (e) => {
+        const handle = e.target.closest('.category-drag-handle');
+        const item = e.target.closest('.category-drag-item');
+        if (handle && item) {
+          item.setAttribute('draggable', 'true');
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        document.querySelectorAll('.category-drag-item').forEach(el => el.setAttribute('draggable', 'false'));
+      });
+
       catNavList.addEventListener('dragstart', (e) => {
         const item = e.target.closest('.category-drag-item');
         if (!item) return;
+        isDraggingCategory = true;
         draggedCatId = item.dataset.catId;
         item.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
@@ -3654,8 +3630,15 @@
 
       catNavList.addEventListener('dragend', (e) => {
         const item = e.target.closest('.category-drag-item');
-        if (item) item.classList.remove('dragging');
-        document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+        if (item) {
+          item.classList.remove('dragging');
+          item.setAttribute('draggable', 'false');
+        }
+        document.querySelectorAll('.category-drag-item').forEach(el => {
+          el.classList.remove('drag-over-top', 'drag-over-bottom');
+          el.setAttribute('draggable', 'false');
+        });
+        setTimeout(() => { isDraggingCategory = false; }, 100);
       });
 
       catNavList.addEventListener('dragover', (e) => {
@@ -3703,10 +3686,13 @@
           UI.showToast('카테고리 순서가 변경되었어요! 🏷️✨', 'info');
         }
         draggedCatId = null;
-        document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+        document.querySelectorAll('.category-drag-item').forEach(el => {
+          el.classList.remove('drag-over-top', 'drag-over-bottom');
+          el.setAttribute('draggable', 'false');
+        });
       });
 
-      // 2. Mobile Touch Drag & Drop (Only when touching the handle icon ⋮⋮)
+      // 2. Mobile Touch Drag & Drop (Only when dragging handle icon)
       catNavList.addEventListener('touchstart', (e) => {
         const handle = e.target.closest('.category-drag-handle');
         if (!handle) {
@@ -3718,14 +3704,17 @@
         const item = e.target.closest('.category-drag-item');
         if (!item) return;
         draggedCatId = item.dataset.catId;
+        touchStartY = e.touches[0].clientY;
         touchMoved = false;
         item.classList.add('touch-dragging');
       }, { passive: true });
 
       catNavList.addEventListener('touchmove', (e) => {
         if (!draggedCatId) return;
-        touchMoved = true;
         const touch = e.touches[0];
+        if (Math.abs(touch.clientY - touchStartY) > 6) {
+          touchMoved = true;
+        }
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
         if (!target) return;
         const overItem = target.closest('.category-drag-item');
@@ -3766,6 +3755,58 @@
         document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('touch-dragging', 'drag-over-top', 'drag-over-bottom'));
       });
     }
+
+    // 2. Global Click Delegation for other menus
+    document.addEventListener('click', (e) => {
+      if (Date.now() < suppressNavClickUntil) return;
+      if (isDraggingCategory) return;
+
+      const navItem = e.target.closest('.nav-item');
+      if (navItem && navItem.dataset.filter && !navItem.closest('#category-nav-list')) {
+        const newFilter = navItem.dataset.filter;
+        window.selectCategoryFilter(newFilter);
+        return;
+      }
+
+      const mobileNavBtn = e.target.closest('.mobile-nav-btn');
+      if (mobileNavBtn && mobileNavBtn.dataset.mobileNav) {
+        const newFilter = mobileNavBtn.dataset.mobileNav;
+        window.selectCategoryFilter(newFilter);
+        return;
+      }
+
+      const mobilePill = e.target.closest('.mobile-cat-pill');
+      if (mobilePill && mobilePill.dataset.filter) {
+        const newFilter = mobilePill.dataset.filter;
+        window.selectCategoryFilter(newFilter);
+        return;
+      }
+
+      // Ledger Month Tab Click
+      const lMonthTab = e.target.closest('.l-m-tab');
+      if (lMonthTab && lMonthTab.dataset.lMonth) {
+        store.selectedLedgerMonth = Number(lMonthTab.dataset.lMonth);
+        UI.renderLedger();
+      }
+
+      // Ledger Bar Column Click
+      const lBarCol = e.target.closest('.ledger-bar-col');
+      if (lBarCol && lBarCol.dataset.lMonth) {
+        store.selectedLedgerMonth = Number(lBarCol.dataset.lMonth);
+        UI.renderLedger();
+      }
+
+      // Standard Template Download Button Click
+      if (e.target.closest('#btn-download-ledger-template') || e.target.closest('[data-action="download-template"]')) {
+        downloadStandardHoneymoonExcelTemplate();
+      }
+
+      // Cloud Sync Button Click Delegation
+      if (e.target.closest('#btn-cloud-status') || e.target.closest('#btn-locked-login') || e.target.closest('[data-action="open-cloud"]')) {
+        e.preventDefault();
+        UI.openCloudModal();
+      }
+    });
 
     // Modal Delete Button Listener (일정 수정 모달 내 삭제)
     const modalDeleteBtn = document.getElementById('btn-modal-delete-task');
