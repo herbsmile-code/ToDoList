@@ -913,20 +913,15 @@
                 }
                 if (Array.isArray(data.vaultFiles)) {
                   const localVault = await this.getAllVaultFiles();
-                  // Smart Merge: Preserve local dataUrl if cloud copy is lightweight metadata
+                  // Clean Smart Merge: Preserve local dataUrl if cloud copy is lightweight metadata
                   const mergedFiles = data.vaultFiles.map(cloudF => {
-                    const localMatch = localVault.find(l => l.id === cloudF.id);
+                    const localMatch = localVault.find(l => l && l.id === cloudF.id);
                     if (localMatch && localMatch.dataUrl && !cloudF.dataUrl) {
                       return Object.assign({}, cloudF, { dataUrl: localMatch.dataUrl });
                     }
                     return cloudF;
                   });
-                  // Also retain any local files created recently
-                  localVault.forEach(l => {
-                    if (!mergedFiles.some(m => m.id === l.id)) {
-                      mergedFiles.push(l);
-                    }
-                  });
+                  // Save strictly the synchronized list (deleted items in cloud are safely pruned locally)
                   await this.saveVaultFiles(mergedFiles);
                   try { UI.renderFilesVault(); } catch (e) {}
                 }
@@ -1130,8 +1125,22 @@
     async deleteVaultFile(fileId) {
       try {
         await VaultDBEngine.delete(fileId);
-        await this.getAllVaultFiles();
-        await this.pushTasksToCloud();
+        // Clean localStorage backups immediately
+        try {
+          const raw = localStorage.getItem('todolist_jy_vault_files');
+          if (raw) {
+            const list = JSON.parse(raw).filter(f => f && f.id !== fileId);
+            localStorage.setItem('todolist_jy_vault_files', JSON.stringify(list));
+          }
+          const rawMeta = localStorage.getItem('todolist_jy_vault_meta');
+          if (rawMeta) {
+            const mList = JSON.parse(rawMeta).filter(f => f && f.id !== fileId);
+            localStorage.setItem('todolist_jy_vault_meta', JSON.stringify(mList));
+          }
+        } catch (e) {}
+
+        this.lastSyncedUpdatedAt = Date.now();
+        await this.pushTasksToCloud(true);
       } catch (e) {
         console.error('deleteVaultFile error:', e);
       }
@@ -1204,6 +1213,7 @@
         return new Promise((resolve, reject) => {
           const tx = db.transaction(this.storeName, 'readwrite');
           const store = tx.objectStore(this.storeName);
+          store.clear(); // Clear existing objects so deletions are truly persisted!
           (files || []).forEach(file => {
             if (file && file.id) store.put(file);
           });
@@ -1561,15 +1571,16 @@
           healthFolders: this.healthFolders,
           hobbyNotes: this.hobbyNotes,
           hobbyFolders: this.hobbyFolders,
+          projects: this.projects,
           updatedAt: Date.now()
         }));
         localStorage.setItem(STREAK_KEY, JSON.stringify(this.streak));
       } catch (e) {}
     }
 
-    save() {
+    save(immediate = false) {
       this.saveLocalOnly();
-      cloudSync.pushTasksToCloud();
+      cloudSync.pushTasksToCloud(immediate);
     }
 
     // --- Task Methods ---
@@ -1633,7 +1644,7 @@
       const idx = this.tasks.findIndex(t => t.id === id);
       if (idx === -1) return false;
       this.tasks.splice(idx, 1);
-      this.save();
+      this.save(true);
       return true;
     }
 
@@ -1666,7 +1677,7 @@
       const idx = this.photos.findIndex(p => p.id === id);
       if (idx === -1) return false;
       this.photos.splice(idx, 1);
-      this.save();
+      this.save(true);
       return true;
     }
 
@@ -1692,10 +1703,11 @@
     }
 
     deleteNote(id) {
-      const idx = this.notes.findIndex(n => n.id === id);
+      const targetId = String(id || '').trim();
+      const idx = this.notes.findIndex(n => n && String(n.id).trim() === targetId);
       if (idx === -1) return false;
       this.notes.splice(idx, 1);
-      this.save();
+      this.save(true);
       return true;
     }
 
@@ -1720,7 +1732,7 @@
       const idx = this.ledgerFiles.findIndex(f => f.id === fileId);
       if (idx === -1) return false;
       this.ledgerFiles.splice(idx, 1);
-      this.save();
+      this.save(true);
       return true;
     }
 
@@ -1766,7 +1778,7 @@
       const idx = this.wishlist.findIndex(w => w.id === id);
       if (idx === -1) return false;
       this.wishlist.splice(idx, 1);
-      this.save();
+      this.save(true);
       return true;
     }
 
@@ -1779,14 +1791,13 @@
 
       const newVacation = {
         id: 'vacation-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        type: type, // 'full' (1.0) | 'half-am' (0.5) | 'half-pm' (0.5) | 'holiday' (0.0)
+        type: type,
         amount: amount,
         date: data.date || getRealTodayStr(),
         reason: (data.reason || '').trim(),
         createdAt: Date.now()
       };
       this.vacations.unshift(newVacation);
-      // Sort by date descending
       this.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
       this.save();
       return newVacation;
@@ -1796,13 +1807,13 @@
       const idx = this.vacations.findIndex(v => v.id === id);
       if (idx === -1) return false;
       this.vacations.splice(idx, 1);
-      this.save();
+      this.save(true);
       return true;
     }
 
     setTotalVacationDays(days) {
       this.totalVacationDays = Math.max(0, Number(days) || 0);
-      this.save();
+      this.save(true);
       return this.totalVacationDays;
     }
 
@@ -1813,7 +1824,7 @@
       this.vacations.forEach(v => {
         if (v.type === 'holiday' || v.amount === 0) {
           holidayCount += 1;
-          return; // 휴가는 연차수 차감 제외 (0일)
+          return;
         }
         used += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
       });
@@ -1859,7 +1870,7 @@
       const idx = this.sites.findIndex(s => s.id === id);
       if (idx === -1) return false;
       this.sites.splice(idx, 1);
-      this.save();
+      this.save(true);
       return true;
     }
 
@@ -7278,16 +7289,21 @@
 
       // 12. File Vault Delete
       if (target.closest('[data-action="delete-file"]')) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
         const btn = target.closest('[data-action="delete-file"]');
-        const fileId = btn.dataset.fileId;
-        if (confirm('정말 삭제하시겠습니까?')) {
+        const fileId = btn.dataset.fileId || (btn.closest('.file-card') ? btn.closest('.file-card').dataset.fileId : '');
+        if (!fileId) return;
+
+        if (confirm('정말 이 파일을 보관함에서 삭제하시겠습니까?')) {
           cloudSync.deleteVaultFile(fileId).then(() => {
             sounds.playDelete();
-            UI.showToast('파일이 삭제되었어요', 'danger');
+            UI.showToast('파일이 보관함에서 안전하게 삭제되었어요 🗑️', 'danger');
             UI.renderFilesVault();
             UI.renderSidebar();
           });
         }
+        return;
       }
 
       // 13. Vacation Manager Action Triggers
