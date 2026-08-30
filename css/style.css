@@ -5183,4 +5183,278 @@ body::after {
   transform: scale(1.2);
 }
 
+/* =========================================================================
+   🎨 취미활동 (Hobby & Activity Journal) Styles
+   ========================================================================= */
+#hobby-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  width: 100%;
+}
+
+.hobby-folders-bar {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding: 0.4rem 0.2rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.hobby-folder-tab {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.45rem 0.95rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  position: relative;
+  padding-right: 0.65rem;
+}
+
+.hobby-folder-tab:hover {
+  border-color: #ff9f43;
+  color: #ff9f43;
+  background: rgba(255, 159, 67, 0.08);
+}
+
+.hobby-folder-tab.active {
+  background: linear-gradient(135deg, #ff9f43, #ff6b8b);
+  color: #fff;
+  border-color: #ff9f43;
+  font-weight: 800;
+  box-shadow: 0 2px 10px rgba(255, 159, 67, 0.3);
+}
+
+.hobby-folder-edit-btn {
+  font-size: 0.72rem;
+  opacity: 0.65;
+  margin-left: 0.25rem;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hobby-folder-tab.active .hobby-folder-edit-btn {
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  opacity: 0.9;
+}
+
+.hobby-folder-edit-btn:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+.hobby-notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1.4rem;
+  padding-bottom: 3rem;
+}
+
+@media (max-width: 768px) {
+  .hobby-notes-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+.hobby-note-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.4rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 220px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.hobby-note-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 159, 67, 0.4);
+  box-shadow: 0 10px 26px rgba(255, 159, 67, 0.12);
+}
+
+.hobby-note-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.hobby-note-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.hobby-folder-badge {
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(255, 159, 67, 0.12);
+  color: #e67e22;
+  border: 1px solid rgba(255, 159, 67, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hobby-note-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.hobby-note-submeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.hobby-duration-chip {
+  background: rgba(255, 159, 67, 0.12);
+  color: #d35400;
+  font-weight: 800;
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 159, 67, 0.25);
+}
+
+.hobby-note-body {
+  font-size: 0.94rem;
+  color: var(--text-main);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
+  background: rgba(0, 0, 0, 0.015);
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .hobby-note-body {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.hobby-note-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* Hobby Emoji Picker Grid */
+.hobby-emoji-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.35rem;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.6rem;
+  max-height: 155px;
+  overflow-y: auto;
+}
+
+[data-theme="dark"] .hobby-emoji-picker-grid {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.hobby-emoji-option-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1.25rem;
+  padding: 0.35rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.hobby-emoji-option-btn:hover {
+  transform: scale(1.15);
+  border-color: #ff9f43;
+  background: rgba(255, 159, 67, 0.1);
+}
+
+.hobby-emoji-option-btn.selected {
+  border-color: #ff9f43;
+  background: rgba(255, 159, 67, 0.2);
+  box-shadow: 0 0 0 2px #ff9f43;
+  transform: scale(1.08);
+}
+
+/* Checkup File Badge & Download Button in Health Card */
+.health-file-badge-card {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(5, 150, 105, 0.05));
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  gap: 0.5rem;
+}
+
+.health-file-info-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  overflow: hidden;
+}
+
+.health-file-name {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #059669;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.health-file-memo-text {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 

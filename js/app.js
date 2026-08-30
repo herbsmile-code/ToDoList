@@ -123,6 +123,7 @@
     { id: 'obgyn', name: '산부인과', icon: '🤰' },
     { id: 'dental', name: '치아', icon: '🦷' },
     { id: 'surgery', name: '수술계획', icon: '🏥' },
+    { id: 'checkup', name: '건강검진', icon: '🩺' },
     { id: 'general', name: '일반/기타', icon: '💊' }
   ];
 
@@ -130,6 +131,21 @@
     '🩺', '🏥', '🤰', '🦷', '💊', '🩹', '💉', '🩸',
     '👁️', '👂', '🧠', '🫀', '🫁', '🦴', '🧴', '🧘',
     '🏃', '🥗', '🍎', '🍵', '🛌', '💖', '⭐', '📁'
+  ];
+
+  const DEFAULT_HOBBY_FOLDERS = [
+    { id: 'all', name: '전체보기', icon: '🎨' },
+    { id: 'workout', name: '운동', icon: '🏃' },
+    { id: 'piano', name: '피아노', icon: '🎹' },
+    { id: 'drawing', name: '그림', icon: '🎨' },
+    { id: 'reading', name: '독서', icon: '📚' },
+    { id: 'general', name: '기타취미', icon: '✨' }
+  ];
+
+  const HOBBY_EMOJI_LIST = [
+    '🏃', '🏋️', '🧘', '🏊', '🚴', '🧗', '🎹', '🎸',
+    '🎻', '🥁', '🎨', '🖌️', '📚', '✍️', '🍳', '☕',
+    '🪴', '📷', '🎮', '🧩', '🎬', '🏕️', '🧶', '✨'
   ];
 
   // =========================================================================
@@ -747,11 +763,23 @@
                 if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations);
                 if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
                 if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
+                if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
                 if (data.healthNotes !== undefined) store.healthNotes = normalizeArray(data.healthNotes);
                 if (data.healthFolders !== undefined && Array.isArray(data.healthFolders)) store.healthFolders = data.healthFolders;
+                if (data.hobbyNotes !== undefined) store.hobbyNotes = normalizeArray(data.hobbyNotes);
+                if (data.hobbyFolders !== undefined && Array.isArray(data.hobbyFolders)) store.hobbyFolders = data.hobbyFolders;
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
-                  const defaultOrder = ['personal', 'work', 'divider-1', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+                  const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
                   let order = data.sidebarMenuOrder.slice();
+                  if (!order.includes('hobby')) {
+                    const healthIdx = order.indexOf('health');
+                    if (healthIdx !== -1) order.splice(healthIdx, 0, 'hobby');
+                    else {
+                      const vacIdx = order.indexOf('vacation');
+                      if (vacIdx !== -1) order.splice(vacIdx, 0, 'hobby');
+                      else order.push('hobby');
+                    }
+                  }
                   if (!order.includes('health')) {
                     const vacIdx = order.indexOf('vacation');
                     if (vacIdx !== -1) order.splice(vacIdx, 0, 'health');
@@ -830,6 +858,8 @@
         sites: store.sites,
         healthNotes: store.healthNotes,
         healthFolders: store.healthFolders,
+        hobbyNotes: store.hobbyNotes,
+        hobbyFolders: store.hobbyFolders,
         updatedAt: Date.now()
       };
 
@@ -1076,6 +1106,8 @@
       const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
       const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
       const userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS;
+      const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
+      const userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS;
       const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
 
       const combinedTasks = userTasks.filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
@@ -1121,9 +1153,18 @@
         }
       });
 
-      // Sidebar menu items order with 3 dividers, health, and devlog
-      const defaultOrder = ['personal', 'work', 'divider-1', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+      // Sidebar menu items order with 3 dividers, hobby, health, and devlog
+      const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       let finalOrder = userSidebarOrder ? userSidebarOrder.slice() : defaultOrder;
+      if (!finalOrder.includes('hobby')) {
+        const healthIdx = finalOrder.indexOf('health');
+        if (healthIdx !== -1) finalOrder.splice(healthIdx, 0, 'hobby');
+        else {
+          const vacIdx = finalOrder.indexOf('vacation');
+          if (vacIdx !== -1) finalOrder.splice(vacIdx, 0, 'hobby');
+          else finalOrder.push('hobby');
+        }
+      }
       if (!finalOrder.includes('health')) {
         const vacIdx = finalOrder.indexOf('vacation');
         if (vacIdx !== -1) finalOrder.splice(vacIdx, 0, 'health');
@@ -1153,6 +1194,9 @@
       this.healthNotes = userHealthNotes;
       this.healthFolders = userHealthFolders;
       this.activeHealthFolder = 'all';
+      this.hobbyNotes = userHobbyNotes;
+      this.hobbyFolders = userHobbyFolders;
+      this.activeHobbyFolder = 'all';
 
       try {
         const streakRaw = localStorage.getItem(STREAK_KEY);
@@ -1179,6 +1223,8 @@
           sites: this.sites,
           healthNotes: this.healthNotes,
           healthFolders: this.healthFolders,
+          hobbyNotes: this.hobbyNotes,
+          hobbyFolders: this.hobbyFolders,
           updatedAt: Date.now()
         }));
         localStorage.setItem(STREAK_KEY, JSON.stringify(this.streak));
@@ -1491,6 +1537,11 @@
         hospital: (data.hospital || '').trim(),
         cost: (data.cost || '').trim(),
         content: (data.content || '').trim(),
+        fileName: data.fileName || '',
+        fileSize: data.fileSize || 0,
+        fileType: data.fileType || '',
+        fileUrl: data.fileUrl || '',
+        fileMemo: (data.fileMemo || '').trim(),
         createdAt: Date.now()
       };
       this.healthNotes.unshift(newNote);
@@ -1548,6 +1599,77 @@
         if (note.folder === id) note.folder = 'general';
       });
       if (this.activeHealthFolder === id) this.activeHealthFolder = 'all';
+      this.save();
+      return true;
+    }
+
+    // --- Hobby & Activity Journal Methods ---
+    addHobbyNote(data) {
+      const newNote = {
+        id: 'hnb-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        folder: data.folder || 'general',
+        title: (data.title || '').trim(),
+        date: data.date || getRealTodayStr(),
+        place: (data.place || '').trim(),
+        duration: (data.duration || '').trim(),
+        content: (data.content || '').trim(),
+        createdAt: Date.now()
+      };
+      this.hobbyNotes.unshift(newNote);
+      this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      this.save();
+      return newNote;
+    }
+
+    updateHobbyNote(id, updates) {
+      const note = this.hobbyNotes.find(n => n.id === id);
+      if (!note) return null;
+      Object.assign(note, updates, { updatedAt: Date.now() });
+      this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      this.save();
+      return note;
+    }
+
+    deleteHobbyNote(id) {
+      const idx = this.hobbyNotes.findIndex(n => n.id === id);
+      if (idx === -1) return false;
+      this.hobbyNotes.splice(idx, 1);
+      this.save();
+      return true;
+    }
+
+    addHobbyFolder(name, icon = '🎨') {
+      const cleanName = (name || '').trim();
+      if (!cleanName) return null;
+      const folderId = 'hfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      const newFolder = {
+        id: folderId,
+        name: cleanName,
+        icon: icon || '🎨'
+      };
+      this.hobbyFolders.push(newFolder);
+      this.save();
+      return newFolder;
+    }
+
+    updateHobbyFolder(id, updates) {
+      const folder = this.hobbyFolders.find(f => f.id === id);
+      if (!folder) return null;
+      if (updates.name) folder.name = updates.name.trim();
+      if (updates.icon) folder.icon = updates.icon;
+      this.save();
+      return folder;
+    }
+
+    deleteHobbyFolder(id) {
+      const idx = this.hobbyFolders.findIndex(f => f.id === id);
+      if (idx === -1) return false;
+      this.hobbyFolders.splice(idx, 1);
+      // Migrate any notes in this deleted folder to 'general'
+      this.hobbyNotes.forEach(note => {
+        if (note.folder === id) note.folder = 'general';
+      });
+      if (this.activeHobbyFolder === id) this.activeHobbyFolder = 'all';
       this.save();
       return true;
     }
@@ -1800,6 +1922,7 @@
         const itemMeta = {
           'personal': { name: '개인 🌸', icon: '', color: '#f06595', count: store.tasks.filter(t => t.category === 'personal').length },
           'work': { name: '업무 💼', icon: '', color: '#868e96', count: store.tasks.filter(t => t.category === 'work').length },
+          'hobby': { name: '취미활동', icon: '🎨', count: (store.hobbyNotes || []).length },
           'health': { name: '건강관리', icon: '🏥', count: (store.healthNotes || []).length },
           'vacation': { name: '연차관리', icon: '🏖️', count: store.vacations.length },
           'photos': { name: '기록', icon: '📸', count: store.photos.length },
@@ -1996,6 +2119,7 @@
       const ledgerView = document.getElementById('ledger-view-container');
       const calMView = document.getElementById('calendar-month-view-container');
       const calWView = document.getElementById('calendar-week-view-container');
+      const hobbyView = document.getElementById('hobby-view-container');
       const healthView = document.getElementById('health-view-container');
       const vacationView = document.getElementById('vacation-view-container');
       const sitesView = document.getElementById('sites-view-container');
@@ -2009,7 +2133,7 @@
 
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
-      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, healthView, vacationView, sitesView, devlogView];
+      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, hobbyView, healthView, vacationView, sitesView, devlogView];
 
       if (lockedScreen) lockedScreen.style.display = 'none';
       if (mobileBar && mobileBar.style.display !== 'flex') mobileBar.style.display = 'flex';
@@ -2019,6 +2143,7 @@
       let targetView = tasksView;
       if (filter === 'calendar-month') targetView = calMView;
       else if (filter === 'calendar-week') targetView = calWView;
+      else if (filter === 'hobby') targetView = hobbyView;
       else if (filter === 'health') targetView = healthView;
       else if (filter === 'vacation') targetView = vacationView;
       else if (filter === 'photos') targetView = photosView;
@@ -2051,6 +2176,12 @@
       // 2. Calendar Weekly View (Horizontal)
       if (filter === 'calendar-week') {
         this.renderCalendarWeek();
+        return;
+      }
+
+      // 2.5. 🎨 취미활동 (Hobby) View
+      if (filter === 'hobby') {
+        this.renderHobby();
         return;
       }
 
@@ -3713,6 +3844,20 @@
 
               <div class="health-note-body">${escapeHTML(note.content)}</div>
 
+              ${note.fileName ? `
+                <div class="health-file-badge-card">
+                  <div class="health-file-info-left">
+                    <span class="health-file-name">📑 ${escapeHTML(note.fileName)}</span>
+                    ${note.fileMemo ? `<span class="health-file-memo-text">💬 ${escapeHTML(note.fileMemo)}</span>` : ''}
+                  </div>
+                  ${note.fileUrl ? `
+                    <a href="${escapeHTML(note.fileUrl)}" download="${escapeHTML(note.fileName)}" class="btn btn-sm" style="font-size: 0.74rem; background: #10b981; color: #fff; padding: 4px 9px; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 3px;" title="결과표 다운로드/열기">
+                      <span>📥 다운로드</span>
+                    </a>
+                  ` : ''}
+                </div>
+              ` : ''}
+
               <div class="health-note-footer">
                 <span>등록일: ${new Date(note.createdAt || Date.now()).toLocaleDateString('ko-KR')}</span>
                 <button type="button" class="btn btn-sm" style="font-size: 0.72rem; padding: 2px 7px; background: rgba(0,0,0,0.04); color: var(--primary);" data-action="copy-health-note" data-id="${note.id}" title="내용 복사">
@@ -3739,8 +3884,24 @@
       const costInput = document.getElementById('health-input-cost');
       const contentInput = document.getElementById('health-input-content');
 
+      const fileSection = document.getElementById('health-checkup-file-section');
+      const fileInput = document.getElementById('health-input-file');
+      const fileNameEl = document.getElementById('health-file-data-name');
+      const fileSizeEl = document.getElementById('health-file-data-size');
+      const fileTypeEl = document.getElementById('health-file-data-type');
+      const fileUrlEl = document.getElementById('health-file-data-url');
+      const fileMemoInput = document.getElementById('health-input-file-memo');
+      const filePreviewStatus = document.getElementById('health-file-preview-status');
+      const clearFileBtn = document.getElementById('btn-health-clear-file');
+
       if (!modal || !form) return;
       form.reset();
+
+      function updateCheckupSection(currentFolderVal) {
+        if (fileSection) {
+          fileSection.style.display = (currentFolderVal === 'checkup') ? 'block' : 'none';
+        }
+      }
 
       // Populate folders in select dropdown
       if (folderSelect) {
@@ -3748,7 +3909,22 @@
         folderSelect.innerHTML = folders.map(f => `
           <option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>
         `).join('');
+
+        folderSelect.onchange = () => {
+          updateCheckupSection(folderSelect.value);
+        };
       }
+
+      if (fileNameEl) fileNameEl.value = '';
+      if (fileSizeEl) fileSizeEl.value = '';
+      if (fileTypeEl) fileTypeEl.value = '';
+      if (fileUrlEl) fileUrlEl.value = '';
+      if (fileMemoInput) fileMemoInput.value = '';
+      if (filePreviewStatus) {
+        filePreviewStatus.textContent = '';
+        filePreviewStatus.style.display = 'none';
+      }
+      if (clearFileBtn) clearFileBtn.style.display = 'none';
 
       if (noteId) {
         const note = store.healthNotes.find(n => n.id === noteId);
@@ -3761,13 +3937,69 @@
         if (hospitalInput) hospitalInput.value = note.hospital || '';
         if (costInput) costInput.value = note.cost || '';
         if (contentInput) contentInput.value = note.content || '';
+
+        if (note.fileName) {
+          if (fileNameEl) fileNameEl.value = note.fileName;
+          if (fileSizeEl) fileSizeEl.value = note.fileSize || '';
+          if (fileTypeEl) fileTypeEl.value = note.fileType || '';
+          if (fileUrlEl) fileUrlEl.value = note.fileUrl || '';
+          if (fileMemoInput) fileMemoInput.value = note.fileMemo || '';
+          if (filePreviewStatus) {
+            filePreviewStatus.textContent = `현재 첨부: 📑 ${note.fileName}`;
+            filePreviewStatus.style.display = 'block';
+          }
+          if (clearFileBtn) clearFileBtn.style.display = 'inline-flex';
+        }
+        updateCheckupSection(note.folder || 'general');
       } else {
         if (titleEl) titleEl.textContent = '🏥 건강 메모 작성 💖';
         if (editIdEl) editIdEl.value = '';
-        if (folderSelect) {
-          folderSelect.value = (store.activeHealthFolder && store.activeHealthFolder !== 'all') ? store.activeHealthFolder : 'obgyn';
-        }
+        const initialFolder = (store.activeHealthFolder && store.activeHealthFolder !== 'all') ? store.activeHealthFolder : 'obgyn';
+        if (folderSelect) folderSelect.value = initialFolder;
         if (dateInput) dateInput.value = getRealTodayStr();
+        updateCheckupSection(initialFolder);
+      }
+
+      // Clear file button handler
+      if (clearFileBtn) {
+        clearFileBtn.onclick = () => {
+          if (fileInput) fileInput.value = '';
+          if (fileNameEl) fileNameEl.value = '';
+          if (fileSizeEl) fileSizeEl.value = '';
+          if (fileTypeEl) fileTypeEl.value = '';
+          if (fileUrlEl) fileUrlEl.value = '';
+          if (filePreviewStatus) {
+            filePreviewStatus.textContent = '';
+            filePreviewStatus.style.display = 'none';
+          }
+          clearFileBtn.style.display = 'none';
+        };
+      }
+
+      // File input change handler (Convert to Base64 DataURL for offline & sync safe storage)
+      if (fileInput) {
+        fileInput.onchange = (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          if (file.size > 15 * 1024 * 1024) {
+            alert('파일 용량은 최대 15MB까지 첨부할 수 있습니다.');
+            fileInput.value = '';
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (fileNameEl) fileNameEl.value = file.name;
+            if (fileSizeEl) fileSizeEl.value = file.size;
+            if (fileTypeEl) fileTypeEl.value = file.type;
+            if (fileUrlEl) fileUrlEl.value = reader.result;
+            if (filePreviewStatus) {
+              filePreviewStatus.textContent = `선택됨: 📑 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+              filePreviewStatus.style.display = 'block';
+            }
+            if (clearFileBtn) clearFileBtn.style.display = 'inline-flex';
+          };
+          reader.readAsDataURL(file);
+        };
       }
 
       modal.style.display = 'flex';
@@ -3811,7 +4043,7 @@
         if (nameInput) nameInput.value = currentName;
         if (iconInput) iconInput.value = currentIcon;
         if (deleteBtn) {
-          const isProtected = (folder.id === 'general' || folder.id === 'obgyn' || folder.id === 'dental' || folder.id === 'surgery' || folder.id === 'all');
+          const isProtected = (folder.id === 'general' || folder.id === 'obgyn' || folder.id === 'dental' || folder.id === 'surgery' || folder.id === 'checkup' || folder.id === 'all');
           deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
           deleteBtn.dataset.id = folder.id;
         }
@@ -3845,6 +4077,237 @@
 
     closeHealthFolderModal() {
       const modal = document.getElementById('health-folder-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    // =========================================================================
+    // 🎨 취미활동 (Hobby & Life Activity Journal Engine)
+    // =========================================================================
+    renderHobby() {
+      const tabsBar = document.getElementById('hobby-folder-tabs');
+      const gridContainer = document.getElementById('hobby-notes-grid-container');
+      const emptyState = document.getElementById('hobby-empty-state');
+      const curFolderBadge = document.getElementById('hobby-cur-folder-badge');
+      const curFolderDesc = document.getElementById('hobby-cur-folder-desc');
+      const notesCountBadge = document.getElementById('hobby-notes-count-badge');
+
+      if (!gridContainer) return;
+
+      const activeFolder = store.activeHobbyFolder || 'all';
+      const folders = store.hobbyFolders || DEFAULT_HOBBY_FOLDERS;
+      const allNotes = store.hobbyNotes || [];
+
+      // 1. Render Folder Tabs (with edit pencil icon for editable folders)
+      if (tabsBar) {
+        tabsBar.innerHTML = folders.map(f => {
+          const isActive = (f.id === activeFolder);
+          const count = f.id === 'all' 
+            ? allNotes.length 
+            : allNotes.filter(n => n.folder === f.id).length;
+          
+          const editBtn = (f.id !== 'all')
+            ? `<span class="hobby-folder-edit-btn" data-action="open-edit-hobby-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정">✏️</span>`
+            : '';
+
+          return `
+            <button type="button" class="hobby-folder-tab ${isActive ? 'active' : ''}" data-hobby-folder-id="${f.id}">
+              <span>${f.icon || '🎨'}</span>
+              <span>${escapeHTML(f.name)}</span>
+              <span class="badge" style="font-size: 0.72rem; padding: 1px 6px; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)'}; color: ${isActive ? '#fff' : 'var(--text-muted)'}; border-radius: 10px;">${count}</span>
+              ${editBtn}
+            </button>
+          `;
+        }).join('');
+      }
+
+      // 2. Filter Notes by active folder
+      const filtered = (activeFolder === 'all')
+        ? allNotes
+        : allNotes.filter(n => n.folder === activeFolder);
+
+      const activeFolderObj = folders.find(f => f.id === activeFolder) || folders[0];
+      if (curFolderBadge) {
+        curFolderBadge.textContent = `${activeFolderObj.icon || '🎨'} ${activeFolderObj.name}`;
+      }
+      if (curFolderDesc) {
+        curFolderDesc.textContent = activeFolder === 'all'
+          ? `총 ${allNotes.length}개의 취미 활동 일지가 보관 중입니다.`
+          : `'${activeFolderObj.name}' 폴더에 ${filtered.length}건의 취미 기록이 있습니다.`;
+      }
+      if (notesCountBadge) {
+        notesCountBadge.textContent = `총 ${filtered.length}건`;
+      }
+
+      // 3. Render Large Hobby Notes Grid
+      if (filtered.length === 0) {
+        gridContainer.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'flex';
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+        gridContainer.innerHTML = filtered.map(note => {
+          const noteFolder = folders.find(f => f.id === note.folder) || { name: '기타취미', icon: '✨' };
+          const dateFormatted = note.date ? note.date.replace(/-/g, '.') : '';
+          
+          return `
+            <div class="hobby-note-card" data-hobby-note-id="${note.id}">
+              <div class="hobby-note-header">
+                <div class="hobby-note-top-row">
+                  <span class="hobby-folder-badge">
+                    <span>${noteFolder.icon || '🎨'}</span>
+                    <span>${escapeHTML(noteFolder.name)}</span>
+                  </span>
+                  <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <button type="button" class="task-action-btn edit-btn" data-action="edit-hobby-note" data-id="${note.id}" title="메모 수정">✏️</button>
+                    <button type="button" class="task-action-btn delete-btn" data-action="delete-hobby-note" data-id="${note.id}" title="메모 삭제">🗑️</button>
+                  </div>
+                </div>
+
+                <h3 class="hobby-note-title">${escapeHTML(note.title)}</h3>
+
+                <div class="hobby-note-submeta">
+                  <span>📅 ${dateFormatted}</span>
+                  ${note.place ? `<span>📍 ${escapeHTML(note.place)}</span>` : ''}
+                  ${note.duration ? `<span class="hobby-duration-chip">⏱️ ${escapeHTML(note.duration)}</span>` : ''}
+                </div>
+              </div>
+
+              <div class="hobby-note-body">${escapeHTML(note.content)}</div>
+
+              <div class="hobby-note-footer">
+                <span>등록일: ${new Date(note.createdAt || Date.now()).toLocaleDateString('ko-KR')}</span>
+                <button type="button" class="btn btn-sm" style="font-size: 0.72rem; padding: 2px 7px; background: rgba(0,0,0,0.04); color: var(--primary);" data-action="copy-hobby-note" data-id="${note.id}" title="내용 복사">
+                  📋 복사
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      this.renderSidebar();
+    },
+
+    openHobbyNoteModal(noteId = null) {
+      const modal = document.getElementById('hobby-note-modal');
+      const form = document.getElementById('hobby-note-form');
+      const titleEl = document.getElementById('hobby-note-modal-title');
+      const editIdEl = document.getElementById('hobby-note-edit-id');
+      const folderSelect = document.getElementById('hobby-input-folder');
+      const dateInput = document.getElementById('hobby-input-date');
+      const titleInput = document.getElementById('hobby-input-title');
+      const placeInput = document.getElementById('hobby-input-place');
+      const durationInput = document.getElementById('hobby-input-duration');
+      const contentInput = document.getElementById('hobby-input-content');
+
+      if (!modal || !form) return;
+      form.reset();
+
+      // Populate folders in select dropdown
+      if (folderSelect) {
+        const folders = (store.hobbyFolders || DEFAULT_HOBBY_FOLDERS).filter(f => f.id !== 'all');
+        folderSelect.innerHTML = folders.map(f => `
+          <option value="${f.id}">${f.icon || '🎨'} ${escapeHTML(f.name)}</option>
+        `).join('');
+      }
+
+      if (noteId) {
+        const note = store.hobbyNotes.find(n => n.id === noteId);
+        if (!note) return;
+        if (titleEl) titleEl.textContent = '🎨 취미 기록 수정 💖';
+        if (editIdEl) editIdEl.value = note.id;
+        if (folderSelect) folderSelect.value = note.folder || 'general';
+        if (dateInput) dateInput.value = note.date || getRealTodayStr();
+        if (titleInput) titleInput.value = note.title || '';
+        if (placeInput) placeInput.value = note.place || '';
+        if (durationInput) durationInput.value = note.duration || '';
+        if (contentInput) contentInput.value = note.content || '';
+      } else {
+        if (titleEl) titleEl.textContent = '🎨 취미 기록 작성 💖';
+        if (editIdEl) editIdEl.value = '';
+        if (folderSelect) {
+          folderSelect.value = (store.activeHobbyFolder && store.activeHobbyFolder !== 'all') ? store.activeHobbyFolder : 'workout';
+        }
+        if (dateInput) dateInput.value = getRealTodayStr();
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (titleInput) setTimeout(() => titleInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeHobbyNoteModal() {
+      const modal = document.getElementById('hobby-note-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openHobbyFolderModal(folderId = null) {
+      const modal = document.getElementById('hobby-folder-modal');
+      const form = document.getElementById('hobby-folder-form');
+      const titleEl = document.getElementById('hobby-folder-modal-title');
+      const editIdEl = document.getElementById('hobby-folder-edit-id');
+      const iconInput = document.getElementById('hobby-input-folder-icon');
+      const nameInput = document.getElementById('hobby-input-folder-name');
+      const grid = document.getElementById('hobby-folder-emoji-grid');
+      const deleteBtn = document.getElementById('btn-delete-hobby-folder');
+      const submitBtn = document.getElementById('btn-submit-hobby-folder');
+
+      if (!modal || !form) return;
+      form.reset();
+
+      let currentIcon = '🎨';
+      let currentName = '';
+
+      if (folderId) {
+        const folder = (store.hobbyFolders || DEFAULT_HOBBY_FOLDERS).find(f => f.id === folderId);
+        if (!folder) return;
+        currentIcon = folder.icon || '🎨';
+        currentName = folder.name || '';
+        if (titleEl) titleEl.textContent = '📁 취미 폴더 수정 💖';
+        if (editIdEl) editIdEl.value = folder.id;
+        if (nameInput) nameInput.value = currentName;
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) {
+          const isProtected = (folder.id === 'general' || folder.id === 'workout' || folder.id === 'piano' || folder.id === 'drawing' || folder.id === 'reading' || folder.id === 'all');
+          deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
+          deleteBtn.dataset.id = folder.id;
+        }
+        if (submitBtn) submitBtn.textContent = '수정 완료 ✨';
+      } else {
+        if (titleEl) titleEl.textContent = '📁 새 취미 폴더 추가';
+        if (editIdEl) editIdEl.value = '';
+        if (nameInput) nameInput.value = '';
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (submitBtn) submitBtn.textContent = '폴더 생성 📁';
+      }
+
+      // Render 24 Hobby Emoji Picker Buttons
+      if (grid) {
+        grid.innerHTML = HOBBY_EMOJI_LIST.map(emoji => {
+          const isSel = (emoji === currentIcon);
+          return `
+            <button type="button" class="hobby-emoji-option-btn ${isSel ? 'selected' : ''}" data-hobby-emoji="${emoji}" title="${emoji}">
+              ${emoji}
+            </button>
+          `;
+        }).join('');
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (nameInput) setTimeout(() => nameInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeHobbyFolderModal() {
+      const modal = document.getElementById('hobby-folder-modal');
       if (modal) {
         modal.style.display = 'none';
         modal.classList.remove('active');
@@ -5036,6 +5499,112 @@
         return;
       }
 
+      // Hobby Manager Buttons & Modals
+      if (target.closest('#btn-open-add-hobby-note') || target.closest('#btn-hobby-empty-add')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openHobbyNoteModal();
+        return;
+      }
+      if (target.closest('#btn-open-add-hobby-folder')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openHobbyFolderModal();
+        return;
+      }
+      if (target.closest('[data-close-hobby-modal]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.closeHobbyNoteModal();
+        return;
+      }
+      if (target.closest('[data-close-hobby-folder-modal]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.closeHobbyFolderModal();
+        return;
+      }
+
+      // Hobby Folder Edit Pencil Click
+      const editHobbyFolderBtn = target.closest('[data-action="open-edit-hobby-folder"]');
+      if (editHobbyFolderBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        UI.openHobbyFolderModal(editHobbyFolderBtn.dataset.id);
+        return;
+      }
+
+      // Hobby Emoji Picker Click
+      const hobbyEmojiBtn = target.closest('.hobby-emoji-option-btn');
+      if (hobbyEmojiBtn && hobbyEmojiBtn.dataset.hobbyEmoji) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const iconInput = document.getElementById('hobby-input-folder-icon');
+        if (iconInput) iconInput.value = hobbyEmojiBtn.dataset.hobbyEmoji;
+        const grid = document.getElementById('hobby-folder-emoji-grid');
+        if (grid) {
+          grid.querySelectorAll('.hobby-emoji-option-btn').forEach(b => b.classList.remove('selected'));
+          hobbyEmojiBtn.classList.add('selected');
+        }
+        return;
+      }
+
+      // Delete Hobby Folder Button Click
+      if (target.closest('#btn-delete-hobby-folder')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const folderId = target.closest('#btn-delete-hobby-folder').dataset.id;
+        if (folderId && confirm('정말 이 취미 폴더를 삭제하시겠습니까?\n(폴더 안의 일지는 [기타취미] 폴더로 안전하게 이동됩니다)')) {
+          store.deleteHobbyFolder(folderId);
+          sounds.playDelete();
+          UI.closeHobbyFolderModal();
+          UI.showToast('취미 폴더가 삭제되었고 기록은 안전하게 보관되었어요.', 'info');
+          UI.renderHobby();
+        }
+        return;
+      }
+
+      // Hobby Folder Tab Click
+      const hobbyTab = target.closest('.hobby-folder-tab');
+      if (hobbyTab && hobbyTab.dataset.hobbyFolderId) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        store.activeHobbyFolder = hobbyTab.dataset.hobbyFolderId;
+        UI.renderHobby();
+        return;
+      }
+
+      // Hobby Note Edit
+      const editHobbyBtn = target.closest('[data-action="edit-hobby-note"]');
+      if (editHobbyBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openHobbyNoteModal(editHobbyBtn.dataset.id);
+        return;
+      }
+
+      // Hobby Note Delete
+      const deleteHobbyBtn = target.closest('[data-action="delete-hobby-note"]');
+      if (deleteHobbyBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const hId = deleteHobbyBtn.dataset.id;
+        if (hId && confirm('이 취미 활동 일지를 정말 삭제하시겠습니까?')) {
+          store.deleteHobbyNote(hId);
+          sounds.playDelete();
+          UI.showToast('취미 기록이 삭제되었어요.', 'danger');
+          UI.renderHobby();
+        }
+        return;
+      }
+
+      // Hobby Note Copy
+      const copyHobbyBtn = target.closest('[data-action="copy-hobby-note"]');
+      if (copyHobbyBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const hId = copyHobbyBtn.dataset.id;
+        const note = (store.hobbyNotes || []).find(n => n.id === hId);
+        if (note && navigator.clipboard) {
+          const textToCopy = `[취미기록] ${note.title}\n날짜: ${note.date}\n장소: ${note.place || '-'}\n소요시간: ${note.duration || '-'}\n\n${note.content}`;
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            sounds.playComplete();
+            UI.showToast('📋 취미 기록 내용이 복사되었어요!', 'success');
+          });
+        }
+        return;
+      }
+
       // 1. Task Completed Toggle
       if (target.matches('[data-action="toggle-complete"]') || target.classList.contains('task-checkbox')) {
         const chip = target.closest('.weekly-item-chip');
@@ -5440,11 +6009,17 @@
         const cost = document.getElementById('health-input-cost')?.value || '';
         const content = document.getElementById('health-input-content')?.value || '';
 
+        const fileName = document.getElementById('health-file-data-name')?.value || '';
+        const fileSize = parseInt(document.getElementById('health-file-data-size')?.value || '0', 10);
+        const fileType = document.getElementById('health-file-data-type')?.value || '';
+        const fileUrl = document.getElementById('health-file-data-url')?.value || '';
+        const fileMemo = document.getElementById('health-input-file-memo')?.value || '';
+
         if (id) {
-          store.updateHealthNote(id, { folder, date, title, hospital, cost, content });
+          store.updateHealthNote(id, { folder, date, title, hospital, cost, content, fileName, fileSize, fileType, fileUrl, fileMemo });
           UI.showToast('건강 메모가 수정되었어요 🩺✨', 'info');
         } else {
-          store.addHealthNote({ folder, date, title, hospital, cost, content });
+          store.addHealthNote({ folder, date, title, hospital, cost, content, fileName, fileSize, fileType, fileUrl, fileMemo });
           sounds.playComplete();
           UI.showToast('새 건강 메모가 등록되었어요 🏥💖', 'success');
         }
@@ -5473,6 +6048,55 @@
         }
         UI.closeHealthFolderModal();
         UI.renderHealth();
+      });
+    }
+
+    // Hobby Note & Folder Form Submissions
+    const hobbyNoteForm = document.getElementById('hobby-note-form');
+    if (hobbyNoteForm) {
+      hobbyNoteForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('hobby-note-edit-id')?.value;
+        const folder = document.getElementById('hobby-input-folder')?.value || 'general';
+        const date = document.getElementById('hobby-input-date')?.value || getRealTodayStr();
+        const title = document.getElementById('hobby-input-title')?.value || '';
+        const place = document.getElementById('hobby-input-place')?.value || '';
+        const duration = document.getElementById('hobby-input-duration')?.value || '';
+        const content = document.getElementById('hobby-input-content')?.value || '';
+
+        if (id) {
+          store.updateHobbyNote(id, { folder, date, title, place, duration, content });
+          UI.showToast('취미 기록이 수정되었어요 🎨✨', 'info');
+        } else {
+          store.addHobbyNote({ folder, date, title, place, duration, content });
+          sounds.playComplete();
+          UI.showToast('새 취미 기록이 등록되었어요 🏃💖', 'success');
+        }
+        UI.closeHobbyNoteModal();
+        UI.renderHobby();
+      });
+    }
+
+    const hobbyFolderForm = document.getElementById('hobby-folder-form');
+    if (hobbyFolderForm) {
+      hobbyFolderForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('hobby-folder-edit-id')?.value;
+        const icon = document.getElementById('hobby-input-folder-icon')?.value || '🎨';
+        const name = document.getElementById('hobby-input-folder-name')?.value || '';
+        if (!name.trim()) return;
+
+        if (id) {
+          store.updateHobbyFolder(id, { name: name.trim(), icon });
+          sounds.playComplete();
+          UI.showToast(`'${name.trim()}' 취미 폴더가 수정되었어요 ✨`, 'info');
+        } else {
+          store.addHobbyFolder(name.trim(), icon);
+          sounds.playAdd();
+          UI.showToast(`'${name.trim()}' 취미 폴더가 추가되었어요 📁✨`, 'success');
+        }
+        UI.closeHobbyFolderModal();
+        UI.renderHobby();
       });
     }
 

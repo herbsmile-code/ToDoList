@@ -436,6 +436,54 @@
         </div>
 
         <!-- ===================================================================
+             SECTION 2.5: 🎨 취미활동 (Hobby & Life Activity Journal) View
+             =================================================================== -->
+        <div id="hobby-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>🎨 취미활동 (Hobby & Activity Journal)</h1>
+              <p>운동, 피아노, 그림, 독서 등 나의 소중한 취미와 열정의 기록을 남겨보세요 🏃🎹🎨</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" id="btn-open-add-hobby-folder" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-main); font-size: 0.82rem; padding: 0.5rem 0.85rem;" title="새 취미 폴더 추가">
+                <span>📁 + 새 폴더 추가</span>
+              </button>
+              <button type="button" id="btn-open-add-hobby-note" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
+                <span>+</span>
+                <span>취미 기록 작성 💖</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Hobby Folders Tabs Bar -->
+          <div class="hobby-folders-bar" style="display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.4rem 0.2rem; -webkit-overflow-scrolling: touch; scrollbar-width: none;" id="hobby-folder-tabs">
+            <!-- Dynamically rendered folder tabs (전체보기, 운동, 피아노, 그림, 독서 등...) -->
+          </div>
+
+          <!-- Hobby Summary Info Bar -->
+          <div id="hobby-summary-bar" style="background: linear-gradient(135deg, rgba(255, 107, 139, 0.08), rgba(255, 159, 67, 0.08)); border: 1px solid rgba(255, 107, 139, 0.2); border-radius: 12px; padding: 0.65rem 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span id="hobby-cur-folder-badge" style="font-size: 0.82rem; font-weight: 800; color: #fff; background: var(--primary); padding: 3px 9px; border-radius: 6px;">전체보기</span>
+              <span id="hobby-cur-folder-desc" style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">총 0개의 취미 기록 일지가 보관 중입니다.</span>
+            </div>
+            <span id="hobby-notes-count-badge" style="font-size: 0.78rem; color: var(--text-muted); font-weight: 700;">총 0건</span>
+          </div>
+
+          <!-- Large Hobby Notes Grid -->
+          <div class="hobby-notes-grid" id="hobby-notes-grid-container">
+            <!-- Dynamically populated large hobby note cards -->
+          </div>
+
+          <!-- Hobby Empty State -->
+          <div id="hobby-empty-state" class="empty-state" style="display: none; padding: 3rem 1rem;">
+            <div class="empty-state-icon">🎨</div>
+            <h3>아직 작성된 취미 활동 기록이 없어요</h3>
+            <p>오늘의 운동 루틴, 피아노 연습곡, 완성한 그림, 읽은 책 등 멋진 기록을 남겨보세요 💖</p>
+            <button type="button" class="btn btn-primary" id="btn-hobby-empty-add">+ 첫 취미 기록 작성하기 💖</button>
+          </div>
+        </div>
+
+        <!-- ===================================================================
              SECTION 2.8: 🏥 건강관리 (Health Manager & Folder Notes) View
              =================================================================== -->
         <div id="health-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
@@ -1589,6 +1637,37 @@
           </div>
         </div>
 
+        <!-- Checkup Specific File Attachment & File Description Box (Shown ONLY when checkup folder is selected) -->
+        <div id="health-checkup-file-section" style="display: none; background: rgba(16, 185, 129, 0.06); border: 1px dashed #10b981; border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+            <label class="form-label" style="margin: 0; color: #059669; font-weight: 800; display: flex; align-items: center; gap: 0.35rem;">
+              <span>📑 건강검진 결과표/소견서 파일 첨부</span>
+            </label>
+            <span style="font-size: 0.72rem; color: #059669; font-weight: 700;">PDF / 이미지 / 엑셀 등</span>
+          </div>
+
+          <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;">
+            <input type="file" id="health-input-file" class="form-input" style="padding: 0.35rem; font-size: 0.8rem; background: #fff;" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.doc,.docx,.hwp">
+            <button type="button" id="btn-health-clear-file" class="btn btn-sm" style="display: none; background: rgba(255,77,77,0.1); color: #ff4d4d; padding: 4px 8px; font-size: 0.75rem;">삭제</button>
+          </div>
+
+          <!-- Hidden storage for file metadata -->
+          <input type="hidden" id="health-file-data-name" value="">
+          <input type="hidden" id="health-file-data-size" value="">
+          <input type="hidden" id="health-file-data-type" value="">
+          <input type="hidden" id="health-file-data-url" value="">
+
+          <div id="health-file-preview-status" style="display: none; font-size: 0.78rem; font-weight: 700; color: #0ca678; margin-bottom: 0.45rem;">
+            <!-- File name display -->
+          </div>
+
+          <!-- File memo / description -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="health-input-file-memo" style="font-size: 0.78rem; color: var(--text-muted);">업로드 파일 설명 / 요약 메모</label>
+            <input type="text" id="health-input-file-memo" class="form-input" placeholder="예: 2026 국민건강보험공단 종합검진 결과표 PDF, 혈액검사 결과지">
+          </div>
+        </div>
+
         <!-- Large Content Textarea -->
         <div class="form-group">
           <label class="form-label" for="health-input-content">상세 건강 메모 / 진료 내용 *</label>
@@ -1642,6 +1721,116 @@
           <div style="display: flex; gap: 0.5rem; margin-left: auto;">
             <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-health-folder-modal>취소</button>
             <button type="submit" id="btn-submit-health-folder" class="btn btn-primary">저장 💖</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Hobby Note Add/Edit Modal (취미 기록 작성 및 수정) -->
+  <div id="hobby-note-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="hobby-note-modal-title">🎨 취미 기록 작성 💖</h3>
+        <button class="modal-close-btn" data-close-hobby-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="hobby-note-form">
+        <input type="hidden" id="hobby-note-edit-id" value="">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <!-- Folder Selection -->
+          <div class="form-group">
+            <label class="form-label" for="hobby-input-folder">취미 분류(폴더) *</label>
+            <select id="hobby-input-folder" class="form-select" required>
+              <option value="workout">🏃 운동</option>
+              <option value="piano">🎹 피아노</option>
+              <option value="drawing">🎨 그림</option>
+              <option value="reading">📚 독서</option>
+              <option value="general">✨ 기타취미</option>
+            </select>
+          </div>
+
+          <!-- Date Input -->
+          <div class="form-group">
+            <label class="form-label" for="hobby-input-date">활동 날짜 *</label>
+            <input type="date" id="hobby-input-date" class="form-input" required>
+          </div>
+        </div>
+
+        <!-- Note Title -->
+        <div class="form-group">
+          <label class="form-label" for="hobby-input-title">활동 제목 / 내용 *</label>
+          <input type="text" id="hobby-input-title" class="form-input" placeholder="예: 하체 루틴 오운완, 쇼팽 녹턴 9-2번 연습, 아크릴 풍경화 완성 등" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <!-- Place / Studio -->
+          <div class="form-group">
+            <label class="form-label" for="hobby-input-place">장소 / 공간</label>
+            <input type="text" id="hobby-input-place" class="form-input" placeholder="예: 헬스장, 음악연습실, 화실, 집">
+          </div>
+
+          <!-- Duration -->
+          <div class="form-group">
+            <label class="form-label" for="hobby-input-duration">소요 시간 / 분량 (선택)</label>
+            <input type="text" id="hobby-input-duration" class="form-input" placeholder="예: 1시간 30분, 30페이지, 2세트">
+          </div>
+        </div>
+
+        <!-- Large Content Textarea -->
+        <div class="form-group">
+          <label class="form-label" for="hobby-input-content">취미 일지 / 상세 메모 / 느낀 점 *</label>
+          <textarea id="hobby-input-content" class="form-textarea" placeholder="오늘 연습하며 느낀 점, 성취감, 개선할 점, 기억하고 싶은 순간들을 자유롭고 넉넉히 기록하세요..." style="min-height: 140px; font-size: 0.92rem; line-height: 1.6;" required></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-hobby-modal>취소</button>
+          <button type="submit" class="btn btn-primary">저장하기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add/Edit Hobby Folder Modal (새 취미 폴더 추가 및 편집) -->
+  <div id="hobby-folder-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="hobby-folder-modal-title">📁 새 취미 폴더 추가</h3>
+        <button class="modal-close-btn" data-close-hobby-folder-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="hobby-folder-form">
+        <input type="hidden" id="hobby-folder-edit-id" value="">
+
+        <!-- Emoji Palette Picker (운동/취미 24종) -->
+        <div class="form-group">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+            <label class="form-label" style="margin: 0;">아이콘 선택 (운동/취미 24종)</label>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span style="font-size: 0.76rem; color: var(--text-muted);">선택됨:</span>
+              <input type="text" id="hobby-input-folder-icon" class="form-input" value="🎨" maxlength="4" style="width: 50px; height: 32px; text-align: center; font-size: 1.15rem; padding: 2px; font-weight: bold;" readonly>
+            </div>
+          </div>
+          
+          <div class="hobby-emoji-picker-grid" id="hobby-folder-emoji-grid">
+            <!-- 24 hobby emoji buttons dynamically rendered -->
+          </div>
+        </div>
+
+        <!-- Folder Name -->
+        <div class="form-group">
+          <label class="form-label" for="hobby-input-folder-name">폴더 이름 *</label>
+          <input type="text" id="hobby-input-folder-name" class="form-input" placeholder="예: 요가, 수영, 기타연주, 베이킹, 사진, 러닝" required>
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" id="btn-delete-hobby-folder" class="btn" style="display: none; background: rgba(255, 77, 77, 0.1); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.25); font-size: 0.8rem;">
+            🗑️ 폴더 삭제
+          </button>
+          <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-hobby-folder-modal>취소</button>
+            <button type="submit" id="btn-submit-hobby-folder" class="btn btn-primary">저장 💖</button>
           </div>
         </div>
       </form>
