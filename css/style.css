@@ -771,6 +771,34 @@ body::after {
   background: linear-gradient(90deg, rgba(255, 107, 139, 0.05), var(--bg-card));
 }
 
+/* Work Category Task Item (차분하고 깔끔한 소프트 그레이톤) */
+.task-card.category-work {
+  background: rgba(134, 142, 150, 0.08);
+  border-left: 4px solid #868e96;
+  border-color: rgba(134, 142, 150, 0.25);
+}
+
+.task-card.category-work:hover {
+  background: rgba(134, 142, 150, 0.14);
+  border-color: rgba(134, 142, 150, 0.45);
+}
+
+[data-theme="dark"] .task-card.category-work {
+  background: rgba(140, 145, 155, 0.12);
+  border-left: 4px solid #adb5bd;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .task-card.category-work:hover {
+  background: rgba(140, 145, 155, 0.18);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Schedule Category Task Item (화사한 핑크톤) */
+.task-card.category-schedule {
+  border-left: 4px solid #f06595;
+}
+
 /* Cute Bubbly Checkbox */
 .task-checkbox-container {
   margin-top: 2px;
@@ -1064,11 +1092,18 @@ body::after {
   position: relative;
 }
 
-.file-upload-card:hover, .file-upload-card.drag-over {
+.file-upload-card:hover, .file-upload-card.drag-over, .file-upload-card.dragover {
   border-color: var(--primary);
   background: var(--primary-light);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 10px 25px rgba(255, 107, 139, 0.25);
+  border-style: solid;
+}
+
+.file-upload-card.drag-over .file-upload-icon,
+.file-upload-card.dragover .file-upload-icon {
+  transform: scale(1.15);
+  animation: pulse 1s infinite ease-in-out;
 }
 
 .file-upload-icon {
@@ -3691,7 +3726,7 @@ body::after {
 }
 
 /* ==========================================================================
-   Polaroid Photo Gallery (사진첩) Styles
+   Polaroid Photo Gallery (기록 / 사진) Styles
    ========================================================================== */
 .photos-view-container {
   display: flex;
@@ -3733,36 +3768,50 @@ body::after {
 }
 
 .photos-count-badge {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  padding: 0.2rem 0.55rem;
-  border-radius: 20px;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
   background: rgba(255, 107, 139, 0.12);
   color: var(--primary);
+  border: 1px solid rgba(255, 107, 139, 0.25);
   white-space: nowrap;
-  flex-shrink: 0;
-  line-height: 1.2;
 }
 
-.photos-grid {
+.photos-grid,
+.photos-grid-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 2.2rem 1.8rem;
-  padding: 0.75rem 0.25rem 2.5rem 0.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  gap: 1.35rem 1.15rem;
+  padding: 0.5rem 0.25rem 2rem 0.25rem;
+}
+
+@media (max-width: 768px) {
+  .photos-grid,
+  .photos-grid-container {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem 0.85rem;
+  }
 }
 
 /* Individual Polaroid Card */
 .polaroid-card {
   position: relative;
   background: #ffffff;
-  padding: 14px 14px 20px 14px;
+  padding: 9px 9px 13px 9px;
   border-radius: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  transform: rotate(var(--rot, 0deg));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08), 0 2px 5px rgba(0, 0, 0, 0.04);
+  transform: rotate(var(--rot, 0deg)) translateZ(0);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+  cursor: grab;
+  user-select: none;
   border: 1px solid rgba(0, 0, 0, 0.06);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  max-width: 220px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 [data-theme="dark"] .polaroid-card {
@@ -3793,7 +3842,7 @@ body::after {
 }
 
 .polaroid-card:hover {
-  transform: translateY(-8px) scale(1.03) rotate(0deg) !important;
+  transform: translateY(-8px) scale(1.03) rotate(0deg) translateZ(0) !important;
   box-shadow: 0 20px 40px rgba(255, 107, 139, 0.25), 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 10;
 }
@@ -3806,6 +3855,7 @@ body::after {
   border-radius: 3px;
   overflow: hidden;
   cursor: pointer;
+  transform: translateZ(0);
 }
 
 .polaroid-img {
@@ -4188,6 +4238,284 @@ body::after {
   .note-composer-card {
     padding: 0.85rem 1rem;
   }
+}
+
+/* =========================================================================
+   🏖️ Vacation Tracker & Manager (연차관리 대시보드)
+   ========================================================================= */
+#vacation-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+  width: 100%;
+}
+
+.vacation-hero-card {
+  background: linear-gradient(135deg, rgba(255, 107, 139, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+  border: 1px solid rgba(255, 107, 139, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.6rem;
+  box-shadow: 0 4px 20px rgba(255, 107, 139, 0.06);
+}
+
+.vacation-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1.15rem;
+}
+
+.vacation-stat-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vacation-stat-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.vacation-stat-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vacation-stat-num {
+  font-size: 1.85rem;
+  font-weight: 900;
+  line-height: 1.1;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}
+
+.vacation-stat-num.highlight-primary {
+  color: var(--primary);
+}
+
+.vacation-stat-num.highlight-used {
+  color: #f59f00;
+}
+
+.vacation-stat-num.highlight-remain {
+  color: #10b981;
+}
+
+.vacation-progress-container {
+  margin-top: 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+}
+
+.vacation-progress-bar-track {
+  height: 12px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  position: relative;
+  margin-top: 0.6rem;
+}
+
+[data-theme="dark"] .vacation-progress-bar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.vacation-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59f00, #ff6b8b);
+  border-radius: var(--radius-full);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vacation-timeline-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.vacation-item-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
+}
+
+.vacation-item-card:hover {
+  border-color: var(--primary-light);
+  transform: translateX(3px);
+}
+
+.vacation-type-badge {
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.vacation-type-badge.full {
+  background: rgba(255, 107, 139, 0.12);
+  color: #ff6b8b;
+  border: 1px solid rgba(255, 107, 139, 0.3);
+}
+
+.vacation-type-badge.half-am {
+  background: rgba(245, 159, 0, 0.12);
+  color: #f59f00;
+  border: 1px solid rgba(245, 159, 0, 0.3);
+}
+
+.vacation-type-badge.half-pm {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* =========================================================================
+   🌐 Sites / Bookmarks Manager (사이트 모음)
+   ========================================================================= */
+#sites-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  width: 100%;
+}
+
+.sites-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.2rem;
+  padding-bottom: 2rem;
+}
+
+@media (max-width: 768px) {
+  .sites-grid {
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+  }
+}
+
+.site-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.85rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.site-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 107, 139, 0.35);
+  box-shadow: 0 10px 24px rgba(255, 107, 139, 0.12);
+}
+
+.site-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.site-title-box {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 1;
+}
+
+.site-favicon-bubble {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 107, 139, 0.1);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 107, 139, 0.2);
+}
+
+.site-title-text {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.25;
+  margin: 0;
+}
+
+.site-url-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: none;
+  background: rgba(255, 107, 139, 0.08);
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 107, 139, 0.2);
+  transition: all 0.2s ease;
+  word-break: break-all;
+  width: fit-content;
+}
+
+.site-url-link:hover {
+  background: var(--primary);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.site-memo-box {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--border-color);
+}
+
+[data-theme="dark"] .site-memo-box {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.site-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.2rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-color);
 }
 
 

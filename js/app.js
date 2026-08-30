@@ -15,8 +15,17 @@
 (function() {
   'use strict';
 
-  // Base "Today" Anchor Date: 2026-08-25
-  const TODAY_STR = '2026-08-25';
+  // Dynamic Real Today Date Helper (YYYY-MM-DD)
+  function getRealTodayStr() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Base "Today" Anchor Date (Real Time System Date)
+  const TODAY_STR = getRealTodayStr();
 
   // =========================================================================
   // 0. Utilities
@@ -759,9 +768,8 @@
   const STREAK_KEY = 'todolist_jy_streak_v39';
 
   const DEFAULT_CATEGORIES = [
-    { id: 'work', name: '업무 💼', color: '#ff6b8b' },
-    { id: 'personal', name: '개인 🌸', color: '#b197fc' },
-    { id: 'schedule', name: '일정', color: '#f06595' }
+    { id: 'personal', name: '개인 🌸', color: '#f06595' },
+    { id: 'work', name: '업무 💼', color: '#868e96' }
   ];
 
   const INITIAL_DEMO_TASKS = [];
@@ -908,62 +916,70 @@
             parsed.forEach(t => {
               if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !combinedTasks.some(x => x.id === t.id)) {
                 combinedTasks.push(t);
-              }
-            });
-          } else if (typeof parsed === 'object' && parsed !== null) {
-            if (Array.isArray(parsed.tasks)) {
-              parsed.tasks.forEach(t => {
-                if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !combinedTasks.some(x => x.id === t.id)) {
-                  combinedTasks.push(t);
-                }
-              });
-            }
-            if (Array.isArray(parsed.wishlist)) {
-              parsed.wishlist.forEach(w => {
-                if (w && w.id && !MOCK_DEMO_IDS.has(w.id) && !combinedWishlist.some(x => x.id === w.id)) {
-                  combinedWishlist.push(w);
-                }
-              });
-            }
-            if (Array.isArray(parsed.photos)) {
-              parsed.photos.forEach(p => {
-                if (p && p.id && !combinedPhotos.some(x => x.id === p.id)) {
-                  combinedPhotos.push(p);
-                }
-              });
-            }
-            if (Array.isArray(parsed.notes)) {
-              parsed.notes.forEach(n => {
-                if (n && n.id && !MOCK_DEMO_IDS.has(n.id) && !combinedNotes.some(x => x.id === n.id)) {
-                  combinedNotes.push(n);
-                }
-              });
-            }
-            if (Array.isArray(parsed.ledgerFiles)) {
-              parsed.ledgerFiles.forEach(f => {
-                if (f && f.id && !MOCK_DEMO_IDS.has(f.id) && !combinedLedgerFiles.some(x => x.id === f.id)) {
-                  combinedLedgerFiles.push(f);
-                }
-              });
-            }
-            if (!userCategories && Array.isArray(parsed.categories) && parsed.categories.length) {
-              userCategories = parsed.categories;
-            }
-          }
-        } catch (err) {}
+      this.viewMode = 'list';
+
+      this.loadLocalOnly();
+    }
+
+    loadLocalOnly() {
+      let savedData = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) savedData = JSON.parse(raw);
+      } catch (e) {
+        console.error('Store load error:', e);
+      }
+
+      const userTasks = (savedData && Array.isArray(savedData.tasks)) ? savedData.tasks : [];
+      const userWishlist = (savedData && Array.isArray(savedData.wishlist)) ? savedData.wishlist : [];
+      const userPhotos = (savedData && Array.isArray(savedData.photos)) ? savedData.photos : [];
+      const userNotes = (savedData && Array.isArray(savedData.notes)) ? savedData.notes : [];
+      const userLedgerFiles = (savedData && Array.isArray(savedData.ledgerFiles)) ? savedData.ledgerFiles : [];
+      const userCategories = (savedData && Array.isArray(savedData.categories)) ? savedData.categories : null;
+      const userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
+      const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
+      const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
+
+      const combinedTasks = userTasks.filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
+      const combinedWishlist = userWishlist.filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
+      const combinedPhotos = userPhotos.filter(p => p && p.id);
+      const combinedNotes = userNotes.filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
+      const combinedLedgerFiles = userLedgerFiles.filter(l => l && l.id && !MOCK_DEMO_IDS.has(l.id));
+
+      // Standardize categories: 'personal' (개인 🌸) and 'work' (업무 💼) ONLY
+      let finalCategories = Array.isArray(userCategories) ? userCategories : DEFAULT_CATEGORIES;
+      const validCatIds = new Set(['personal', 'work']);
+      
+      finalCategories = finalCategories.filter(c => c && c.id && (validCatIds.has(c.id) || c.id === 'schedule'));
+      finalCategories = finalCategories.map(c => {
+        if (c.id === 'personal' || c.id === 'schedule') {
+          return { id: 'personal', name: '개인 🌸', color: '#f06595' };
+        }
+        if (c.id === 'work') {
+          return { id: 'work', name: '업무 💼', color: '#868e96' };
+        }
+        return null;
+      }).filter(Boolean);
+
+      // Deduplicate by ID
+      const seenCatIds = new Set();
+      finalCategories = finalCategories.filter(c => {
+        if (seenCatIds.has(c.id)) return false;
+        seenCatIds.add(c.id);
+        return true;
       });
 
-      // Filter out deleted categories (study, routine, cafe) and ensure 'schedule' exists
-      let finalCategories = Array.isArray(userCategories) ? userCategories : DEFAULT_CATEGORIES;
-      const bannedIds = new Set(['study', 'routine', 'cafe']);
-      finalCategories = finalCategories.filter(c => c && c.id && !bannedIds.has(c.id));
-      finalCategories.forEach(c => {
-        if (c.id === 'schedule') c.name = '일정';
-        else if (c.name) c.name = c.name.replace('♥', '').trim();
-      });
+      // Ensure both personal and work exist
       DEFAULT_CATEGORIES.forEach(defCat => {
         if (!finalCategories.some(c => c.id === defCat.id)) {
           finalCategories.push(defCat);
+        }
+      });
+
+      // Map any tasks with unknown category safely to 'personal'
+      combinedTasks.forEach(task => {
+        if (!task.category || !validCatIds.has(task.category)) {
+          task.category = 'personal';
         }
       });
 
@@ -1203,6 +1219,91 @@
       return true;
     }
 
+    // --- Vacation Manager Methods ---
+    addVacation(data) {
+      const type = data.type || 'full';
+      const amount = (type === 'full') ? 1.0 : 0.5;
+      const newVacation = {
+        id: 'vacation-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        type: type, // 'full' (1.0) | 'half-am' (0.5) | 'half-pm' (0.5)
+        amount: amount,
+        date: data.date || getRealTodayStr(),
+        reason: (data.reason || '').trim(),
+        createdAt: Date.now()
+      };
+      this.vacations.unshift(newVacation);
+      // Sort by date descending
+      this.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      this.save();
+      return newVacation;
+    }
+
+    deleteVacation(id) {
+      const idx = this.vacations.findIndex(v => v.id === id);
+      if (idx === -1) return false;
+      this.vacations.splice(idx, 1);
+      this.save();
+      return true;
+    }
+
+    setTotalVacationDays(days) {
+      this.totalVacationDays = Math.max(0, Number(days) || 0);
+      this.save();
+      return this.totalVacationDays;
+    }
+
+    getVacationStats() {
+      const total = Number(this.totalVacationDays) || 15.0;
+      let used = 0;
+      this.vacations.forEach(v => {
+        used += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
+      });
+      const remain = Math.max(0, total - used);
+      const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+      return { total, used, remain, pct };
+    }
+
+    // --- Sites / Bookmarks Methods ---
+    addSite(data) {
+      let rawUrl = (data.url || '').trim();
+      if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+        rawUrl = 'https://' + rawUrl;
+      }
+      const newSite = {
+        id: 'site-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        title: (data.title || '').trim(),
+        url: rawUrl,
+        memo: (data.memo || '').trim(),
+        createdAt: Date.now()
+      };
+      this.sites.unshift(newSite);
+      this.save();
+      return newSite;
+    }
+
+    updateSite(id, updates) {
+      const site = this.sites.find(s => s.id === id);
+      if (!site) return null;
+      if (updates.url) {
+        let rawUrl = (updates.url || '').trim();
+        if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+          rawUrl = 'https://' + rawUrl;
+        }
+        updates.url = rawUrl;
+      }
+      Object.assign(site, updates, { updatedAt: Date.now() });
+      this.save();
+      return site;
+    }
+
+    deleteSite(id) {
+      const idx = this.sites.findIndex(s => s.id === id);
+      if (idx === -1) return false;
+      this.sites.splice(idx, 1);
+      this.save();
+      return true;
+    }
+
     updateStreak() {
       const today = TODAY_STR;
       if (this.streak.lastDate === today) return;
@@ -1325,15 +1426,13 @@
 
     formatDueDate(dateStr) {
       if (!dateStr) return null;
+      const today = getRealTodayStr();
       let label = dateStr.replace(/-/g, '.');
       let className = '';
 
-      if (dateStr === TODAY_STR) {
-        label = '오늘 (2026.08.25)';
+      if (dateStr === today) {
+        label = `오늘 (${label})`;
         className = 'due-today';
-      } else if (dateStr === '2026-08-26') {
-        label = '내일 (2026.08.26)';
-        className = 'due-tomorrow';
       }
 
       return { label, className };
@@ -1341,10 +1440,10 @@
 
     getTypeInfo(type) {
       const map = {
-        'todo': { label: '할 일 📋', class: 'type-todo' },
-        'schedule': { label: '일정 ⏰', class: 'type-schedule' },
-        'half-off': { label: '반차 🌿', class: 'half-off' },
-        'vacation': { label: '휴가 🌴', class: 'vacation' }
+        'todo': { label: '할일 📋', class: 'type-todo', count: 1.0 },
+        'half-off': { label: '반차 🌿', class: 'half-off', count: 0.5 },
+        'vacation': { label: '연차 🌴', class: 'vacation', count: 1.0 },
+        'schedule': { label: '일정 🌸', class: 'type-schedule', count: 1.0 }
       };
       return map[type] || map['todo'];
     },
@@ -1360,7 +1459,7 @@
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
       if (!isLogged) {
-        const counts = ['all', 'upcoming', 'overdue', 'pinned', 'completed', 'photos', 'notes', 'ledger', 'wishlist', 'vault'];
+        const counts = ['all', 'upcoming', 'overdue', 'pinned', 'completed', 'photos', 'notes', 'ledger', 'wishlist', 'vault', 'vacation', 'sites'];
         counts.forEach(k => {
           const el = document.getElementById(`nav-count-${k}`);
           if (el) el.textContent = '🔒';
@@ -1380,10 +1479,12 @@
         overdue: stats.overdue,
         pinned: store.tasks.filter(t => t.pinned).length,
         completed: stats.completed,
-        photos: (store.photos || []).length,
+        photos: store.photos.length,
         notes: store.notes.length,
         ledger: store.ledgerFiles.length,
-        wishlist: store.wishlist.length
+        wishlist: store.wishlist.length,
+        vacation: store.vacations.length,
+        sites: store.sites.length
       };
 
       Object.keys(counts).forEach(k => {
@@ -1430,8 +1531,8 @@
         }
       });
 
-      // 2. Mobile Bottom Nav (모든할일, 위시, 메모, 사진첩)
-      const isCustomView = ['wishlist', 'photos', 'notes', 'ledger', 'vault', 'calendar-month', 'calendar-week'].includes(store.activeFilter);
+      // 2. Mobile Bottom Nav (모든할일, 위시, 메모, 기록)
+      const isCustomView = ['wishlist', 'photos', 'notes', 'ledger', 'vault', 'calendar-month', 'calendar-week', 'vacation', 'sites'].includes(store.activeFilter);
       document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
         const action = btn.dataset.mobileNav;
         if (action === 'all') {
@@ -1462,7 +1563,9 @@
       const priority = this.getPriorityInfo(task.priority);
       const typeInfo = this.getTypeInfo(task.type || 'todo');
       const dueInfo = this.formatDueDate(task.dueDate);
-      const cat = store.categories.find(c => c.id === task.category);
+      const isWorkCategory = (task.category === 'work');
+      const categoryClass = isWorkCategory ? 'category-work' : 'category-personal';
+      const cat = store.categories.find(c => c.id === task.category) || (isWorkCategory ? { name: '업무 💼', color: '#868e96' } : { name: '개인 🌸', color: '#f06595' });
       const createdDateStr = new Date(task.createdAt || Date.now()).toISOString().split('T')[0];
 
       let subtasksHTML = '';
@@ -1485,8 +1588,12 @@
         ? `background: linear-gradient(135deg, #fff3bf, #ffd43b); color: #8c5300; font-weight: 800; border: 1px solid #fab005;`
         : `background: rgba(116, 192, 252, 0.15); color: #1971c2; font-weight: 700;`;
 
+      const catBadgeStyle = isWorkCategory
+        ? `background: rgba(134, 142, 150, 0.18); color: #495057; font-weight: 700; border: 1px solid rgba(134, 142, 150, 0.35);`
+        : `background: ${cat.color}18; color: ${cat.color}; font-weight: 700; border: 1px solid ${cat.color}30;`;
+
       return `
-        <div class="task-card ${isCompleted ? 'completed' : ''} ${task.pinned ? 'pinned' : ''}" 
+        <div class="task-card ${isCompleted ? 'completed' : ''} ${task.pinned ? 'pinned' : ''} ${categoryClass}" 
              id="${task.id}" data-id="${task.id}" draggable="true">
           
           <div class="task-checkbox-container">
@@ -1505,7 +1612,7 @@
             <div class="task-meta-row">
               <span class="badge" style="${typeBadgeStyle}">${typeInfo.label}</span>
               <span class="badge ${priority.class}">${priority.label}</span>
-              ${cat ? `<span class="badge badge-tag" style="background: ${cat.color}15; color: ${cat.color};">${cat.name}</span>` : ''}
+              ${cat ? `<span class="badge badge-tag" style="${catBadgeStyle}">${cat.name}</span>` : ''}
               ${dueInfo ? `<span class="badge badge-date ${dueInfo.className}">${dueInfo.label}</span>` : ''}
             </div>
           </div>
@@ -1534,6 +1641,9 @@
       const ledgerView = document.getElementById('ledger-view-container');
       const calMView = document.getElementById('calendar-month-view-container');
       const calWView = document.getElementById('calendar-week-view-container');
+      const vacationView = document.getElementById('vacation-view-container');
+      const sitesView = document.getElementById('sites-view-container');
+
       const listContainer = document.getElementById('tasks-list-container');
       const kanbanContainer = document.getElementById('kanban-board-container');
       const emptyState = document.getElementById('empty-state');
@@ -1542,9 +1652,11 @@
 
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
+      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, vacationView, sitesView];
+
       if (!isLogged) {
         if (lockedScreen && lockedScreen.style.display !== 'flex') lockedScreen.style.display = 'flex';
-        [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView].forEach(v => {
+        allViews.forEach(v => {
           if (v && v.style.display !== 'none') v.style.display = 'none';
         });
         if (mobileBar && mobileBar.style.display !== 'none') mobileBar.style.display = 'none';
@@ -1555,19 +1667,21 @@
       if (lockedScreen && lockedScreen.style.display !== 'none') lockedScreen.style.display = 'none';
       if (mobileBar && mobileBar.style.display !== 'flex') mobileBar.style.display = 'flex';
 
-      // Atomic Target View Switching (Zero-flicker layout persistence)
+      // Atomic Target View Switching
       const filter = store.activeFilter;
       let targetView = tasksView;
       if (filter === 'calendar-month') targetView = calMView;
       else if (filter === 'calendar-week') targetView = calWView;
+      else if (filter === 'vacation') targetView = vacationView;
       else if (filter === 'photos') targetView = photosView;
       else if (filter === 'notes') targetView = notesView;
       else if (filter === 'ledger') targetView = ledgerView;
       else if (filter === 'wishlist') targetView = wishView;
+      else if (filter === 'sites') targetView = sitesView;
       else if (filter === 'vault') targetView = filesView;
       else targetView = tasksView;
 
-      [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView].forEach(v => {
+      allViews.forEach(v => {
         if (v) {
           if (v === targetView) {
             if (v.style.display !== 'flex') v.style.display = 'flex';
@@ -1591,37 +1705,49 @@
         return;
       }
 
-      // 3.0. 📷 폴라로이드 사진첩 (Photos) View
+      // 3.0. 🏖️ 연차관리 (Vacation) View
+      if (filter === 'vacation') {
+        this.renderVacation();
+        return;
+      }
+
+      // 3.5. 📷 폴라로이드 기록 (Photos) View
       if (filter === 'photos') {
         this.renderPhotos();
         return;
       }
 
-      // 3. 끄적끄적 (Notes) View
+      // 4. 끄적끄적 (Notes) View
       if (filter === 'notes') {
         this.renderNotes();
         return;
       }
 
-      // 4. 💍 2026년 신혼 가계부 View
+      // 5. 💍 2026년 신혼 가계부 View
       if (filter === 'ledger') {
         this.renderLedger();
         return;
       }
 
-      // 5. Wishlist View
+      // 6. Wishlist View
       if (filter === 'wishlist') {
         this.renderWishlist();
         return;
       }
 
-      // 6. File Vault View
+      // 6.5. 🌐 사이트 모음 (Sites) View
+      if (filter === 'sites') {
+        this.renderSites();
+        return;
+      }
+
+      // 7. File Vault View
       if (filter === 'vault') {
         this.renderFilesVault();
         return;
       }
 
-      // 7. Standard Tasks View
+      // 8. Standard Tasks View
       if (tasksView) tasksView.style.display = 'flex';
 
       const filtered = store.getFilteredTasks();
@@ -1736,57 +1862,67 @@
         `;
       }
 
+      const realToday = getRealTodayStr();
       for (let day = 1; day <= totalDays; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const isToday = (dateStr === TODAY_STR);
+        const isToday = (dateStr === realToday);
         const isSelected = (dateStr === store.selectedCalendarDateStr);
 
         const daysTasks = store.tasks.filter(t => t.dueDate === dateStr);
+        const daysVacations = (store.vacations || []).filter(v => v.date === dateStr);
+
+        let dayTotalScore = 0;
         let taskChipsHTML = '';
 
-        daysTasks.slice(0, 3).forEach(task => {
-          const isDone = task.status === 'completed';
-
-          const isImportant = (task.priority === 'urgent' || task.priority === 'high');
-          const starIcon = isImportant ? '<span class="cal-star-badge" title="중요">⭐</span>' : '';
-
-          if (task.type === 'half-off') {
-            taskChipsHTML += `
-              <div class="cal-task-chip half-off ${isDone ? 'completed' : ''}" title="${escapeHTML(task.title || '반차')}">
-                ${starIcon}
-                <span>🌿</span>
-                <span>반차</span>
-              </div>
-            `;
-          } else if (task.type === 'vacation') {
-            taskChipsHTML += `
-              <div class="cal-task-chip vacation ${isDone ? 'completed' : ''}" title="${escapeHTML(task.title || '휴가')}">
-                ${starIcon}
-                <span>🌴</span>
-                <span>휴가</span>
-              </div>
-            `;
-          } else {
-            const pClass = isImportant ? 'high' : 'medium';
-            const icon = task.type === 'schedule' ? '⏰' : (isDone ? '✨' : '📋');
-            taskChipsHTML += `
-              <div class="cal-task-chip ${isDone ? 'completed' : ''} ${pClass}" title="${escapeHTML(task.title)}">
-                ${starIcon}
-                <span>${icon}</span>
-                <span>${escapeHTML(task.title)}</span>
-              </div>
-            `;
-          }
+        daysVacations.forEach(v => {
+          dayTotalScore += (v.amount || (v.type === 'full' ? 1.0 : 0.5));
+          const isFull = (v.type === 'full');
+          const isAm = (v.type === 'half-am');
+          const vLabel = isFull ? '🌴 연차 (1.0)' : (isAm ? '🌅 오전반차 (0.5)' : '🌇 오후반차 (0.5)');
+          const vClass = isFull ? 'vacation' : 'half-off';
+          taskChipsHTML += `
+            <div class="cal-task-chip ${vClass}" title="${vLabel} ${v.reason ? '- ' + escapeHTML(v.reason) : ''}">
+              <span>${isFull ? '🌴' : '🌿'}</span>
+              <span>${vLabel}</span>
+            </div>
+          `;
         });
 
-        if (daysTasks.length > 3) {
-          taskChipsHTML += `<div class="cal-task-more">+${daysTasks.length - 3}개 더보기</div>`;
+        daysTasks.forEach(t => {
+          dayTotalScore += 1.0;
+        });
+
+        daysTasks.slice(0, Math.max(0, 3 - daysVacations.length)).forEach(task => {
+          const isDone = task.status === 'completed';
+          const isImportant = (task.priority === 'urgent' || task.priority === 'high');
+          const starIcon = isImportant ? '<span class="cal-star-badge" title="중요">⭐</span>' : '';
+          const pClass = isImportant ? 'high' : 'medium';
+          const icon = isDone ? '✨' : '📋';
+          taskChipsHTML += `
+            <div class="cal-task-chip ${isDone ? 'completed' : ''} ${pClass}" title="${escapeHTML(task.title)}">
+              ${starIcon}
+              <span>${icon}</span>
+              <span>${escapeHTML(task.title)}</span>
+            </div>
+          `;
+        });
+
+        const totalItemsCount = daysTasks.length + daysVacations.length;
+        if (totalItemsCount > 3) {
+          taskChipsHTML += `<div class="cal-task-more">+${totalItemsCount - 3}개 더보기</div>`;
         }
+
+        const scoreBadge = dayTotalScore > 0 
+          ? `<span class="cal-day-count-badge" style="font-size: 0.7rem; font-weight: 700; color: var(--primary); background: rgba(255,107,139,0.1); padding: 1px 5px; border-radius: 6px;">${dayTotalScore}개</span>` 
+          : '';
 
         cellsHTML += `
           <div class="cal-day-cell ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" data-date="${dateStr}">
             <div class="cal-day-header">
-              <span class="cal-day-num">${day}</span>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <span class="cal-day-num">${day}</span>
+                ${scoreBadge}
+              </div>
               ${isToday ? '<span class="cal-today-badge">오늘 🌸</span>' : ''}
             </div>
             <div class="cal-day-tasks">
@@ -1834,14 +1970,34 @@
       }
 
       const tasksForDate = store.tasks.filter(t => t.dueDate === selectedDate);
-      if (tasksForDate.length === 0) {
+      const vacationsForDate = (store.vacations || []).filter(v => v.date === selectedDate);
+
+      let vacBannerHTML = '';
+      if (vacationsForDate.length > 0) {
+        vacBannerHTML = vacationsForDate.map(v => {
+          const isFull = (v.type === 'full');
+          const isAm = (v.type === 'half-am');
+          const badgeClass = isFull ? 'full' : (isAm ? 'half-am' : 'half-pm');
+          const badgeLabel = isFull ? '🌴 연차 (1.0일 사용)' : (isAm ? '🌅 오전 반차 (0.5일 사용)' : '🌇 오후 반차 (0.5일 사용)');
+          return `
+            <div class="vacation-item-card" style="margin-bottom: 0.5rem; background: linear-gradient(135deg, rgba(255, 243, 191, 0.4), rgba(255, 212, 59, 0.15)); border: 1px solid rgba(250, 176, 5, 0.35);">
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span class="vacation-type-badge ${badgeClass}">${badgeLabel}</span>
+                <span style="font-weight: 700; font-size: 0.9rem; color: var(--text-main);">${v.reason ? escapeHTML(v.reason) : '휴가/반차'}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      if (tasksForDate.length === 0 && vacationsForDate.length === 0) {
         listEl.innerHTML = `
           <div style="padding: 1.5rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.88rem; background: rgba(0,0,0,0.02); border-radius: var(--radius-md);">
             <span>🌷 이 날짜에 등록된 일정이 없어요. '+ 이 날짜에 새 일정/할 일 추가' 버튼을 눌러보세요!</span>
           </div>
         `;
       } else {
-        listEl.innerHTML = tasksForDate.map(t => this.createTaskCardHTML(t)).join('');
+        listEl.innerHTML = vacBannerHTML + tasksForDate.map(t => this.createTaskCardHTML(t)).join('');
       }
     },
 
@@ -1932,7 +2088,7 @@
     },
 
     // =======================================================================
-    // 📷 폴라로이드 사진첩 (Polaroid Photo Gallery) Engine
+    // 📷 기록 / 폴라로이드 사진 (Polaroid Photo Gallery) Engine (Flicker-Free Keyed DOM)
     // =======================================================================
     renderPhotos() {
       const grid = document.getElementById('photos-grid-container');
@@ -1940,43 +2096,92 @@
       const countEl = document.getElementById('photos-count-total');
       if (!grid) return;
 
-      const total = (store.photos || []).length;
+      const photos = store.photos || [];
+      const total = photos.length;
       if (countEl) countEl.textContent = total;
 
       if (total === 0) {
         grid.innerHTML = '';
         if (emptyState) emptyState.style.display = 'flex';
-      } else {
-        if (emptyState) emptyState.style.display = 'none';
-
-        grid.innerHTML = store.photos.map(photo => {
-          const rot = photo.rotationDeg !== undefined ? photo.rotationDeg : 0;
-          const dateFormatted = photo.date ? photo.date.replace(/-/g, '.') : '';
-          
-          return `
-            <div class="polaroid-card" style="--rot: ${rot}deg;" data-photo-id="${photo.id}" draggable="true">
-              <div class="polaroid-image-wrapper" data-action="view-photo-lightbox" data-photo-id="${photo.id}" title="클릭하여 크게 보기 🔍">
-                <img src="${photo.imageDataUrl}" class="polaroid-img" alt="${escapeHTML(photo.caption || '폴라로이드 사진')}" loading="lazy">
-              </div>
-              <div class="polaroid-caption-area">
-                <span class="polaroid-date-badge">${dateFormatted}</span>
-                <div class="polaroid-memo-text">${escapeHTML(photo.caption)}</div>
-              </div>
-              <div class="polaroid-actions-row">
-                <button type="button" class="polaroid-btn" data-action="view-photo-lightbox" data-photo-id="${photo.id}" title="크게 보기">
-                  🔍
-                </button>
-                <button type="button" class="polaroid-btn" data-action="edit-photo" data-photo-id="${photo.id}" title="사진/메모 수정">
-                  ✏️
-                </button>
-                <button type="button" class="polaroid-btn delete" data-action="delete-photo" data-photo-id="${photo.id}" title="사진 삭제">
-                  🗑️
-                </button>
-              </div>
-            </div>
-          `;
-        }).join('');
+        return;
       }
+      if (emptyState) emptyState.style.display = 'none';
+
+      // 1. Existing DOM cards Map (Keyed by photoId)
+      const existingCardsMap = new Map();
+      grid.querySelectorAll('.polaroid-card').forEach(card => {
+        if (card.dataset.photoId) existingCardsMap.set(card.dataset.photoId, card);
+      });
+
+      const currentIds = new Set(photos.map(p => p.id));
+
+      // 2. Remove deleted photo cards smoothly
+      existingCardsMap.forEach((card, id) => {
+        if (!currentIds.has(id)) {
+          card.remove();
+        }
+      });
+
+      // 3. Helper to create a single Polaroid Card element
+      const createPolaroidCardEl = (photo) => {
+        const rot = photo.rotationDeg !== undefined ? photo.rotationDeg : 0;
+        const dateFormatted = photo.date ? photo.date.replace(/-/g, '.') : '';
+        const temp = document.createElement('div');
+        temp.innerHTML = `
+          <div class="polaroid-card" style="--rot: ${rot}deg;" data-photo-id="${photo.id}" draggable="true">
+            <div class="polaroid-image-wrapper" data-action="view-photo-lightbox" data-photo-id="${photo.id}" title="클릭하여 크게 보기 🔍">
+              <img src="${photo.imageDataUrl}" class="polaroid-img" alt="${escapeHTML(photo.caption || '기록 사진')}" loading="lazy" decoding="async">
+            </div>
+            <div class="polaroid-caption-area">
+              <span class="polaroid-date-badge">${dateFormatted}</span>
+              <div class="polaroid-memo-text">${escapeHTML(photo.caption)}</div>
+            </div>
+            <div class="polaroid-actions-row">
+              <button type="button" class="polaroid-btn" data-action="view-photo-lightbox" data-photo-id="${photo.id}" title="크게 보기">
+                🔍
+              </button>
+              <button type="button" class="polaroid-btn" data-action="edit-photo" data-photo-id="${photo.id}" title="사진/메모 수정">
+                ✏️
+              </button>
+              <button type="button" class="polaroid-btn delete" data-action="delete-photo" data-photo-id="${photo.id}" title="사진 삭제">
+                🗑️
+              </button>
+            </div>
+          </div>
+        `.trim();
+        return temp.firstElementChild;
+      };
+
+      // 4. Update existing cards in place without image flash, or insert new ones
+      photos.forEach((photo, index) => {
+        const existingCard = existingCardsMap.get(photo.id);
+        if (existingCard) {
+          const img = existingCard.querySelector('.polaroid-img');
+          if (img && img.src !== photo.imageDataUrl) {
+            img.src = photo.imageDataUrl;
+          }
+          const dateBadge = existingCard.querySelector('.polaroid-date-badge');
+          if (dateBadge) {
+            const dateFormatted = photo.date ? photo.date.replace(/-/g, '.') : '';
+            if (dateBadge.textContent !== dateFormatted) dateBadge.textContent = dateFormatted;
+          }
+          const memoText = existingCard.querySelector('.polaroid-memo-text');
+          if (memoText) {
+            const safeCap = escapeHTML(photo.caption);
+            if (memoText.innerHTML !== safeCap) memoText.innerHTML = safeCap;
+          }
+          const rot = photo.rotationDeg !== undefined ? photo.rotationDeg : 0;
+          existingCard.style.setProperty('--rot', `${rot}deg`);
+
+          // Ensure correct order in grid
+          if (grid.children[index] !== existingCard) {
+            grid.insertBefore(existingCard, grid.children[index] || null);
+          }
+        } else {
+          const newCard = createPolaroidCardEl(photo);
+          grid.insertBefore(newCard, grid.children[index] || null);
+        }
+      });
     },
 
     // =======================================================================
@@ -2421,17 +2626,20 @@
         catSelect.innerHTML = store.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
       }
 
+      const deleteBtn = document.getElementById('btn-modal-delete-task');
+
       if (taskId) {
         const task = store.tasks.find(t => t.id === taskId);
         if (!task) return;
         modalTitle.textContent = '일정 / 할 일 수정하기 ✏️';
         form.dataset.taskId = task.id;
+        if (deleteBtn) deleteBtn.style.display = 'inline-flex';
         document.getElementById('task-input-title').value = task.title;
         document.getElementById('task-input-type').value = task.type || 'todo';
         document.getElementById('task-input-desc').value = task.description || '';
         document.getElementById('task-input-priority').value = (task.priority === 'urgent' || task.priority === 'high') ? 'high' : 'medium';
-        document.getElementById('task-input-category').value = task.category || 'routine';
-        document.getElementById('task-input-duedate').value = task.dueDate || TODAY_STR;
+        document.getElementById('task-input-category').value = task.category || 'personal';
+        document.getElementById('task-input-duedate').value = task.dueDate || getRealTodayStr();
         document.getElementById('task-input-pinned').checked = !!task.pinned;
 
         if (task.subtasks) {
@@ -2440,13 +2648,13 @@
       } else {
         modalTitle.textContent = '새로운 일정/할 일 등록 💖';
         delete form.dataset.taskId;
+        if (deleteBtn) deleteBtn.style.display = 'none';
         document.getElementById('task-input-type').value = 'todo';
         document.getElementById('task-input-priority').value = 'medium';
-        document.getElementById('task-input-duedate').value = presetDueDate || TODAY_STR;
+        document.getElementById('task-input-duedate').value = presetDueDate || getRealTodayStr();
 
-        const defaultCat = store.activeFilter !== 'all' && store.activeFilter !== 'vault' && store.categories.some(c => c.id === store.activeFilter)
-          ? store.activeFilter
-          : (store.categories[0] ? store.categories[0].id : 'routine');
+        // Default Category: if active filter is work -> work, otherwise personal
+        const defaultCat = (store.activeFilter === 'work') ? 'work' : 'personal';
         document.getElementById('task-input-category').value = defaultCat;
       }
 
@@ -2612,9 +2820,9 @@
       if (photoId) {
         const photo = store.photos.find(p => p.id === photoId);
         if (!photo) return;
-        if (titleEl) titleEl.textContent = '📸 사진첩 사진/메모 수정';
+        if (titleEl) titleEl.textContent = '📸 기록 사진/메모 수정';
         if (hiddenId) hiddenId.value = photo.id;
-        if (dateInput) dateInput.value = photo.date || TODAY_STR;
+        if (dateInput) dateInput.value = photo.date || getRealTodayStr();
         if (captionInput) captionInput.value = photo.caption || '';
         
         window._photoEditor.rawSrc = photo.imageDataUrl;
@@ -2635,9 +2843,9 @@
         if (fitHint) fitHint.style.display = 'inline';
         if (previewPlaceholder) previewPlaceholder.style.display = 'none';
       } else {
-        if (titleEl) titleEl.textContent = '📸 새로운 사진 걸어두기';
+        if (titleEl) titleEl.textContent = '📸 새로운 기록 사진 등록';
         if (hiddenId) hiddenId.value = '';
-        if (dateInput) dateInput.value = TODAY_STR;
+        if (dateInput) dateInput.value = getRealTodayStr();
         if (previewImg) {
           previewImg.src = '';
           previewImg.style.transform = 'translate(-50%, -50%)';
@@ -2654,6 +2862,9 @@
     },
 
     closePhotoModal() {
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
       const modal = document.getElementById('photo-modal');
       if (modal) {
         modal.style.display = 'none';
@@ -2709,6 +2920,192 @@
 
     closeEditNoteModal() {
       const modal = document.getElementById('edit-note-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    // =========================================================================
+    // 🏖️ Vacation Manager (연차관리)
+    // =========================================================================
+    renderVacation() {
+      const stats = store.getVacationStats();
+      const totalEl = document.getElementById('vacation-stat-total');
+      const usedEl = document.getElementById('vacation-stat-used');
+      const remainEl = document.getElementById('vacation-stat-remain');
+      const barEl = document.getElementById('vacation-progress-bar');
+      const textEl = document.getElementById('vacation-progress-text');
+      const listEl = document.getElementById('vacation-history-list');
+      const emptyEl = document.getElementById('vacation-empty-state');
+      const countEl = document.getElementById('vacation-history-count');
+
+      if (totalEl) totalEl.innerHTML = `${stats.total.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
+      if (usedEl) usedEl.innerHTML = `${stats.used.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
+      if (remainEl) remainEl.innerHTML = `${stats.remain.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
+      if (barEl) barEl.style.width = `${stats.pct}%`;
+      if (textEl) textEl.textContent = `${stats.pct}% (${stats.used.toFixed(1)}일 / ${stats.total.toFixed(1)}일) 사용 완료`;
+      if (countEl) countEl.textContent = `총 ${store.vacations.length}건`;
+
+      if (!listEl) return;
+
+      if (store.vacations.length === 0) {
+        listEl.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'flex';
+      } else {
+        if (emptyEl) emptyEl.style.display = 'none';
+        listEl.innerHTML = store.vacations.map(v => {
+          const isFull = (v.type === 'full');
+          const isAm = (v.type === 'half-am');
+          const badgeClass = isFull ? 'full' : (isAm ? 'half-am' : 'half-pm');
+          const badgeLabel = isFull ? '🌴 연차 (1.0일)' : (isAm ? '🌅 오전 반차 (0.5일)' : '🌇 오후 반차 (0.5일)');
+          const dateStr = v.date ? v.date.replace(/-/g, '.') : '';
+
+          return `
+            <div class="vacation-item-card" data-vacation-id="${v.id}">
+              <div style="display: flex; align-items: center; gap: 0.85rem; flex: 1;">
+                <span class="vacation-type-badge ${badgeClass}">${badgeLabel}</span>
+                <div>
+                  <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                    <span>${dateStr}</span>
+                    ${v.reason ? `<span style="font-weight: 500; font-size: 0.85rem; color: var(--text-muted);">| ${escapeHTML(v.reason)}</span>` : ''}
+                  </div>
+                </div>
+              </div>
+              <button type="button" class="task-action-btn delete-btn" data-action="delete-vacation" data-vacation-id="${v.id}" title="연차 기록 삭제">
+                🗑️
+              </button>
+            </div>
+          `;
+        }).join('');
+      }
+
+      this.renderSidebar();
+    },
+
+    openVacationModal() {
+      const modal = document.getElementById('vacation-modal');
+      const form = document.getElementById('vacation-form');
+      const dateInput = document.getElementById('vacation-input-date');
+      if (!modal || !form) return;
+      form.reset();
+      if (dateInput) dateInput.value = getRealTodayStr();
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    },
+
+    closeVacationModal() {
+      const modal = document.getElementById('vacation-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openTotalVacationModal() {
+      const modal = document.getElementById('total-vacation-modal');
+      const input = document.getElementById('input-total-vacation-days');
+      if (!modal) return;
+      if (input) input.value = store.totalVacationDays || 15;
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    },
+
+    closeTotalVacationModal() {
+      const modal = document.getElementById('total-vacation-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    // =========================================================================
+    // 🌐 Sites / Bookmarks (사이트 바로가기)
+    // =========================================================================
+    renderSites() {
+      const grid = document.getElementById('sites-grid-container');
+      const emptyEl = document.getElementById('sites-empty-state');
+      if (!grid) return;
+
+      if (store.sites.length === 0) {
+        grid.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'flex';
+      } else {
+        if (emptyEl) emptyEl.style.display = 'none';
+        grid.innerHTML = store.sites.map(site => {
+          let hostname = '';
+          try {
+            hostname = new URL(site.url).hostname;
+          } catch (e) {
+            hostname = site.url;
+          }
+
+          return `
+            <div class="site-card" data-site-id="${site.id}">
+              <div class="site-card-header">
+                <div class="site-title-box">
+                  <div class="site-favicon-bubble">🌐</div>
+                  <div>
+                    <h4 class="site-title-text">${escapeHTML(site.title)}</h4>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">${escapeHTML(hostname)}</span>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 0.35rem;">
+                  <button type="button" class="task-action-btn edit-btn" data-action="edit-site" data-site-id="${site.id}" title="사이트 수정">✏️</button>
+                  <button type="button" class="task-action-btn delete-btn" data-action="delete-site" data-site-id="${site.id}" title="사이트 삭제">🗑️</button>
+                </div>
+              </div>
+
+              ${site.memo ? `<div class="site-memo-box">📝 ${escapeHTML(site.memo)}</div>` : ''}
+
+              <div class="site-card-footer">
+                <a href="${escapeHTML(site.url)}" target="_blank" rel="noopener noreferrer" class="site-url-link" title="새 탭으로 열기">
+                  <span>🚀 바로가기</span>
+                  <span style="font-size: 0.72rem; opacity: 0.85;">↗</span>
+                </a>
+                <button type="button" class="btn btn-sm" style="font-size: 0.74rem; background: rgba(0,0,0,0.04); color: var(--text-muted); padding: 3px 7px;" data-action="copy-site-url" data-url="${escapeHTML(site.url)}" title="URL 복사">
+                  📋 복사
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      this.renderSidebar();
+    },
+
+    openSiteModal(siteId = null) {
+      const modal = document.getElementById('site-modal');
+      const form = document.getElementById('site-form');
+      const titleEl = document.getElementById('site-modal-title');
+      const hiddenId = document.getElementById('site-edit-id');
+      const inputTitle = document.getElementById('site-input-title');
+      const inputUrl = document.getElementById('site-input-url');
+      const inputMemo = document.getElementById('site-input-memo');
+      if (!modal || !form) return;
+
+      form.reset();
+      if (siteId) {
+        const site = store.sites.find(s => s.id === siteId);
+        if (!site) return;
+        if (titleEl) titleEl.textContent = '🌐 사이트 바로가기 수정 💖';
+        if (hiddenId) hiddenId.value = site.id;
+        if (inputTitle) inputTitle.value = site.title || '';
+        if (inputUrl) inputUrl.value = site.url || '';
+        if (inputMemo) inputMemo.value = site.memo || '';
+      } else {
+        if (titleEl) titleEl.textContent = '🌐 새 사이트 바로가기 등록 💖';
+        if (hiddenId) hiddenId.value = '';
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (inputTitle) setTimeout(() => inputTitle.focus(), 60);
+    },
+
+    closeSiteModal() {
+      const modal = document.getElementById('site-modal');
       if (modal) {
         modal.style.display = 'none';
         modal.classList.remove('active');
@@ -3117,8 +3514,11 @@
       });
     }
 
-    // Sidebar & Mobile Nav Filter Delegation
+    // Sidebar & Mobile Nav Filter Delegation (with drag suppression)
+    let suppressNavClickUntil = 0;
+
     document.addEventListener('click', (e) => {
+      if (Date.now() < suppressNavClickUntil) return;
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
       const navItem = e.target.closest('.nav-item');
@@ -3195,11 +3595,13 @@
       }
     });
 
-    // Category Drag & Drop Reordering (카테고리 드래그 순서 변경)
+    // Category Drag & Drop Reordering (카테고리 드래그 순서 변경 - 데스크톱 & 모바일 터치 지원)
     const catNavList = document.getElementById('category-nav-list');
     if (catNavList) {
       let draggedCatId = null;
+      let touchTargetItem = null;
 
+      // 1. Desktop Mouse Drag & Drop
       catNavList.addEventListener('dragstart', (e) => {
         const item = e.target.closest('.category-drag-item');
         if (!item) return;
@@ -3210,6 +3612,7 @@
       });
 
       catNavList.addEventListener('dragend', (e) => {
+        suppressNavClickUntil = Date.now() + 350;
         const item = e.target.closest('.category-drag-item');
         if (item) item.classList.remove('dragging');
         document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
@@ -3241,6 +3644,7 @@
 
       catNavList.addEventListener('drop', (e) => {
         e.preventDefault();
+        suppressNavClickUntil = Date.now() + 350;
         const targetItem = e.target.closest('.category-drag-item');
         if (!targetItem || !draggedCatId) return;
         const targetCatId = targetItem.dataset.catId;
@@ -3260,6 +3664,77 @@
         }
         draggedCatId = null;
         document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+      });
+
+      // 2. Mobile Touch Drag & Drop
+      catNavList.addEventListener('touchstart', (e) => {
+        const handle = e.target.closest('.category-drag-handle') || e.target.closest('.category-drag-item');
+        if (!handle) return;
+        const item = e.target.closest('.category-drag-item');
+        if (!item) return;
+        draggedCatId = item.dataset.catId;
+        item.classList.add('touch-dragging');
+      }, { passive: true });
+
+      catNavList.addEventListener('touchmove', (e) => {
+        if (!draggedCatId) return;
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (!target) return;
+        const overItem = target.closest('.category-drag-item');
+        
+        document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+        if (overItem && overItem.dataset.catId !== draggedCatId) {
+          touchTargetItem = overItem;
+          const rect = overItem.getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          if (touch.clientY < midY) {
+            overItem.classList.add('drag-over-top');
+          } else {
+            overItem.classList.add('drag-over-bottom');
+          }
+        }
+      }, { passive: true });
+
+      catNavList.addEventListener('touchend', (e) => {
+        suppressNavClickUntil = Date.now() + 350;
+        if (draggedCatId && touchTargetItem) {
+          const targetCatId = touchTargetItem.dataset.catId;
+          if (targetCatId && targetCatId !== draggedCatId) {
+            const fromIdx = store.categories.findIndex(c => c.id === draggedCatId);
+            const toIdx = store.categories.findIndex(c => c.id === targetCatId);
+            if (fromIdx !== -1 && toIdx !== -1) {
+              const [movedCat] = store.categories.splice(fromIdx, 1);
+              const insertIdx = touchTargetItem.classList.contains('drag-over-top') ? toIdx : toIdx + 1;
+              store.categories.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, movedCat);
+              store.save();
+              UI.renderSidebar();
+              UI.showToast('카테고리 순서가 변경되었어요! 🏷️✨', 'info');
+            }
+          }
+        }
+        draggedCatId = null;
+        touchTargetItem = null;
+        document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('touch-dragging', 'drag-over-top', 'drag-over-bottom'));
+      });
+    }
+
+    // Modal Delete Button Listener (일정 수정 모달 내 삭제)
+    const modalDeleteBtn = document.getElementById('btn-modal-delete-task');
+    if (modalDeleteBtn) {
+      modalDeleteBtn.addEventListener('click', () => {
+        const form = document.getElementById('task-form');
+        const taskId = form?.dataset.taskId;
+        if (taskId && confirm('이 일정을 정말 삭제하시겠습니까?')) {
+          store.deleteTask(taskId);
+          sounds.playDelete();
+          UI.closeTaskModal();
+          UI.showToast('일정이 안전하게 삭제되었어요 🗑️', 'info');
+          UI.renderTasks();
+          UI.renderSidebar();
+          if (store.activeFilter === 'calendar-month') UI.renderCalendarMonth();
+          if (store.activeFilter === 'calendar-week') UI.renderCalendarWeek();
+        }
       });
     }
 
@@ -3613,13 +4088,21 @@
 
       // 4. Task Delete
       if (target.closest('[data-action="delete"]')) {
+        e.stopPropagation();
+        e.preventDefault();
         const card = target.closest('.task-card');
-        if (card && confirm('정말 삭제하시겠습니까?')) {
-          store.deleteTask(card.dataset.id);
+        const chip = target.closest('.weekly-item-chip');
+        const taskId = (card ? card.dataset.id : null) || (chip ? chip.dataset.taskId : null) || target.closest('[data-task-id]')?.dataset.taskId;
+        if (taskId && confirm('정말 이 일정을 삭제하시겠습니까?')) {
+          store.deleteTask(taskId);
           sounds.playDelete();
-          UI.showToast('일정이 삭제되었어요', 'danger');
+          UI.showToast('일정이 안전하게 삭제되었어요 🗑️', 'danger');
           UI.renderTasks();
+          UI.renderSidebar();
+          if (store.activeFilter === 'calendar-month') UI.renderCalendarMonth();
+          if (store.activeFilter === 'calendar-week') UI.renderCalendarWeek();
         }
+        return;
       }
 
       // 5. Weekly Row Add Button
@@ -3780,26 +4263,138 @@
         }
       }
 
-      // 13. Open Add Photo Modal Triggers
+      // 13. Vacation Manager Action Triggers
+      if (target.closest('[data-action="delete-vacation"]')) {
+        const btn = target.closest('[data-action="delete-vacation"]');
+        const vId = btn.dataset.vacationId;
+        if (vId && confirm('이 연차/반차 기록을 삭제하시겠습니까?')) {
+          store.deleteVacation(vId);
+          sounds.playDelete();
+          UI.showToast('연차 기록이 삭제되었어요 🗑️', 'danger');
+          UI.renderVacation();
+        }
+      }
+
+      if (target.closest('#btn-open-add-vacation-modal')) {
+        UI.openVacationModal();
+      }
+      if (target.closest('#btn-open-set-total-vacation')) {
+        UI.openTotalVacationModal();
+      }
+      if (target.closest('#btn-close-vacation-modal') || target.closest('#btn-cancel-vacation-modal')) {
+        UI.closeVacationModal();
+      }
+      if (target.closest('#btn-close-total-vacation-modal') || target.closest('#btn-cancel-total-vacation-modal')) {
+        UI.closeTotalVacationModal();
+      }
+
+      // 14. Sites / Bookmarks Action Triggers
+      if (target.closest('[data-action="edit-site"]')) {
+        const btn = target.closest('[data-action="edit-site"]');
+        const siteId = btn.dataset.siteId;
+        if (siteId) UI.openSiteModal(siteId);
+      }
+
+      if (target.closest('[data-action="delete-site"]')) {
+        const btn = target.closest('[data-action="delete-site"]');
+        const siteId = btn.dataset.siteId;
+        if (siteId && confirm('이 사이트 바로가기를 삭제하시겠습니까?')) {
+          store.deleteSite(siteId);
+          sounds.playDelete();
+          UI.showToast('사이트 바로가기가 삭제되었어요 🗑️', 'danger');
+          UI.renderSites();
+        }
+      }
+
+      if (target.closest('[data-action="copy-site-url"]')) {
+        const btn = target.closest('[data-action="copy-site-url"]');
+        const url = btn.dataset.url;
+        if (url) {
+          navigator.clipboard.writeText(url).then(() => {
+            UI.showToast('사이트 주소가 복사되었어요 📋✨', 'success');
+          }).catch(() => {
+            UI.showToast('주소 복사에 실패했어요', 'danger');
+          });
+        }
+      }
+
+      if (target.closest('#btn-open-add-site-modal') || target.closest('#btn-sites-empty-add')) {
+        UI.openSiteModal();
+      }
+      if (target.closest('#btn-close-site-modal') || target.closest('#btn-cancel-site-modal')) {
+        UI.closeSiteModal();
+      }
+
+      // 15. Open Add Photo Modal Triggers
       if (target.closest('#btn-open-add-photo-modal') || target.closest('#btn-photos-empty-add')) {
         UI.openPhotoModal();
       }
 
-      // 14. Close Photo Modal Triggers
+      // 16. Close Photo Modal Triggers
       if (target.closest('#btn-close-photo-modal') || target.closest('#btn-cancel-photo-modal')) {
         UI.closePhotoModal();
       }
 
-      // 15. Close Lightbox Trigger
+      // 17. Close Lightbox Trigger
       if (target.closest('#btn-close-photo-lightbox') || target.id === 'photo-lightbox-modal') {
         UI.closePhotoLightbox();
       }
 
-      // 16. Close Edit Note Modal Triggers
+      // 18. Close Edit Note Modal Triggers
       if (target.closest('#btn-close-edit-note-modal') || target.closest('#btn-cancel-edit-note-modal')) {
         UI.closeEditNoteModal();
       }
     });
+
+    // Form Submissions for Vacation & Sites
+    const vacationForm = document.getElementById('vacation-form');
+    if (vacationForm) {
+      vacationForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const type = document.getElementById('vacation-input-type')?.value || 'full';
+        const date = document.getElementById('vacation-input-date')?.value || getRealTodayStr();
+        const reason = document.getElementById('vacation-input-reason')?.value || '';
+        store.addVacation({ type, date, reason });
+        sounds.playComplete();
+        UI.closeVacationModal();
+        UI.showToast('연차/반차가 성공적으로 등록되었어요 🏖️💖', 'success');
+        UI.renderVacation();
+      });
+    }
+
+    const totalVacationForm = document.getElementById('total-vacation-form');
+    if (totalVacationForm) {
+      totalVacationForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const days = document.getElementById('input-total-vacation-days')?.value;
+        store.setTotalVacationDays(days);
+        UI.closeTotalVacationModal();
+        UI.showToast('총 연차 일수가 설정되었어요 ⚙️✨', 'success');
+        UI.renderVacation();
+      });
+    }
+
+    const siteForm = document.getElementById('site-form');
+    if (siteForm) {
+      siteForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('site-edit-id')?.value;
+        const title = document.getElementById('site-input-title')?.value;
+        const url = document.getElementById('site-input-url')?.value;
+        const memo = document.getElementById('site-input-memo')?.value;
+
+        if (id) {
+          store.updateSite(id, { title, url, memo });
+          UI.showToast('사이트 정보가 수정되었어요 🌐✨', 'info');
+        } else {
+          store.addSite({ title, url, memo });
+          sounds.playComplete();
+          UI.showToast('새 사이트 바로가기가 등록되었어요 🚀💖', 'success');
+        }
+        UI.closeSiteModal();
+        UI.renderSites();
+      });
+    }
 
     // Polaroid Photo Dropzone & Interactive 1:1 Frame Editor Handling
     const photoDropzone = document.getElementById('photo-dropzone');
@@ -3951,6 +4546,13 @@
         reader.onload = (e) => {
           const img = new Image();
           img.onload = () => {
+            // Auto fill today date if new upload
+            const editId = document.getElementById('photo-edit-id')?.value;
+            const dateInput = document.getElementById('photo-input-date');
+            if (!editId && dateInput && !dateInput.value) {
+              dateInput.value = getRealTodayStr();
+            }
+
             window._photoEditor = {
               rawImg: img,
               rawSrc: e.target.result,
@@ -4054,7 +4656,7 @@
       photoForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const editId = document.getElementById('photo-edit-id').value;
-        const dateVal = document.getElementById('photo-input-date').value || TODAY_STR;
+        const dateVal = document.getElementById('photo-input-date').value || getRealTodayStr();
         const captionVal = document.getElementById('photo-input-caption').value.trim();
 
         if (!window._photoEditor || (!window._photoEditor.rawImg && !window._photoEditor.rawSrc)) {
@@ -4080,7 +4682,7 @@
             caption: captionVal,
             imageDataUrl: finalImageDataUrl
           });
-          UI.showToast('사진이 1:1 고정 틀에 맞춰 수정되었어요! ✨', 'info');
+          UI.showToast('기록 사진이 1:1 고정 틀에 맞춰 수정되었어요! ✨', 'info');
         } else {
           store.addPhoto({
             date: dateVal,
@@ -4089,7 +4691,7 @@
           });
           sounds.playAdd();
           confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 18);
-          UI.showToast('사진첩에 예쁘게 걸어두었어요! 📸💖', 'success');
+          UI.showToast('기록에 예쁘게 저장했어요! 📸💖', 'success');
         }
 
         UI.closePhotoModal();

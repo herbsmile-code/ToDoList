@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=6.9">
-  <link rel="stylesheet" href="css/animations.css?v=6.9">
+  <link rel="stylesheet" href="css/style.css?v=7.7">
+  <link rel="stylesheet" href="css/animations.css?v=7.7">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -72,9 +72,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v6.9)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.7)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v6.9</span>
+          <span>v7.7</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -164,13 +164,21 @@
             <!-- Dynamically populated categories -->
           </ul>
           
-          <!-- Extra Features: Photos, Notes, Ledger, Wishlist & File Vault -->
+          <!-- Extra Features: Vacation, Photos, Notes, Ledger, Wishlist, Sites & File Vault -->
           <ul class="nav-list" style="margin-top: 0.65rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
-            <!-- Photos / Polaroid Gallery Menu Item (사진첩) -->
-            <li class="nav-item photos-nav-item" data-filter="photos" id="nav-filter-photos" title="폴라로이드 감성 사진 & 추억 보관함">
+            <!-- Vacation Tracker Menu Item (연차관리) -->
+            <li class="nav-item vacation-nav-item" data-filter="vacation" id="nav-filter-vacation" title="회사 총 연차/반차 사용 현황 및 잔여 일수 관리">
+              <div class="nav-item-left">
+                <span>🏖️</span>
+                <span>연차관리</span>
+              </div>
+              <span class="nav-count" id="nav-count-vacation">0</span>
+            </li>
+            <!-- Photos / Polaroid Gallery Menu Item (기록) -->
+            <li class="nav-item photos-nav-item" data-filter="photos" id="nav-filter-photos" title="폴라로이드 감성 사진 & 추억 기록 보관함">
               <div class="nav-item-left">
                 <span>📸</span>
-                <span>사진첩</span>
+                <span>기록</span>
               </div>
               <span class="nav-count" id="nav-count-photos">0</span>
             </li>
@@ -198,6 +206,14 @@
                 <span>위시리스트</span>
               </div>
               <span class="nav-count" id="nav-count-wishlist">0</span>
+            </li>
+            <!-- Sites / Bookmarks Menu Item (사이트) -->
+            <li class="nav-item sites-nav-item" data-filter="sites" id="nav-filter-sites" title="자주 가는 사이트 바로가기 & 메모">
+              <div class="nav-item-left">
+                <span>🌐</span>
+                <span>사이트</span>
+              </div>
+              <span class="nav-count" id="nav-count-sites">0</span>
             </li>
             <!-- File Vault Menu Item (파일 보관함) -->
             <li class="nav-item vault-nav-item" data-filter="vault" id="nav-filter-vault" title="엑셀, 메모장 등 파일 보관소">
@@ -248,10 +264,12 @@
         <div class="mobile-category-bar" id="mobile-category-bar">
           <button type="button" class="mobile-cat-pill" data-filter="calendar-month">🗓️ 월별달력</button>
           <button type="button" class="mobile-cat-pill active" data-filter="all">🌸 전체</button>
-          <button type="button" class="mobile-cat-pill" data-filter="photos">📸 사진첩</button>
+          <button type="button" class="mobile-cat-pill" data-filter="vacation">🏖️ 연차</button>
+          <button type="button" class="mobile-cat-pill" data-filter="photos">📸 기록</button>
           <button type="button" class="mobile-cat-pill" data-filter="notes">📝 끄적끄적</button>
           <button type="button" class="mobile-cat-pill" data-filter="ledger">💍 가계부</button>
           <button type="button" class="mobile-cat-pill" data-filter="wishlist">🎁 위시</button>
+          <button type="button" class="mobile-cat-pill" data-filter="sites">🌐 사이트</button>
           <button type="button" class="mobile-cat-pill" data-filter="pinned">💖 중요</button>
         </div>
 
@@ -470,17 +488,103 @@
         </div>
 
         <!-- ===================================================================
-             SECTION 3.5: 사진첩 (Polaroid Photo Gallery) View
+             SECTION 3.0: 🏖️ 연차관리 (Vacation Manager) View
+             =================================================================== -->
+        <div id="vacation-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>🏖️ 연차관리 (Vacation Manager)</h1>
+              <p>회사에서 발생한 연차와 사용한 반차/연차를 체계적으로 관리하세요 🌸</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" id="btn-open-set-total-vacation" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-main); font-size: 0.82rem; padding: 0.5rem 0.85rem;" title="총 발생 연차 일수 설정">
+                <span>⚙️ 총 연차 설정</span>
+              </button>
+              <button type="button" id="btn-open-add-vacation-modal" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
+                <span>+</span>
+                <span>연차/반차 등록 💖</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Vacation Dashboard Hero Card -->
+          <div class="vacation-hero-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                <span>🌴 나의 2026년 연차 사용 현황</span>
+              </h3>
+              <span id="vacation-year-badge" style="font-size: 0.76rem; font-weight: 800; color: var(--primary); background: rgba(255,107,139,0.12); padding: 3px 8px; border-radius: 6px;">2026 기준</span>
+            </div>
+
+            <div class="vacation-stats-grid">
+              <div class="vacation-stat-box">
+                <div class="vacation-stat-title">
+                  <span>총 발생 연차</span>
+                  <span>🎯</span>
+                </div>
+                <div class="vacation-stat-num highlight-primary" id="vacation-stat-total">15.0<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span></div>
+              </div>
+
+              <div class="vacation-stat-box">
+                <div class="vacation-stat-title">
+                  <span>사용한 연차</span>
+                  <span>🌿</span>
+                </div>
+                <div class="vacation-stat-num highlight-used" id="vacation-stat-used">0.0<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span></div>
+              </div>
+
+              <div class="vacation-stat-box">
+                <div class="vacation-stat-title">
+                  <span>남은 연차 (잔여)</span>
+                  <span>🌸</span>
+                </div>
+                <div class="vacation-stat-num highlight-remain" id="vacation-stat-remain">15.0<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span></div>
+              </div>
+            </div>
+
+            <!-- Vacation Progress Gauge Bar -->
+            <div class="vacation-progress-container">
+              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 700; color: var(--text-main);">
+                <span>연차 소진율</span>
+                <span id="vacation-progress-text" style="color: var(--primary);">0% 사용 완료</span>
+              </div>
+              <div class="vacation-progress-bar-track">
+                <div class="vacation-progress-bar-fill" id="vacation-progress-bar" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Vacation Timeline / History List -->
+          <div class="vacation-timeline-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+              <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--text-main);">📅 연차 / 반차 사용 내역</h3>
+              <span id="vacation-history-count" style="font-size: 0.8rem; color: var(--text-muted);">총 0건</span>
+            </div>
+
+            <div id="vacation-history-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <!-- Dynamically populated vacation item cards -->
+            </div>
+
+            <div id="vacation-empty-state" class="empty-state" style="display: none; padding: 2.5rem 1rem;">
+              <div class="empty-state-icon">🏖️</div>
+              <h3>아직 등록된 연차/반차 내역이 없어요</h3>
+              <p>연차나 반차를 사용하셨다면 '+ 연차/반차 등록' 버튼을 눌러 기록해 보세요 🌸</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             SECTION 3.5: 기록 (Polaroid Photo Gallery) View
              =================================================================== -->
         <div id="photos-view-container" style="display: none; flex-direction: column; gap: 1.25rem;">
           <div class="photos-header-row">
             <div class="photos-title-group">
-              <h1 class="photos-main-title">📸 사진첩</h1>
+              <h1 class="photos-main-title">📸 기록</h1>
               <span class="photos-count-badge">총 <strong id="photos-count-total">0</strong>장</span>
             </div>
             <button type="button" id="btn-open-add-photo-modal" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
               <span>+</span>
-              <span>사진 올리기</span>
+              <span>기록 남기기</span>
             </button>
           </div>
 
@@ -492,9 +596,9 @@
           <!-- Photos Empty State -->
           <div id="photos-empty-state" class="empty-state" style="display: none;">
             <div class="empty-state-icon">📸</div>
-            <h3>아직 등록된 사진이 없어요</h3>
+            <h3>아직 등록된 기록 사진이 없어요</h3>
             <p>소중한 순간, 일상의 사진과 감성 메모를 폴라로이드처럼 예쁘게 남겨보세요 💖</p>
-            <button type="button" class="btn btn-primary" id="btn-photos-empty-add">+ 첫 사진 등록하기</button>
+            <button type="button" class="btn btn-primary" id="btn-photos-empty-add">+ 첫 기록 사진 등록하기</button>
           </div>
         </div>
 
@@ -772,6 +876,35 @@
         </div>
 
         <!-- ===================================================================
+             SECTION 6.5: 🌐 사이트 (Sites / Bookmarks) View
+             =================================================================== -->
+        <div id="sites-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>🌐 사이트 바로가기 (Sites)</h1>
+              <p>자주 방문하는 웹사이트, 회사 인트라넷, 유용한 링크를 한곳에 모아보세요 🚀</p>
+            </div>
+            <button type="button" id="btn-open-add-site-modal" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
+              <span>+</span>
+              <span>새 사이트 등록 💖</span>
+            </button>
+          </div>
+
+          <!-- Stored Sites Grid -->
+          <div class="sites-grid" id="sites-grid-container">
+            <!-- Dynamically rendered site cards -->
+          </div>
+
+          <!-- Sites Empty State -->
+          <div id="sites-empty-state" class="empty-state" style="display: none; padding: 2.5rem 1rem;">
+            <div class="empty-state-icon">🌐</div>
+            <h3>아직 등록된 사이트가 없어요</h3>
+            <p>자주 접속하는 사이트나 중요한 링크를 등록하고 언제든 원클릭으로 이동해 보세요 ✨</p>
+            <button type="button" class="btn btn-primary" id="btn-sites-empty-add">+ 첫 사이트 등록하기 💖</button>
+          </div>
+        </div>
+
+        <!-- ===================================================================
              SECTION 7: File Vault View (파일 보관함)
              =================================================================== -->
         <div id="files-view-container" style="display: none; flex-direction: column; gap: 1.5rem;">
@@ -816,7 +949,7 @@
       </main>
     </div>
 
-    <!-- iOS Mobile Floating Bottom Navigation Bar (할일, 위시, 메모, 사진첩) -->
+    <!-- iOS Mobile Floating Bottom Navigation Bar (할일, 위시, 메모, 기록) -->
     <nav class="mobile-bottom-nav">
       <button type="button" class="mobile-nav-btn active" data-mobile-nav="all">
         <span class="nav-icon">📅</span>
@@ -832,7 +965,7 @@
       </button>
       <button type="button" class="mobile-nav-btn" data-mobile-nav="photos">
         <span class="nav-icon">📸</span>
-        <span>사진첩</span>
+        <span>기록</span>
       </button>
     </nav>
   </div>
@@ -862,10 +995,7 @@
           <div class="form-group">
             <label class="form-label" for="task-input-type">구분 🏷️</label>
             <select id="task-input-type" class="form-select">
-              <option value="todo" selected>할 일 (To Do)</option>
-              <option value="schedule">일정 (Schedule)</option>
-              <option value="half-off">반차 🌿</option>
-              <option value="vacation">휴가 🌴</option>
+              <option value="todo" selected>할일</option>
             </select>
           </div>
 
@@ -911,9 +1041,12 @@
           <div class="checklist-builder" id="modal-subtasks-list"></div>
         </div>
 
-        <div class="modal-actions">
-          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-modal>취소</button>
-          <button type="submit" class="btn btn-primary" id="btn-save-task">저장하기 💖</button>
+        <div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between;">
+          <button type="button" class="btn" style="background: rgba(224, 49, 49, 0.1); color: #e03131; border: 1px solid rgba(224, 49, 49, 0.25); display: none;" id="btn-modal-delete-task">🗑️ 삭제</button>
+          <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-modal>취소</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-task">저장하기 💖</button>
+          </div>
         </div>
       </form>
     </div>
@@ -1027,7 +1160,7 @@
   <div id="photo-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
     <div class="modal-card" style="max-width: 490px;">
       <div class="modal-header">
-        <h3 class="modal-title" id="photo-modal-title">📸 사진첩 사진 등록</h3>
+        <h3 class="modal-title" id="photo-modal-title">📸 기록 사진 등록</h3>
         <button class="modal-close-btn" id="btn-close-photo-modal" title="닫기 (Esc)">✕</button>
       </div>
 
@@ -1095,7 +1228,7 @@
 
         <div class="modal-actions">
           <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" id="btn-cancel-photo-modal">취소</button>
-          <button type="submit" class="btn btn-primary" id="btn-submit-photo">사진첩에 걸어두기 💖</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-photo">기록에 저장하기 💖</button>
         </div>
       </form>
     </div>
@@ -1179,14 +1312,14 @@
   <div id="cloud-modal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card" style="max-width: 460px;">
       <div class="modal-header">
-        <h3 class="modal-title">🛡️ AES-256 E2EE 종단간 암호화 실시간 동기화</h3>
+        <h3 class="modal-title">🔐 2단계 보안 실시간 동기화</h3>
         <button class="modal-close-btn" data-close-modal>✕</button>
       </div>
       <div style="display: flex; flex-direction: column; gap: 1rem; font-size: 0.9rem;">
         <div style="background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.2); padding: 0.85rem 1rem; border-radius: var(--radius-md);">
-          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">✨ Zero-Knowledge AES-256 종단간 암호화 (E2EE)</div>
+          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">✨ 스마트폰·회사·집 실시간 2단계 보안 연동</div>
           <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
-            클라우드 서버에는 모든 메모와 데이터가 외계어(AES-256 암호문)로 저장되어 아무도 읽을 수 없으며, 오직 비밀번호를 입력한 내 브라우저에서만 안전하게 해독됩니다!
+            나만의 아이디와 2단계 비밀번호를 설정하여, 나만 안전하게 할 일과 달력, 끄적끄적 메모, 가계부, 위시리스트를 실시간 동기화하세요!
           </p>
         </div>
 
@@ -1194,8 +1327,8 @@
         <div id="sync-active-banner" style="display: none; padding: 0.95rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md);">
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <div>
-              <div style="font-weight: 700; color: #10b981; font-size: 0.88rem;">🔒 AES-256 E2EE 보안 동기화 연결됨</div>
-              <div style="font-size: 0.8rem; color: var(--text-main); margin-top: 2px;" id="current-sync-key-display">아이디: on3257 | 🛡️ E2EE 보호됨</div>
+              <div style="font-weight: 700; color: #10b981; font-size: 0.88rem;">🟢 2단계 보안 동기화 연결됨</div>
+              <div style="font-size: 0.8rem; color: var(--text-main); margin-top: 2px;" id="current-sync-key-display">아이디: jy | 비번: ****</div>
             </div>
             <button type="button" id="btn-disconnect-sync" class="btn" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(0,0,0,0.06);">로그아웃</button>
           </div>
@@ -1209,12 +1342,12 @@
           </div>
 
           <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="sync-input-pin" style="font-size: 0.82rem;">2단계: E2EE 복호화 보안 비밀번호 *</label>
+            <label class="form-label" for="sync-input-pin" style="font-size: 0.82rem;">2단계: 2단계 보안 비밀번호 *</label>
             <input type="password" id="sync-input-pin" class="form-input" placeholder="보안 비밀번호 입력" required autocomplete="new-password" style="padding: 0.65rem 0.85rem; font-size: 0.9rem;">
           </div>
 
           <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem; font-size: 0.92rem; margin-top: 0.25rem;">
-            🛡️ E2EE 보안 연결 &amp; 동기화 시작
+            🔐 2단계 보안 연결 & 동기화 시작
           </button>
           
           <div style="text-align: center; margin-top: 0.35rem; font-size: 0.76rem; color: var(--text-dim);">
@@ -1418,11 +1551,108 @@
     </div>
   </div>
 
+  <!-- Modal: Add Vacation / Half-off (연차/반차 등록 모달) -->
+  <div id="vacation-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
+    <div class="modal-card" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="vacation-modal-title">🏖️ 연차 / 반차 등록 💖</h3>
+        <button class="modal-close-btn" id="btn-close-vacation-modal" title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="vacation-form">
+        <input type="hidden" id="vacation-edit-id" value="">
+
+        <div class="form-group">
+          <label class="form-label" for="vacation-input-type">연차 구분 *</label>
+          <select id="vacation-input-type" class="form-select" required>
+            <option value="full" selected>연차 (1.0일) 🌴</option>
+            <option value="half-am">오전 반차 (0.5일) 🌅</option>
+            <option value="half-pm">오후 반차 (0.5일) 🌇</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="vacation-input-date">사용 날짜 *</label>
+          <input type="date" id="vacation-input-date" class="form-input" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="vacation-input-reason">사유 / 메모</label>
+          <input type="text" id="vacation-input-reason" class="form-input" placeholder="예: 개인 사정, 여름휴가, 병원 진료, 휴식 등">
+        </div>
+
+        <div class="modal-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" id="btn-cancel-vacation-modal">취소</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-vacation">연차 등록하기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Set Total Vacation Days (총 발생 연차 일수 설정 모달) -->
+  <div id="total-vacation-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
+    <div class="modal-card" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 class="modal-title">⚙️ 총 발생 연차 일수 설정</h3>
+        <button class="modal-close-btn" id="btn-close-total-vacation-modal" title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="total-vacation-form">
+        <div class="form-group">
+          <label class="form-label" for="input-total-vacation-days">2026년 회사 발생 총 연차 (일) *</label>
+          <input type="number" id="input-total-vacation-days" class="form-input" min="0" max="60" step="0.5" value="15" required placeholder="예: 15 또는 15.5">
+          <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem;">
+            💡 회사에서 부여된 총 연차 일수를 입력하시면 사용/잔여 일수가 자동 계산됩니다.
+          </div>
+        </div>
+
+        <div class="modal-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" id="btn-cancel-total-vacation-modal">취소</button>
+          <button type="submit" class="btn btn-primary">설정 저장 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add / Edit Site Bookmark (사이트 바로가기 등록/수정 모달) -->
+  <div id="site-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10001;">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="site-modal-title">🌐 새 사이트 바로가기 등록 💖</h3>
+        <button class="modal-close-btn" id="btn-close-site-modal" title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="site-form">
+        <input type="hidden" id="site-edit-id" value="">
+
+        <div class="form-group">
+          <label class="form-label" for="site-input-title">사이트 이름 / 제목 *</label>
+          <input type="text" id="site-input-title" class="form-input" placeholder="예: 국세청 홈택스, 노션 워크스페이스, 네이버" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="site-input-url">사이트 주소 (URL) *</label>
+          <input type="url" id="site-input-url" class="form-input" placeholder="예: https://www.hometax.go.kr" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="site-input-memo">메모 / 용도 (선택)</label>
+          <textarea id="site-input-memo" class="form-textarea" placeholder="예: 매월 10일 세금계산서 발행 및 조회용 (아이디 힌트 등)" rows="2"></textarea>
+        </div>
+
+        <div class="modal-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" id="btn-cancel-site-modal">취소</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-site">사이트 저장하기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- External Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=6.9"></script>
-  <script src="js/treasure.js?v=6.9"></script>
+  <script src="js/app.js?v=7.7"></script>
+  <script src="js/treasure.js?v=7.7"></script>
 </body>
 </html>
