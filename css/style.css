@@ -423,11 +423,12 @@ body::after {
 }
 
 .nav-item.active {
-  background: rgba(255, 107, 139, 0.14);
-  color: var(--primary);
-  font-weight: 700;
-  border: none;
-  box-shadow: none;
+  background: linear-gradient(90deg, rgba(255, 107, 139, 0.16) 0%, rgba(255, 107, 139, 0.06) 100%) !important;
+  color: var(--primary) !important;
+  font-weight: 800 !important;
+  border-left: 4px solid var(--primary) !important;
+  box-shadow: 0 2px 8px rgba(255, 107, 139, 0.12) !important;
+  transform: translateX(2px);
 }
 
 .nav-item-left {

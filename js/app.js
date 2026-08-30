@@ -960,38 +960,6 @@
       this.selectedCalendarDateStr = TODAY_STR;
       this.currentWeeklyDate = new Date(2026, 7, 25);
 
-      this.load();
-    }
-
-    load() {
-      // Collect real user items from all possible legacy storage keys
-      let combinedTasks = [];
-      let combinedWishlist = [];
-      let combinedPhotos = [];
-      let combinedNotes = [];
-      let combinedLedgerFiles = [];
-      let userCategories = null;
-
-      const keysToCheck = [
-        STORAGE_KEY,
-        'todolist_jy_data_v38', 'todolist_jy_data_v37', 'todolist_jy_data_v36', 'todolist_jy_data_v35',
-        'todolist_jy_data_v34', 'todolist_jy_data_v33', 'todolist_jy_data_v30', 'todolist_jy_data_v20',
-        'todolist_jy_data', 'todolist_jy_tasks'
-      ];
-
-      keysToCheck.forEach(k => {
-        try {
-          const raw = localStorage.getItem(k);
-          if (!raw) return;
-          const parsed = JSON.parse(raw);
-
-          // If raw was just an array of tasks
-          if (Array.isArray(parsed)) {
-            parsed.forEach(t => {
-              if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !combinedTasks.some(x => x.id === t.id)) {
-                combinedTasks.push(t);
-      this.viewMode = 'list';
-
       this.loadLocalOnly();
     }
 
@@ -1809,14 +1777,18 @@
 
       const headingEl = document.getElementById('view-title');
       const filterNames = {
-        all: '모든 할 일 & 일정 🌸',
-        upcoming: '다가오는 일정 ⏰',
-        overdue: '기한 지연된 일정 ⚠️',
-        pinned: '중요한 일정 💖',
-        completed: '완료된 목록 ✨'
+        all: '📋 모든 할 일 & 일정',
+        upcoming: '⏰ 다가오는 일정',
+        overdue: '⚠️ 기한 지연된 일정',
+        pinned: '💖 중요한 일정',
+        completed: '✨ 완료된 목록',
+        personal: '🌸 개인 카테고리',
+        work: '💼 업무 카테고리'
       };
-      const catMatch = store.categories.find(c => c.id === store.activeFilter);
-      if (headingEl) headingEl.textContent = filterNames[store.activeFilter] || (catMatch ? `${catMatch.name} 목록` : '할 일 목록');
+      const titleText = filterNames[store.activeFilter] || '할 일 목록';
+      if (headingEl) {
+        headingEl.innerHTML = `${titleText} <span style="font-size: 0.85rem; padding: 2px 9px; background: rgba(255, 107, 139, 0.15); color: var(--primary); border-radius: 12px; margin-left: 8px; font-weight: 700;">${filtered.length}개</span>`;
+      }
 
       if (store.viewMode === 'list') {
         if (listContainer) listContainer.style.display = 'flex';
