@@ -839,7 +839,22 @@
                   store.sidebarMenuOrder = order;
                 }
                 if (Array.isArray(data.vaultFiles)) {
-                  await this.saveVaultFiles(data.vaultFiles);
+                  const localVault = await this.getAllVaultFiles();
+                  // Smart Merge: Preserve local dataUrl if cloud copy is lightweight metadata
+                  const mergedFiles = data.vaultFiles.map(cloudF => {
+                    const localMatch = localVault.find(l => l.id === cloudF.id);
+                    if (localMatch && localMatch.dataUrl && !cloudF.dataUrl) {
+                      return Object.assign({}, cloudF, { dataUrl: localMatch.dataUrl });
+                    }
+                    return cloudF;
+                  });
+                  // Also retain any local files created recently
+                  localVault.forEach(l => {
+                    if (!mergedFiles.some(m => m.id === l.id)) {
+                      mergedFiles.push(l);
+                    }
+                  });
+                  await this.saveVaultFiles(mergedFiles);
                   try { UI.renderFilesVault(); } catch (e) {}
                 }
                 
@@ -886,6 +901,17 @@
       if (!this.spaceId || !this.pin) return;
       const key = this.getStorageKey();
       const vaultFiles = await this.getAllVaultFiles();
+      
+      // Sanitize vault files for cloud RTDB (strip huge dataUrls > 500KB to prevent HTTP 413 Payload Too Large)
+      const sanitizedVaultFiles = (vaultFiles || []).map(f => {
+        if (f.dataUrl && f.dataUrl.length > 500 * 1024) {
+          const clone = Object.assign({}, f);
+          delete clone.dataUrl;
+          return clone;
+        }
+        return f;
+      });
+
       const rawPayload = {
         tasks: store.tasks,
         categories: store.categories,
@@ -893,7 +919,7 @@
         wishlist: store.wishlist,
         photos: store.photos,
         notes: store.notes,
-        vaultFiles: vaultFiles,
+        vaultFiles: sanitizedVaultFiles,
         honeymoonData: store.honeymoonData,
         ledgerFiles: store.ledgerFiles,
         vacations: store.vacations,
@@ -977,11 +1003,35 @@
         const raw = localStorage.getItem('todolist_jy_vault_files');
         const lsFiles = raw ? JSON.parse(raw) : [];
         if (lsFiles.length > 0) {
-          // Migrate legacy localStorage files to IndexedDB
           await VaultDBEngine.saveAll(lsFiles);
+          return lsFiles;
         }
-        return lsFiles;
+        return [];
       } catch (e) {
+        console.warn('getAllVaultFiles error:', e);
+        return [];
+      }
+    }
+
+    async addVaultFiles(newItems) {
+      if (!Array.isArray(newItems) || !newItems.length) return [];
+      try {
+        await VaultDBEngine.addFiles(newItems);
+        const all = await this.getAllVaultFiles();
+        // Update metadata in localStorage as backup
+        const metaOnly = all.map(f => ({
+          id: f.id,
+          name: f.name,
+          size: f.size,
+          type: f.type,
+          note: f.note,
+          createdAt: f.createdAt
+        }));
+        localStorage.setItem('todolist_jy_vault_meta', JSON.stringify(metaOnly));
+        this.pushTasksToCloud();
+        return all;
+      } catch (e) {
+        console.error('addVaultFiles error:', e);
         return [];
       }
     }
@@ -989,7 +1039,6 @@
     async saveVaultFiles(files) {
       try {
         await VaultDBEngine.saveAll(files);
-        // Also save metadata only (without huge dataUrl) to localStorage as safe backup
         const metaOnly = (files || []).map(f => ({
           id: f.id,
           name: f.name,
@@ -1007,9 +1056,11 @@
     async deleteVaultFile(fileId) {
       try {
         await VaultDBEngine.delete(fileId);
-        const files = await this.getAllVaultFiles();
+        await this.getAllVaultFiles();
         await this.pushTasksToCloud();
-      } catch (e) {}
+      } catch (e) {
+        console.error('deleteVaultFile error:', e);
+      }
     }
   }
 
@@ -1055,13 +1106,30 @@
       }
     },
 
+    async addFiles(newItems) {
+      try {
+        const db = await this.getDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(this.storeName, 'readwrite');
+          const store = tx.objectStore(this.storeName);
+          (newItems || []).forEach(file => {
+            if (file && file.id) store.put(file);
+          });
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (err) {
+        console.warn('IDB addFiles error:', err);
+        return false;
+      }
+    },
+
     async saveAll(files) {
       try {
         const db = await this.getDB();
         return new Promise((resolve, reject) => {
           const tx = db.transaction(this.storeName, 'readwrite');
           const store = tx.objectStore(this.storeName);
-          store.clear();
           (files || []).forEach(file => {
             if (file && file.id) store.put(file);
           });
@@ -5749,14 +5817,13 @@
               createdAt: Date.now()
             };
 
-            await cloudSync.saveVaultFiles([newFile]);
+            await cloudSync.addVaultFiles([newFile]);
             sounds.playAdd();
             confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
             UI.closeFileUploadModal();
             UI.showToast(`'${file.name}' 파일이 보관함에 안전하게 저장되었어요! 💾✨`, 'success');
             UI.renderFilesVault();
             UI.renderSidebar();
-            cloudSync.pushTasksToCloud(true);
           };
           reader.readAsDataURL(file);
         } catch (err) {
@@ -5801,13 +5868,12 @@
             });
           }
 
-          await cloudSync.saveVaultFiles(newFiles);
+          await cloudSync.addVaultFiles(newFiles);
           sounds.playAdd();
           confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
           UI.showToast(`총 ${newFiles.length}개 파일이 보관함에 안전하게 저장되었어요! 📁✨`, 'success');
           UI.renderFilesVault();
           UI.renderSidebar();
-          cloudSync.pushTasksToCloud(true);
         } catch (err) {
           console.error(err);
           UI.showToast('파일 보관 중 오류가 발생했어요.', 'danger');
@@ -5858,13 +5924,12 @@
             });
           }
 
-          await cloudSync.saveVaultFiles(newFiles);
+          await cloudSync.addVaultFiles(newFiles);
           sounds.playAdd();
           confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
           UI.showToast(`총 ${newFiles.length}개 파일이 드롭되어 보관함에 저장되었어요! 📂✨`, 'success');
           UI.renderFilesVault();
           UI.renderSidebar();
-          cloudSync.pushTasksToCloud(true);
         } catch (err) {
           console.error(err);
           UI.showToast('파일 보관 중 오류가 발생했어요.', 'danger');
@@ -6520,17 +6585,23 @@
         const fileId = btn.dataset.fileId;
         cloudSync.getAllVaultFiles().then(files => {
           const f = files.find(x => x.id === fileId);
-          if (!f || !f.dataUrl) return;
-          const blob = dataURLtoBlob(f.dataUrl);
-          if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = f.name;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          if (!f || !f.dataUrl) {
+            UI.showToast('파일 데이터를 찾을 수 없습니다.', 'danger');
+            return;
+          }
+          try {
+            const a = document.createElement('a');
+            a.href = f.dataUrl;
+            a.download = f.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            sounds.playComplete();
+            UI.showToast(`'${f.name}' 다운로드를 시작했어요! 📥✨`, 'success');
+          } catch (err) {
+            console.error('Download error:', err);
+            UI.showToast('다운로드 처리 중 오류가 발생했습니다.', 'danger');
+          }
         });
       }
 
