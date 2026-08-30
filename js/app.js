@@ -589,7 +589,18 @@
       this.activeUrl = savedUrl;
       this.syncTimer = null;
       this.pushDebounceTimer = null;
-      this.lastSyncedUpdatedAt = 0;
+
+      // Always restore true local timestamp from localStorage to prevent overwriting new local items on refresh!
+      let localTs = 0;
+      try {
+        const raw = localStorage.getItem('todolist_jy_data_v39');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.updatedAt) localTs = Number(parsed.updatedAt) || 0;
+        }
+      } catch (e) {}
+      this.lastSyncedUpdatedAt = localTs;
+      this.isPushing = false;
     }
 
     init() {
@@ -774,7 +785,16 @@
               if (remoteUpdated > localUpdated) {
                 this.lastSyncedUpdatedAt = remoteUpdated;
                 if (data.tasks !== undefined) {
-                  store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
+                  const cloudTasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
+                  const taskMap = new Map();
+                  cloudTasks.forEach(t => taskMap.set(t.id, t));
+                  // Preserve recently created local tasks
+                  store.tasks.forEach(localT => {
+                    if (localT && localT.id && !taskMap.has(localT.id)) {
+                      taskMap.set(localT.id, localT);
+                    }
+                  });
+                  store.tasks = Array.from(taskMap.values());
                   store.tasks.forEach(t => {
                     if (!t.category || (t.category !== 'personal' && t.category !== 'work')) {
                       t.category = 'personal';
@@ -799,15 +819,47 @@
                   });
                   store.categories = cats;
                 }
-                if (data.wishlist !== undefined) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
-                if (data.photos !== undefined) store.photos = normalizeArray(data.photos).filter(p => p && p.id);
-                if (data.notes !== undefined) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
+                if (data.wishlist !== undefined) {
+                  const cloudWishes = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
+                  const wishMap = new Map();
+                  cloudWishes.forEach(w => wishMap.set(w.id, w));
+                  store.wishlist.forEach(lw => {
+                    if (lw && lw.id && !wishMap.has(lw.id)) wishMap.set(lw.id, lw);
+                  });
+                  store.wishlist = Array.from(wishMap.values());
+                }
+                if (data.photos !== undefined) {
+                  const cloudPhotos = normalizeArray(data.photos).filter(p => p && p.id);
+                  const photoMap = new Map();
+                  cloudPhotos.forEach(p => photoMap.set(p.id, p));
+                  store.photos.forEach(lp => {
+                    if (lp && lp.id && !photoMap.has(lp.id)) photoMap.set(lp.id, lp);
+                  });
+                  store.photos = Array.from(photoMap.values());
+                }
+                if (data.notes !== undefined) {
+                  const cloudNotes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
+                  const noteMap = new Map();
+                  cloudNotes.forEach(n => noteMap.set(n.id, n));
+                  store.notes.forEach(ln => {
+                    if (ln && ln.id && !noteMap.has(ln.id)) noteMap.set(ln.id, ln);
+                  });
+                  store.notes = Array.from(noteMap.values());
+                }
                 if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
                 if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
                 if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations);
                 if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
                 if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
-                if (data.healthNotes !== undefined) store.healthNotes = normalizeArray(data.healthNotes);
+                if (data.healthNotes !== undefined) {
+                  const cloudHNotes = normalizeArray(data.healthNotes);
+                  const hMap = new Map();
+                  cloudHNotes.forEach(n => hMap.set(n.id, n));
+                  store.healthNotes.forEach(ln => {
+                    if (ln && ln.id && !hMap.has(ln.id)) hMap.set(ln.id, ln);
+                  });
+                  store.healthNotes = Array.from(hMap.values());
+                }
                 if (data.healthFolders !== undefined && Array.isArray(data.healthFolders)) {
                   let hFolders = data.healthFolders.slice();
                   DEFAULT_HEALTH_FOLDERS.forEach(defF => {
@@ -819,7 +871,15 @@
                   });
                   store.healthFolders = hFolders;
                 }
-                if (data.hobbyNotes !== undefined) store.hobbyNotes = normalizeArray(data.hobbyNotes);
+                if (data.hobbyNotes !== undefined) {
+                  const cloudHbNotes = normalizeArray(data.hobbyNotes);
+                  const hbMap = new Map();
+                  cloudHbNotes.forEach(n => hbMap.set(n.id, n));
+                  store.hobbyNotes.forEach(ln => {
+                    if (ln && ln.id && !hbMap.has(ln.id)) hbMap.set(ln.id, ln);
+                  });
+                  store.hobbyNotes = Array.from(hbMap.values());
+                }
                 if (data.hobbyFolders !== undefined && Array.isArray(data.hobbyFolders)) {
                   let hbFolders = data.hobbyFolders.slice();
                   DEFAULT_HOBBY_FOLDERS.forEach(defF => {
@@ -1367,7 +1427,7 @@
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.ledgerFiles = [];
       this.selectedLedgerMonth = 7;
-      this.activeFilter = 'all';
+      this.activeFilter = localStorage.getItem('todolist_jy_active_filter') || 'all';
       this.activePriority = 'all';
       this.activeWishCat = 'all';
       this.selectedVacationYear = '2026';
@@ -5453,6 +5513,7 @@
       return;
     }
     store.activeFilter = catId;
+    localStorage.setItem('todolist_jy_active_filter', catId);
     // 화면 점핑 방지: scrollTo 제거하여 현재 스크롤 위치 완벽 유지
     UI.renderTasks();
     UI.renderSidebar();
@@ -5715,6 +5776,7 @@
 
   function resetToAllTasks() {
     store.activeFilter = 'all';
+    localStorage.setItem('todolist_jy_active_filter', 'all');
     store.searchQuery = '';
     const searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = '';
