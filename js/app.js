@@ -83,13 +83,16 @@
       badgeColor: '#ff6b8b',
       summary: '연차/반차/휴가 통합 관리 시스템 구축, 월별 달력 연동, Firebase 즉시 백업, 화면 점핑 방지 및 UI 인터랙션 대폭 강화',
       details: [
+        '🏥 건강관리 신설: 산부인과, 치아, 수술계획 등 전용 폴더 분류 및 넉넉한 대형 진료 메모장 지원 (제목, 진료일, 병원명, 진료비 기록)',
         '🏖️ 연차관리 신설: 총 발생연차, 사용한 연차, 남은 연차, 휴가(0일 차감) 4대 통계 카드 탑재',
         '📅 사용날짜(YYYY-MM-DD) 기준 최신순 자동 정렬 및 월별 실시간 요약 배너 추가',
         '🎯 통계 카드 원클릭 필터링: [사용한 연차/반차만 보기], [전체 기간 휴가만 보기] 지원',
-        '🗓️ 월별 달력 연동: 상단 통계에 "🌴 연차사용" 실제 일수 실시간 계산 연동',
+        '🗓️ 월별 달력 연동: 상단 통계에 "🌴 연차사용" 실제 일수 실시간 계산 연동 및 개발기록 팝업 칩 탑재',
+        '💎 보물지식함 클라우드 게이지 바 복구 & 6개단위 페이지네이션(1,2,3,4...) 복원',
         '☁️ Firebase 즉시 백업: 다운로드 창 없이 클라우드로 1초 만에 안전하게 즉시 백업 & 업로드',
         '🌐 사이트 바로가기 북마크 신설 (국세청, 노션 등 자주 가는 링크 모음)',
         '✏️ 사이드바 카테고리 순서변경 토글 모드 및 드래그 구분선 3개 지원',
+        '🚀 새로고침 시 개발기록 및 메뉴 순서 사라짐 방지 패치',
         '🖱️ 메뉴 전환 시 화면이 맨 위로 튀어 올라가는 점핑 현상 완전 제거',
         '📋 1일 단위 버전 관리 정책 수립 및 오늘 개발분 v1.1 정립'
       ]
@@ -113,6 +116,14 @@
         '🛡️ AES-256 E2EE 종단간 암호화 실시간 Firebase 클라우드 동기화'
       ]
     }
+  ];
+
+  const DEFAULT_HEALTH_FOLDERS = [
+    { id: 'all', name: '전체보기', icon: '🌸' },
+    { id: 'obgyn', name: '산부인과', icon: '🤰' },
+    { id: 'dental', name: '치아', icon: '🦷' },
+    { id: 'surgery', name: '수술계획', icon: '🏥' },
+    { id: 'general', name: '일반/기타', icon: '💊' }
   ];
 
   // =========================================================================
@@ -730,7 +741,26 @@
                 if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations);
                 if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
                 if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
-                if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) store.sidebarMenuOrder = data.sidebarMenuOrder;
+                if (data.healthNotes !== undefined) store.healthNotes = normalizeArray(data.healthNotes);
+                if (data.healthFolders !== undefined && Array.isArray(data.healthFolders)) store.healthFolders = data.healthFolders;
+                if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
+                  const defaultOrder = ['personal', 'work', 'divider-1', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+                  let order = data.sidebarMenuOrder.slice();
+                  if (!order.includes('health')) {
+                    const vacIdx = order.indexOf('vacation');
+                    if (vacIdx !== -1) order.splice(vacIdx, 0, 'health');
+                    else order.push('health');
+                  }
+                  if (!order.includes('devlog')) {
+                    const vaultIdx = order.indexOf('vault');
+                    if (vaultIdx !== -1) order.splice(vaultIdx, 0, 'devlog');
+                    else order.push('devlog');
+                  }
+                  defaultOrder.forEach(id => {
+                    if (!order.includes(id)) order.push(id);
+                  });
+                  store.sidebarMenuOrder = order;
+                }
                 if (Array.isArray(data.vaultFiles)) {
                   await this.saveVaultFiles(data.vaultFiles);
                   try { UI.renderFilesVault(); } catch (e) {}
@@ -792,6 +822,8 @@
         vacations: store.vacations,
         totalVacationDays: store.totalVacationDays,
         sites: store.sites,
+        healthNotes: store.healthNotes,
+        healthFolders: store.healthFolders,
         updatedAt: Date.now()
       };
 
@@ -1036,6 +1068,8 @@
       const userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
       const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
       const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
+      const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
+      const userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS;
       const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
 
       const combinedTasks = userTasks.filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
@@ -1081,9 +1115,14 @@
         }
       });
 
-      // Sidebar menu items order with 3 dividers and devlog (개발기록)
-      const defaultOrder = ['personal', 'work', 'divider-1', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+      // Sidebar menu items order with 3 dividers, health, and devlog
+      const defaultOrder = ['personal', 'work', 'divider-1', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       let finalOrder = userSidebarOrder ? userSidebarOrder.slice() : defaultOrder;
+      if (!finalOrder.includes('health')) {
+        const vacIdx = finalOrder.indexOf('vacation');
+        if (vacIdx !== -1) finalOrder.splice(vacIdx, 0, 'health');
+        else finalOrder.push('health');
+      }
       if (!finalOrder.includes('devlog')) {
         const vaultIdx = finalOrder.indexOf('vault');
         if (vaultIdx !== -1) finalOrder.splice(vaultIdx, 0, 'devlog');
@@ -1105,6 +1144,9 @@
       this.vacations = userVacations;
       this.totalVacationDays = userTotalVacationDays;
       this.sites = userSites;
+      this.healthNotes = userHealthNotes;
+      this.healthFolders = userHealthFolders;
+      this.activeHealthFolder = 'all';
 
       try {
         const streakRaw = localStorage.getItem(STREAK_KEY);
@@ -1129,6 +1171,8 @@
           vacations: this.vacations,
           totalVacationDays: this.totalVacationDays,
           sites: this.sites,
+          healthNotes: this.healthNotes,
+          healthFolders: this.healthFolders,
           updatedAt: Date.now()
         }));
         localStorage.setItem(STREAK_KEY, JSON.stringify(this.streak));
@@ -1431,6 +1475,55 @@
       return true;
     }
 
+    // --- Health Manager Methods ---
+    addHealthNote(data) {
+      const newNote = {
+        id: 'hnote-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        folder: data.folder || 'general',
+        title: (data.title || '').trim(),
+        date: data.date || getRealTodayStr(),
+        hospital: (data.hospital || '').trim(),
+        cost: (data.cost || '').trim(),
+        content: (data.content || '').trim(),
+        createdAt: Date.now()
+      };
+      this.healthNotes.unshift(newNote);
+      this.healthNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      this.save();
+      return newNote;
+    }
+
+    updateHealthNote(id, updates) {
+      const note = this.healthNotes.find(n => n.id === id);
+      if (!note) return null;
+      Object.assign(note, updates, { updatedAt: Date.now() });
+      this.healthNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      this.save();
+      return note;
+    }
+
+    deleteHealthNote(id) {
+      const idx = this.healthNotes.findIndex(n => n.id === id);
+      if (idx === -1) return false;
+      this.healthNotes.splice(idx, 1);
+      this.save();
+      return true;
+    }
+
+    addHealthFolder(name, icon = '🩺') {
+      const cleanName = (name || '').trim();
+      if (!cleanName) return null;
+      const folderId = 'folder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      const newFolder = {
+        id: folderId,
+        name: cleanName,
+        icon: icon || '🩺'
+      };
+      this.healthFolders.push(newFolder);
+      this.save();
+      return newFolder;
+    }
+
     updateStreak() {
       const today = TODAY_STR;
       if (this.streak.lastDate === today) return;
@@ -1679,6 +1772,7 @@
         const itemMeta = {
           'personal': { name: '개인 🌸', icon: '', color: '#f06595', count: store.tasks.filter(t => t.category === 'personal').length },
           'work': { name: '업무 💼', icon: '', color: '#868e96', count: store.tasks.filter(t => t.category === 'work').length },
+          'health': { name: '건강관리', icon: '🏥', count: (store.healthNotes || []).length },
           'vacation': { name: '연차관리', icon: '🏖️', count: store.vacations.length },
           'photos': { name: '기록', icon: '📸', count: store.photos.length },
           'notes': { name: '끄적끄적', icon: '✏️', count: store.notes.length },
@@ -1874,6 +1968,7 @@
       const ledgerView = document.getElementById('ledger-view-container');
       const calMView = document.getElementById('calendar-month-view-container');
       const calWView = document.getElementById('calendar-week-view-container');
+      const healthView = document.getElementById('health-view-container');
       const vacationView = document.getElementById('vacation-view-container');
       const sitesView = document.getElementById('sites-view-container');
       const devlogView = document.getElementById('devlog-view-container');
@@ -1886,7 +1981,7 @@
 
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
-      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, vacationView, sitesView, devlogView];
+      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, healthView, vacationView, sitesView, devlogView];
 
       if (lockedScreen) lockedScreen.style.display = 'none';
       if (mobileBar && mobileBar.style.display !== 'flex') mobileBar.style.display = 'flex';
@@ -1896,6 +1991,7 @@
       let targetView = tasksView;
       if (filter === 'calendar-month') targetView = calMView;
       else if (filter === 'calendar-week') targetView = calWView;
+      else if (filter === 'health') targetView = healthView;
       else if (filter === 'vacation') targetView = vacationView;
       else if (filter === 'photos') targetView = photosView;
       else if (filter === 'notes') targetView = notesView;
@@ -1927,6 +2023,12 @@
       // 2. Calendar Weekly View (Horizontal)
       if (filter === 'calendar-week') {
         this.renderCalendarWeek();
+        return;
+      }
+
+      // 2.8. 🏥 건강관리 (Health Manager) View
+      if (filter === 'health') {
+        this.renderHealth();
         return;
       }
 
@@ -3491,6 +3593,183 @@
     },
 
     // =========================================================================
+    // 🏥 건강관리 (Health Manager & Folder Notes Engine)
+    // =========================================================================
+    renderHealth() {
+      const tabsBar = document.getElementById('health-folder-tabs');
+      const gridContainer = document.getElementById('health-notes-grid-container');
+      const emptyState = document.getElementById('health-empty-state');
+      const curFolderBadge = document.getElementById('health-cur-folder-badge');
+      const curFolderDesc = document.getElementById('health-cur-folder-desc');
+      const notesCountBadge = document.getElementById('health-notes-count-badge');
+
+      if (!gridContainer) return;
+
+      const activeFolder = store.activeHealthFolder || 'all';
+      const folders = store.healthFolders || DEFAULT_HEALTH_FOLDERS;
+      const allNotes = store.healthNotes || [];
+
+      // 1. Render Folder Tabs
+      if (tabsBar) {
+        tabsBar.innerHTML = folders.map(f => {
+          const isActive = (f.id === activeFolder);
+          const count = f.id === 'all' 
+            ? allNotes.length 
+            : allNotes.filter(n => n.folder === f.id).length;
+          return `
+            <button type="button" class="health-folder-tab ${isActive ? 'active' : ''}" data-health-folder-id="${f.id}">
+              <span>${f.icon || '📁'}</span>
+              <span>${escapeHTML(f.name)}</span>
+              <span class="badge" style="font-size: 0.72rem; padding: 1px 6px; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)'}; color: ${isActive ? '#fff' : 'var(--text-muted)'}; border-radius: 10px;">${count}</span>
+            </button>
+          `;
+        }).join('');
+      }
+
+      // 2. Filter Notes by active folder
+      const filtered = (activeFolder === 'all')
+        ? allNotes
+        : allNotes.filter(n => n.folder === activeFolder);
+
+      const activeFolderObj = folders.find(f => f.id === activeFolder) || folders[0];
+      if (curFolderBadge) {
+        curFolderBadge.textContent = `${activeFolderObj.icon || '📁'} ${activeFolderObj.name}`;
+      }
+      if (curFolderDesc) {
+        curFolderDesc.textContent = activeFolder === 'all'
+          ? `총 ${allNotes.length}개의 건강 기록 메모가 보관 중입니다.`
+          : `'${activeFolderObj.name}' 폴더에 ${filtered.length}건의 진료 및 건강 메모가 있습니다.`;
+      }
+      if (notesCountBadge) {
+        notesCountBadge.textContent = `총 ${filtered.length}건`;
+      }
+
+      // 3. Render Large Notes Grid
+      if (filtered.length === 0) {
+        gridContainer.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'flex';
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+        gridContainer.innerHTML = filtered.map(note => {
+          const noteFolder = folders.find(f => f.id === note.folder) || { name: '일반/기타', icon: '💊' };
+          const dateFormatted = note.date ? note.date.replace(/-/g, '.') : '';
+          
+          return `
+            <div class="health-note-card" data-health-note-id="${note.id}">
+              <div class="health-note-header">
+                <div class="health-note-top-row">
+                  <span class="health-folder-badge">
+                    <span>${noteFolder.icon || '🩺'}</span>
+                    <span>${escapeHTML(noteFolder.name)}</span>
+                  </span>
+                  <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <button type="button" class="task-action-btn edit-btn" data-action="edit-health-note" data-id="${note.id}" title="메모 수정">✏️</button>
+                    <button type="button" class="task-action-btn delete-btn" data-action="delete-health-note" data-id="${note.id}" title="메모 삭제">🗑️</button>
+                  </div>
+                </div>
+
+                <h3 class="health-note-title">${escapeHTML(note.title)}</h3>
+
+                <div class="health-note-submeta">
+                  <span>📅 ${dateFormatted}</span>
+                  ${note.hospital ? `<span>🏥 ${escapeHTML(note.hospital)}</span>` : ''}
+                  ${note.cost ? `<span class="health-cost-chip">💳 ${escapeHTML(note.cost)}</span>` : ''}
+                </div>
+              </div>
+
+              <div class="health-note-body">${escapeHTML(note.content)}</div>
+
+              <div class="health-note-footer">
+                <span>등록일: ${new Date(note.createdAt || Date.now()).toLocaleDateString('ko-KR')}</span>
+                <button type="button" class="btn btn-sm" style="font-size: 0.72rem; padding: 2px 7px; background: rgba(0,0,0,0.04); color: var(--primary);" data-action="copy-health-note" data-id="${note.id}" title="내용 복사">
+                  📋 복사
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      this.renderSidebar();
+    },
+
+    openHealthNoteModal(noteId = null) {
+      const modal = document.getElementById('health-note-modal');
+      const form = document.getElementById('health-note-form');
+      const titleEl = document.getElementById('health-note-modal-title');
+      const editIdEl = document.getElementById('health-note-edit-id');
+      const folderSelect = document.getElementById('health-input-folder');
+      const dateInput = document.getElementById('health-input-date');
+      const titleInput = document.getElementById('health-input-title');
+      const hospitalInput = document.getElementById('health-input-hospital');
+      const costInput = document.getElementById('health-input-cost');
+      const contentInput = document.getElementById('health-input-content');
+
+      if (!modal || !form) return;
+      form.reset();
+
+      // Populate folders in select dropdown
+      if (folderSelect) {
+        const folders = (store.healthFolders || DEFAULT_HEALTH_FOLDERS).filter(f => f.id !== 'all');
+        folderSelect.innerHTML = folders.map(f => `
+          <option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>
+        `).join('');
+      }
+
+      if (noteId) {
+        const note = store.healthNotes.find(n => n.id === noteId);
+        if (!note) return;
+        if (titleEl) titleEl.textContent = '🏥 건강 메모 수정 💖';
+        if (editIdEl) editIdEl.value = note.id;
+        if (folderSelect) folderSelect.value = note.folder || 'general';
+        if (dateInput) dateInput.value = note.date || getRealTodayStr();
+        if (titleInput) titleInput.value = note.title || '';
+        if (hospitalInput) hospitalInput.value = note.hospital || '';
+        if (costInput) costInput.value = note.cost || '';
+        if (contentInput) contentInput.value = note.content || '';
+      } else {
+        if (titleEl) titleEl.textContent = '🏥 건강 메모 작성 💖';
+        if (editIdEl) editIdEl.value = '';
+        if (folderSelect) {
+          folderSelect.value = (store.activeHealthFolder && store.activeHealthFolder !== 'all') ? store.activeHealthFolder : 'obgyn';
+        }
+        if (dateInput) dateInput.value = getRealTodayStr();
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (titleInput) setTimeout(() => titleInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeHealthNoteModal() {
+      const modal = document.getElementById('health-note-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openHealthFolderModal() {
+      const modal = document.getElementById('health-folder-modal');
+      const form = document.getElementById('health-folder-form');
+      const nameInput = document.getElementById('health-input-folder-name');
+      if (!modal || !form) return;
+      form.reset();
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (nameInput) setTimeout(() => nameInput.focus(), 60);
+    },
+
+    closeHealthFolderModal() {
+      const modal = document.getElementById('health-folder-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    // =========================================================================
     // 🚀 개발기록 (Dev Log Engine)
     // =========================================================================
     renderDevLog() {
@@ -4569,6 +4848,75 @@
         return;
       }
 
+      // Health Manager Buttons & Modals
+      if (target.closest('#btn-open-add-health-note') || target.closest('#btn-health-empty-add')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openHealthNoteModal();
+        return;
+      }
+      if (target.closest('#btn-open-add-health-folder')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openHealthFolderModal();
+        return;
+      }
+      if (target.closest('[data-close-health-modal]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.closeHealthNoteModal();
+        return;
+      }
+      if (target.closest('[data-close-health-folder-modal]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.closeHealthFolderModal();
+        return;
+      }
+
+      // Health Folder Tab Click
+      const healthTab = target.closest('.health-folder-tab');
+      if (healthTab && healthTab.dataset.healthFolderId) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        store.activeHealthFolder = healthTab.dataset.healthFolderId;
+        UI.renderHealth();
+        return;
+      }
+
+      // Health Note Edit
+      const editHealthBtn = target.closest('[data-action="edit-health-note"]');
+      if (editHealthBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openHealthNoteModal(editHealthBtn.dataset.id);
+        return;
+      }
+
+      // Health Note Delete
+      const deleteHealthBtn = target.closest('[data-action="delete-health-note"]');
+      if (deleteHealthBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const hId = deleteHealthBtn.dataset.id;
+        if (hId && confirm('이 건강 기록 메모를 정말 삭제하시겠습니까?')) {
+          store.deleteHealthNote(hId);
+          sounds.playDelete();
+          UI.showToast('건강 메모가 삭제되었어요.', 'danger');
+          UI.renderHealth();
+        }
+        return;
+      }
+
+      // Health Note Copy
+      const copyHealthBtn = target.closest('[data-action="copy-health-note"]');
+      if (copyHealthBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const hId = copyHealthBtn.dataset.id;
+        const note = (store.healthNotes || []).find(n => n.id === hId);
+        if (note && navigator.clipboard) {
+          const textToCopy = `[건강메모] ${note.title}\n날짜: ${note.date}\n병원: ${note.hospital || '-'}\n비용: ${note.cost || '-'}\n\n${note.content}`;
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            sounds.playComplete();
+            UI.showToast('📋 건강 메모 내용이 복사되었어요!', 'success');
+          });
+        }
+        return;
+      }
+
       // 1. Task Completed Toggle
       if (target.matches('[data-action="toggle-complete"]') || target.classList.contains('task-checkbox')) {
         const chip = target.closest('.weekly-item-chip');
@@ -4957,6 +5305,48 @@
         }
         UI.closeSiteModal();
         UI.renderSites();
+      });
+    }
+
+    // Health Note & Folder Form Submissions
+    const healthNoteForm = document.getElementById('health-note-form');
+    if (healthNoteForm) {
+      healthNoteForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('health-note-edit-id')?.value;
+        const folder = document.getElementById('health-input-folder')?.value || 'general';
+        const date = document.getElementById('health-input-date')?.value || getRealTodayStr();
+        const title = document.getElementById('health-input-title')?.value || '';
+        const hospital = document.getElementById('health-input-hospital')?.value || '';
+        const cost = document.getElementById('health-input-cost')?.value || '';
+        const content = document.getElementById('health-input-content')?.value || '';
+
+        if (id) {
+          store.updateHealthNote(id, { folder, date, title, hospital, cost, content });
+          UI.showToast('건강 메모가 수정되었어요 🩺✨', 'info');
+        } else {
+          store.addHealthNote({ folder, date, title, hospital, cost, content });
+          sounds.playComplete();
+          UI.showToast('새 건강 메모가 등록되었어요 🏥💖', 'success');
+        }
+        UI.closeHealthNoteModal();
+        UI.renderHealth();
+      });
+    }
+
+    const healthFolderForm = document.getElementById('health-folder-form');
+    if (healthFolderForm) {
+      healthFolderForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const icon = document.getElementById('health-input-folder-icon')?.value || '🩺';
+        const name = document.getElementById('health-input-folder-name')?.value || '';
+        if (name.trim()) {
+          store.addHealthFolder(name.trim(), icon);
+          sounds.playAdd();
+          UI.closeHealthFolderModal();
+          UI.showToast(`'${name.trim()}' 건강 폴더가 추가되었어요 📁✨`, 'success');
+          UI.renderHealth();
+        }
       });
     }
 

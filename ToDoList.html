@@ -140,13 +140,6 @@
               </div>
               <span class="nav-count" id="nav-count-upcoming">0</span>
             </li>
-            <li class="nav-item" data-filter="overdue" id="nav-filter-overdue" onclick="window.selectCategoryFilter('overdue')">
-              <div class="nav-item-left">
-                <span>⚠️</span>
-                <span>기한 지연</span>
-              </div>
-              <span class="nav-count" id="nav-count-overdue">0</span>
-            </li>
             <li class="nav-item" data-filter="pinned" id="nav-filter-pinned" onclick="window.selectCategoryFilter('pinned')">
               <div class="nav-item-left">
                 <span>💖</span>
@@ -195,30 +188,6 @@
           </div>
         </div>
 
-        <!-- Firebase Realtime Sync & Storage Bar Card (Firebase 막대표 복구) -->
-        <div class="sidebar-card cloud-storage-card" id="sidebar-cloud-card" style="margin-top: 0.75rem; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,240,245,0.85));">
-          <div class="sidebar-title" style="display: flex; align-items: center; justify-content: space-between;">
-            <span style="display: flex; align-items: center; gap: 0.35rem;">
-              <span>☁️ Firebase 동기화</span>
-            </span>
-            <span class="cloud-live-dot-badge" id="sidebar-cloud-dot-badge" style="font-size: 0.72rem; font-weight: 700; color: #10b981; background: rgba(16,185,129,0.12); padding: 2px 7px; border-radius: 6px;">🟢 실시간</span>
-          </div>
-          <div class="sidebar-card-body" style="padding-top: 0.3rem;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-bottom: 0.3rem;">
-              <span>클라우드 저장소 용량</span>
-              <span id="sidebar-cloud-usage-text" style="color: var(--primary); font-weight: 800;">0.28 MB / 1,024 MB</span>
-            </div>
-            <div class="vacation-progress-bar-track" style="height: 7px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;">
-              <div class="vacation-progress-bar-fill" id="sidebar-cloud-progress-bar" style="width: 2.5%; background: linear-gradient(90deg, #ff6b8b, #7048e8);"></div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem;">
-              <span style="font-size: 0.72rem; color: var(--text-dim);" id="sidebar-cloud-sync-status-msg">보안 PIN 암호화 연동 🛡️</span>
-              <button type="button" class="btn" style="padding: 2px 7px; font-size: 0.72rem; background: rgba(255,107,139,0.1); color: var(--primary); font-weight: 700; border-radius: 6px; border: 1px solid rgba(255,107,139,0.25); cursor: pointer;" onclick="window.openCloudModal()">
-                설정 ⚙️
-              </button>
-            </div>
-          </div>
-        </div>
       </aside>
 
       <!-- Center Main Content Area -->
@@ -463,6 +432,54 @@
           <!-- Weekly Horizontal Rows Container -->
           <div class="weekly-horizontal-container" id="weekly-board-grid">
             <!-- Dynamically populated 7 horizontal day rows -->
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             SECTION 2.8: 🏥 건강관리 (Health Manager & Folder Notes) View
+             =================================================================== -->
+        <div id="health-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>🏥 건강관리 (Health Manager)</h1>
+              <p>산부인과, 치아, 수술계획 등 소중한 건강 기록과 진료 메모를 꼼꼼하게 관리하세요 🩺💖</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" id="btn-open-add-health-folder" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-main); font-size: 0.82rem; padding: 0.5rem 0.85rem;" title="새 폴더(카테고리) 추가">
+                <span>📁 + 새 폴더 추가</span>
+              </button>
+              <button type="button" id="btn-open-add-health-note" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
+                <span>+</span>
+                <span>건강 메모 작성 💖</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Health Folders Tabs Bar -->
+          <div class="health-folders-bar" style="display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.4rem 0.2rem; -webkit-overflow-scrolling: touch; scrollbar-width: none;" id="health-folder-tabs">
+            <!-- Dynamically rendered folder tabs (전체보기, 산부인과, 치아, 수술계획, 기타...) -->
+          </div>
+
+          <!-- Health Summary Info Bar -->
+          <div id="health-summary-bar" style="background: linear-gradient(135deg, rgba(255, 107, 139, 0.08), rgba(112, 72, 232, 0.08)); border: 1px solid rgba(255, 107, 139, 0.2); border-radius: 12px; padding: 0.65rem 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span id="health-cur-folder-badge" style="font-size: 0.82rem; font-weight: 800; color: #fff; background: var(--primary); padding: 3px 9px; border-radius: 6px;">전체보기</span>
+              <span id="health-cur-folder-desc" style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">총 0개의 건강 기록 메모가 보관 중입니다.</span>
+            </div>
+            <span id="health-notes-count-badge" style="font-size: 0.78rem; color: var(--text-muted); font-weight: 700;">총 0건</span>
+          </div>
+
+          <!-- Large Health Notes Grid -->
+          <div class="health-notes-grid" id="health-notes-grid-container">
+            <!-- Dynamically populated large health note cards -->
+          </div>
+
+          <!-- Health Empty State -->
+          <div id="health-empty-state" class="empty-state" style="display: none; padding: 3rem 1rem;">
+            <div class="empty-state-icon">🏥</div>
+            <h3>아직 작성된 건강 메모가 없어요</h3>
+            <p>산부인과 검진, 치과 진료, 수술 계획 등 소중한 건강 메모를 등록해 보세요 💖</p>
+            <button type="button" class="btn btn-primary" id="btn-health-empty-add">+ 첫 건강 메모 작성하기 💖</button>
           </div>
         </div>
 
@@ -1519,6 +1536,97 @@
       <div class="modal-actions" style="margin-top: 0.5rem;">
         <button type="button" class="btn btn-primary" data-close-devlog-modal style="width: 100%;">확인 ✨</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal: Health Note Add/Edit Modal (건강 메모 작성 및 수정) -->
+  <div id="health-note-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="health-note-modal-title">🏥 건강 메모 작성 💖</h3>
+        <button class="modal-close-btn" data-close-health-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="health-note-form">
+        <input type="hidden" id="health-note-edit-id" value="">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <!-- Folder Selection -->
+          <div class="form-group">
+            <label class="form-label" for="health-input-folder">폴더(진료과/항목) *</label>
+            <select id="health-input-folder" class="form-select" required>
+              <option value="obgyn">🤰 산부인과</option>
+              <option value="dental">🦷 치아</option>
+              <option value="surgery">🏥 수술계획</option>
+              <option value="general">💊 일반/기타</option>
+            </select>
+          </div>
+
+          <!-- Date Input -->
+          <div class="form-group">
+            <label class="form-label" for="health-input-date">날짜 (진료/검진일) *</label>
+            <input type="date" id="health-input-date" class="form-input" required>
+          </div>
+        </div>
+
+        <!-- Note Title -->
+        <div class="form-group">
+          <label class="form-label" for="health-input-title">메모 이름 (제목) *</label>
+          <input type="text" id="health-input-title" class="form-input" placeholder="예: 정기 초음파 검진, 스케일링, 수술 전 혈액검사 등" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <!-- Hospital / Doctor -->
+          <div class="form-group">
+            <label class="form-label" for="health-input-hospital">병원명 / 담당의</label>
+            <input type="text" id="health-input-hospital" class="form-input" placeholder="예: 서울여성병원, 서울대치과">
+          </div>
+
+          <!-- Cost / Fee -->
+          <div class="form-group">
+            <label class="form-label" for="health-input-cost">진료비 / 비용 (선택)</label>
+            <input type="text" id="health-input-cost" class="form-input" placeholder="예: 35,000원, 12만원">
+          </div>
+        </div>
+
+        <!-- Large Content Textarea -->
+        <div class="form-group">
+          <label class="form-label" for="health-input-content">상세 건강 메모 / 진료 내용 *</label>
+          <textarea id="health-input-content" class="form-textarea" placeholder="진료 결과, 처방약 복용법, 다음 예약일, 의사 소견, 주의사항 등을 자유롭게 넉넉히 기록하세요..." style="min-height: 140px; font-size: 0.92rem; line-height: 1.6;" required></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-health-modal>취소</button>
+          <button type="submit" class="btn btn-primary">저장하기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Health Folder Modal (새 폴더 추가) -->
+  <div id="health-folder-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 class="modal-title">📁 새 건강 폴더 추가</h3>
+        <button class="modal-close-btn" data-close-health-folder-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="health-folder-form">
+        <div class="form-group">
+          <label class="form-label" for="health-input-folder-icon">아이콘 (이모지)</label>
+          <input type="text" id="health-input-folder-icon" class="form-input" value="🩺" maxlength="4" style="width: 70px; text-align: center; font-size: 1.2rem;">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="health-input-folder-name">폴더 이름 *</label>
+          <input type="text" id="health-input-folder-name" class="form-input" placeholder="예: 피부과, 안과, 정형외과, 영양제" required>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-health-folder-modal>취소</button>
+          <button type="submit" class="btn btn-primary">폴더 생성 📁</button>
+        </div>
+      </form>
     </div>
   </div>
 
