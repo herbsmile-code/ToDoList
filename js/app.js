@@ -685,6 +685,7 @@
                 if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations);
                 if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
                 if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
+                if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) store.sidebarMenuOrder = data.sidebarMenuOrder;
                 if (Array.isArray(data.vaultFiles)) {
                   await this.saveVaultFiles(data.vaultFiles);
                   try { UI.renderFilesVault(); } catch (e) {}
@@ -736,12 +737,16 @@
       const rawPayload = {
         tasks: store.tasks,
         categories: store.categories,
+        sidebarMenuOrder: store.sidebarMenuOrder,
         wishlist: store.wishlist,
         photos: store.photos,
         notes: store.notes,
         vaultFiles: vaultFiles,
         honeymoonData: store.honeymoonData,
         ledgerFiles: store.ledgerFiles,
+        vacations: store.vacations,
+        totalVacationDays: store.totalVacationDays,
+        sites: store.sites,
         updatedAt: Date.now()
       };
 
