@@ -5457,4 +5457,114 @@ body::after {
   font-weight: 600;
 }
 
+/* =========================================================================
+   Batch Action Toolbar & Checkbox for Health & Hobby Notes
+   ========================================================================= */
+.note-batch-toolbar {
+  grid-column: 1 / -1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.65rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+  margin-bottom: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.note-batch-toolbar.is-active {
+  border-color: var(--primary);
+  background: rgba(255, 107, 139, 0.04);
+}
+
+.batch-left, .batch-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.batch-check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  user-select: none;
+}
+
+.batch-checkbox-all {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.batch-action-hint {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.batch-select-dropdown {
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.batch-select-dropdown:focus {
+  border-color: var(--primary);
+}
+
+.note-card-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.health-item-checkbox, .hobby-item-checkbox {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.health-note-card.is-selected {
+  border-color: var(--primary);
+  background: rgba(255, 107, 139, 0.03);
+  box-shadow: 0 0 0 2px rgba(255, 107, 139, 0.3);
+}
+
+.hobby-note-card.is-selected {
+  border-color: #ff9f43;
+  background: rgba(255, 159, 67, 0.03);
+  box-shadow: 0 0 0 2px rgba(255, 159, 67, 0.3);
+}
+
+.move-folder-btn {
+  font-size: 0.82rem;
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.04);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.move-folder-btn:hover {
+  background: rgba(255, 107, 139, 0.15);
+  color: var(--primary);
+  transform: scale(1.05);
+}
+
 

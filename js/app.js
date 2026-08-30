@@ -788,7 +788,7 @@
                   store.hobbyFolders = hbFolders;
                 }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
-                  const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+                  const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
                   let order = data.sidebarMenuOrder.slice();
                   if (!order.includes('hobby')) {
                     const healthIdx = order.indexOf('health');
@@ -809,6 +809,11 @@
                     if (vaultIdx !== -1) order.splice(vaultIdx, 0, 'devlog');
                     else order.push('devlog');
                   }
+                  if (!order.includes('divider-vacation')) {
+                    const vacIdx = order.indexOf('vacation');
+                    if (vacIdx !== -1) order.splice(vacIdx + 1, 0, 'divider-vacation');
+                    else order.push('divider-vacation');
+                  }
                   defaultOrder.forEach(id => {
                     if (!order.includes(id)) order.push(id);
                   });
@@ -820,6 +825,15 @@
                     order.splice(d1Idx, 1);
                     const newHIdx = order.indexOf('hobby');
                     order.splice(newHIdx, 0, 'divider-1');
+                  }
+
+                  // Ensure divider-vacation is positioned RIGHT AFTER vacation
+                  const dvIdx = order.indexOf('divider-vacation');
+                  const vIdx = order.indexOf('vacation');
+                  if (dvIdx !== -1 && vIdx !== -1 && dvIdx !== vIdx + 1) {
+                    order.splice(dvIdx, 1);
+                    const newVIdx = order.indexOf('vacation');
+                    order.splice(newVIdx + 1, 0, 'divider-vacation');
                   }
 
                   store.sidebarMenuOrder = order;
@@ -958,8 +972,15 @@
 
     async getAllVaultFiles() {
       try {
+        const idbFiles = await VaultDBEngine.getAll();
+        if (idbFiles && idbFiles.length > 0) return idbFiles;
         const raw = localStorage.getItem('todolist_jy_vault_files');
-        return raw ? JSON.parse(raw) : [];
+        const lsFiles = raw ? JSON.parse(raw) : [];
+        if (lsFiles.length > 0) {
+          // Migrate legacy localStorage files to IndexedDB
+          await VaultDBEngine.saveAll(lsFiles);
+        }
+        return lsFiles;
       } catch (e) {
         return [];
       }
@@ -967,17 +988,107 @@
 
     async saveVaultFiles(files) {
       try {
-        localStorage.setItem('todolist_jy_vault_files', JSON.stringify(files));
-      } catch (e) {}
+        await VaultDBEngine.saveAll(files);
+        // Also save metadata only (without huge dataUrl) to localStorage as safe backup
+        const metaOnly = (files || []).map(f => ({
+          id: f.id,
+          name: f.name,
+          size: f.size,
+          type: f.type,
+          note: f.note,
+          createdAt: f.createdAt
+        }));
+        localStorage.setItem('todolist_jy_vault_meta', JSON.stringify(metaOnly));
+      } catch (e) {
+        console.warn('saveVaultFiles error:', e);
+      }
     }
 
     async deleteVaultFile(fileId) {
-      const files = await this.getAllVaultFiles();
-      const filtered = files.filter(f => f.id !== fileId);
-      await this.saveVaultFiles(filtered);
-      await this.pushTasksToCloud();
+      try {
+        await VaultDBEngine.delete(fileId);
+        const files = await this.getAllVaultFiles();
+        await this.pushTasksToCloud();
+      } catch (e) {}
     }
   }
+
+  // IndexedDB Vault Storage Engine (No 5MB localStorage limit!)
+  const VaultDBEngine = {
+    dbName: 'todolist_jy_vault_idb',
+    storeName: 'vault_files',
+    dbPromise: null,
+
+    async getDB() {
+      if (this.dbPromise) return this.dbPromise;
+      this.dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open(this.dbName, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(this.storeName)) {
+            db.createObjectStore(this.storeName, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = (e) => reject(e.target.error);
+      });
+      return this.dbPromise;
+    },
+
+    async getAll() {
+      try {
+        const db = await this.getDB();
+        return new Promise((resolve) => {
+          const tx = db.transaction(this.storeName, 'readonly');
+          const store = tx.objectStore(this.storeName);
+          const req = store.getAll();
+          req.onsuccess = () => {
+            const list = req.result || [];
+            list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            resolve(list);
+          };
+          req.onerror = () => resolve([]);
+        });
+      } catch (err) {
+        console.warn('IDB get error:', err);
+        return [];
+      }
+    },
+
+    async saveAll(files) {
+      try {
+        const db = await this.getDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(this.storeName, 'readwrite');
+          const store = tx.objectStore(this.storeName);
+          store.clear();
+          (files || []).forEach(file => {
+            if (file && file.id) store.put(file);
+          });
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (err) {
+        console.warn('IDB save error:', err);
+        return false;
+      }
+    },
+
+    async delete(id) {
+      try {
+        const db = await this.getDB();
+        return new Promise((resolve) => {
+          const tx = db.transaction(this.storeName, 'readwrite');
+          const store = tx.objectStore(this.storeName);
+          store.delete(id);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        });
+      } catch (err) {
+        return false;
+      }
+    }
+  };
 
   const cloudSync = new CloudSyncManager();
   window.cloudSync = cloudSync;
@@ -1101,7 +1212,9 @@
       this.selectedVacationMonth = String(new Date().getMonth() + 1); // 이번 달 (8월) 자동 선택
       this.vacationTypeFilter = 'all'; // 'all' | 'used' | 'holiday'
       this.isReorderMode = false; // 순서변경 모드 토글
-      this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'vault'];
+      this.selectedHealthNotes = new Set();
+      this.selectedHobbyNotes = new Set();
+      this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       this.searchQuery = '';
       this.sortBy = 'dueDate';
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
@@ -1200,8 +1313,8 @@
         }
       });
 
-      // Sidebar menu items order with 3 dividers, hobby, health, and devlog
-      const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+      // Sidebar menu items order with 4 dividers, hobby, health, and devlog
+      const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       let finalOrder = userSidebarOrder ? userSidebarOrder.slice() : defaultOrder;
 
       // 1. Ensure essential items exist
@@ -1224,6 +1337,11 @@
         if (vaultIdx !== -1) finalOrder.splice(vaultIdx, 0, 'devlog');
         else finalOrder.push('devlog');
       }
+      if (!finalOrder.includes('divider-vacation')) {
+        const vacIdx = finalOrder.indexOf('vacation');
+        if (vacIdx !== -1) finalOrder.splice(vacIdx + 1, 0, 'divider-vacation');
+        else finalOrder.push('divider-vacation');
+      }
       defaultOrder.forEach(id => {
         if (!finalOrder.includes(id)) finalOrder.push(id);
       });
@@ -1235,6 +1353,15 @@
         finalOrder.splice(d1Idx, 1);
         const newHIdx = finalOrder.indexOf('hobby');
         finalOrder.splice(newHIdx, 0, 'divider-1');
+      }
+
+      // 3. Ensure divider-vacation is positioned RIGHT AFTER vacation (연차관리 메뉴 아래에 구분선)
+      const dvIdx = finalOrder.indexOf('divider-vacation');
+      const vIdx = finalOrder.indexOf('vacation');
+      if (dvIdx !== -1 && vIdx !== -1 && dvIdx !== vIdx + 1) {
+        finalOrder.splice(dvIdx, 1);
+        const newVIdx = finalOrder.indexOf('vacation');
+        finalOrder.splice(newVIdx + 1, 0, 'divider-vacation');
       }
 
       this.tasks = combinedTasks;
@@ -1716,7 +1843,8 @@
         icon: icon || '🎨'
       };
       this.hobbyFolders.push(newFolder);
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return newFolder;
     }
 
@@ -1725,7 +1853,8 @@
       if (!folder) return null;
       if (updates.name) folder.name = updates.name.trim();
       if (updates.icon) folder.icon = updates.icon;
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return folder;
     }
 
@@ -1738,8 +1867,60 @@
         if (note.folder === id) note.folder = 'general';
       });
       if (this.activeHobbyFolder === id) this.activeHobbyFolder = 'all';
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return true;
+    }
+
+    // --- Batch Move & Delete for Health & Hobby Notes ---
+    moveHealthNotesToFolder(noteIds, targetFolder) {
+      if (!Array.isArray(noteIds) || !noteIds.length || !targetFolder) return 0;
+      let count = 0;
+      this.healthNotes.forEach(n => {
+        if (noteIds.includes(n.id)) {
+          n.folder = targetFolder;
+          n.updatedAt = Date.now();
+          count++;
+        }
+      });
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
+      return count;
+    }
+
+    deleteHealthNotesBatch(noteIds) {
+      if (!Array.isArray(noteIds) || !noteIds.length) return 0;
+      const initialLen = this.healthNotes.length;
+      this.healthNotes = this.healthNotes.filter(n => !noteIds.includes(n.id));
+      const deletedCount = initialLen - this.healthNotes.length;
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
+      return deletedCount;
+    }
+
+    moveHobbyNotesToFolder(noteIds, targetFolder) {
+      if (!Array.isArray(noteIds) || !noteIds.length || !targetFolder) return 0;
+      let count = 0;
+      this.hobbyNotes.forEach(n => {
+        if (noteIds.includes(n.id)) {
+          n.folder = targetFolder;
+          n.updatedAt = Date.now();
+          count++;
+        }
+      });
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
+      return count;
+    }
+
+    deleteHobbyNotesBatch(noteIds) {
+      if (!Array.isArray(noteIds) || !noteIds.length) return 0;
+      const initialLen = this.hobbyNotes.length;
+      this.hobbyNotes = this.hobbyNotes.filter(n => !noteIds.includes(n.id));
+      const deletedCount = initialLen - this.hobbyNotes.length;
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
+      return deletedCount;
     }
 
     updateStreak() {
@@ -3868,6 +4049,7 @@
       const activeFolder = store.activeHealthFolder || 'all';
       const folders = store.healthFolders || DEFAULT_HEALTH_FOLDERS;
       const allNotes = store.healthNotes || [];
+      const nonAllFolders = folders.filter(f => f.id !== 'all');
 
       // 1. Render Folder Tabs (with edit pencil icon for editable folders)
       if (tabsBar) {
@@ -3878,7 +4060,7 @@
             : allNotes.filter(n => n.folder === f.id).length;
           
           const editBtn = (f.id !== 'all')
-            ? `<span class="health-folder-edit-btn" data-action="open-edit-health-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정">✏️</span>`
+            ? `<span class="health-folder-edit-btn" data-action="open-edit-health-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
             : '';
 
           return `
@@ -3910,25 +4092,66 @@
         notesCountBadge.textContent = `총 ${filtered.length}건`;
       }
 
+      // 2.5. Batch Action Toolbar (선택된 메모 이동 / 삭제)
+      const selectedIds = Array.from(store.selectedHealthNotes || []).filter(id => filtered.some(n => n.id === id));
+      const isAllSelected = filtered.length > 0 && selectedIds.length === filtered.length;
+
+      let batchBarHTML = '';
+      if (filtered.length > 0) {
+        const folderOptionsHTML = nonAllFolders.map(f => `<option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>`).join('');
+        batchBarHTML = `
+          <div class="note-batch-toolbar ${selectedIds.length > 0 ? 'is-active' : ''}">
+            <div class="batch-left">
+              <label class="batch-check-label" title="전체 선택/해제">
+                <input type="checkbox" id="health-check-all" class="batch-checkbox-all" ${isAllSelected ? 'checked' : ''}>
+                <span>${selectedIds.length > 0 ? `선택됨 <strong>${selectedIds.length}</strong>개` : '전체 선택'}</span>
+              </label>
+            </div>
+            <div class="batch-right" style="${selectedIds.length > 0 ? 'display: flex;' : 'display: none;'}">
+              <span class="batch-action-hint">선택 항목 이동:</span>
+              <select id="health-batch-target-folder" class="batch-select-dropdown">
+                <option value="">📁 이동할 폴더 선택...</option>
+                ${folderOptionsHTML}
+              </select>
+              <button type="button" class="btn btn-sm btn-primary" data-action="batch-move-health-notes" title="선택한 메모들을 선택한 폴더로 이동합니다">
+                <span>이동 ✨</span>
+              </button>
+              <button type="button" class="btn btn-sm" style="background: rgba(255, 77, 77, 0.12); color: #ff4d4d; border: 1px solid rgba(255,77,77,0.25);" data-action="batch-delete-health-notes" title="선택한 메모들을 삭제합니다">
+                <span>일괄 삭제 🗑️</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
       // 3. Render Large Notes Grid
       if (filtered.length === 0) {
         gridContainer.innerHTML = '';
         if (emptyState) emptyState.style.display = 'flex';
       } else {
         if (emptyState) emptyState.style.display = 'none';
-        gridContainer.innerHTML = filtered.map(note => {
+        const cardsHTML = filtered.map(note => {
           const noteFolder = folders.find(f => f.id === note.folder) || { name: '일반/기타', icon: '💊' };
           const dateFormatted = note.date ? note.date.replace(/-/g, '.') : '';
+          const isChecked = store.selectedHealthNotes && store.selectedHealthNotes.has(note.id);
           
           return `
-            <div class="health-note-card" data-health-note-id="${note.id}">
+            <div class="health-note-card ${isChecked ? 'is-selected' : ''}" data-health-note-id="${note.id}">
               <div class="health-note-header">
                 <div class="health-note-top-row">
-                  <span class="health-folder-badge">
-                    <span>${noteFolder.icon || '🩺'}</span>
-                    <span>${escapeHTML(noteFolder.name)}</span>
-                  </span>
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label class="note-card-checkbox-label" title="메모 선택" onclick="event.stopPropagation();">
+                      <input type="checkbox" class="health-item-checkbox" data-id="${note.id}" ${isChecked ? 'checked' : ''}>
+                      <span class="custom-card-check"></span>
+                    </label>
+                    <span class="health-folder-badge">
+                      <span>${noteFolder.icon || '🩺'}</span>
+                      <span>${escapeHTML(noteFolder.name)}</span>
+                    </span>
+                  </div>
                   <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <!-- 퀵 폴더 이동 버튼 -->
+                    <button type="button" class="task-action-btn move-folder-btn" data-action="quick-move-health-note" data-id="${note.id}" title="다른 폴더로 이동">📁⇄</button>
                     <button type="button" class="task-action-btn edit-btn" data-action="edit-health-note" data-id="${note.id}" title="메모 수정">✏️</button>
                     <button type="button" class="task-action-btn delete-btn" data-action="delete-health-note" data-id="${note.id}" title="메모 삭제">🗑️</button>
                   </div>
@@ -3968,6 +4191,8 @@
             </div>
           `;
         }).join('');
+
+        gridContainer.innerHTML = batchBarHTML + cardsHTML;
       }
 
       this.renderSidebar();
@@ -4139,12 +4364,13 @@
         if (!folder) return;
         currentIcon = folder.icon || '🩺';
         currentName = folder.name || '';
-        if (titleEl) titleEl.textContent = '📁 건강 폴더 수정 💖';
+        if (titleEl) titleEl.textContent = '📁 건강 폴더 수정 & 삭제 💖';
         if (editIdEl) editIdEl.value = folder.id;
         if (nameInput) nameInput.value = currentName;
         if (iconInput) iconInput.value = currentIcon;
         if (deleteBtn) {
-          const isProtected = (folder.id === 'general' || folder.id === 'obgyn' || folder.id === 'dental' || folder.id === 'surgery' || folder.id === 'checkup' || folder.id === 'all');
+          // 'all' (전체보기) 제외하고 모든 폴더 삭제 허용!
+          const isProtected = (folder.id === 'all');
           deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
           deleteBtn.dataset.id = folder.id;
         }
@@ -4200,6 +4426,7 @@
       const activeFolder = store.activeHobbyFolder || 'all';
       const folders = store.hobbyFolders || DEFAULT_HOBBY_FOLDERS;
       const allNotes = store.hobbyNotes || [];
+      const nonAllFolders = folders.filter(f => f.id !== 'all');
 
       // 1. Render Folder Tabs (with edit pencil icon for editable folders)
       if (tabsBar) {
@@ -4210,7 +4437,7 @@
             : allNotes.filter(n => n.folder === f.id).length;
           
           const editBtn = (f.id !== 'all')
-            ? `<span class="hobby-folder-edit-btn" data-action="open-edit-hobby-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정">✏️</span>`
+            ? `<span class="hobby-folder-edit-btn" data-action="open-edit-hobby-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
             : '';
 
           return `
@@ -4242,27 +4469,68 @@
         notesCountBadge.textContent = `총 ${filtered.length}건`;
       }
 
+      // 2.5. Batch Action Toolbar (선택된 취미 일지 이동 / 삭제)
+      const selectedIds = Array.from(store.selectedHobbyNotes || []).filter(id => filtered.some(n => n.id === id));
+      const isAllSelected = filtered.length > 0 && selectedIds.length === filtered.length;
+
+      let batchBarHTML = '';
+      if (filtered.length > 0) {
+        const folderOptionsHTML = nonAllFolders.map(f => `<option value="${f.id}">${f.icon || '🎨'} ${escapeHTML(f.name)}</option>`).join('');
+        batchBarHTML = `
+          <div class="note-batch-toolbar ${selectedIds.length > 0 ? 'is-active' : ''}">
+            <div class="batch-left">
+              <label class="batch-check-label" title="전체 선택/해제">
+                <input type="checkbox" id="hobby-check-all" class="batch-checkbox-all" ${isAllSelected ? 'checked' : ''}>
+                <span>${selectedIds.length > 0 ? `선택됨 <strong>${selectedIds.length}</strong>개` : '전체 선택'}</span>
+              </label>
+            </div>
+            <div class="batch-right" style="${selectedIds.length > 0 ? 'display: flex;' : 'display: none;'}">
+              <span class="batch-action-hint">선택 항목 이동:</span>
+              <select id="hobby-batch-target-folder" class="batch-select-dropdown">
+                <option value="">📁 이동할 폴더 선택...</option>
+                ${folderOptionsHTML}
+              </select>
+              <button type="button" class="btn btn-sm btn-primary" data-action="batch-move-hobby-notes" title="선택한 일지들을 선택한 폴더로 이동합니다">
+                <span>이동 ✨</span>
+              </button>
+              <button type="button" class="btn btn-sm" style="background: rgba(255, 77, 77, 0.12); color: #ff4d4d; border: 1px solid rgba(255,77,77,0.25);" data-action="batch-delete-hobby-notes" title="선택한 일지들을 삭제합니다">
+                <span>일괄 삭제 🗑️</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
       // 3. Render Large Hobby Notes Grid
       if (filtered.length === 0) {
         gridContainer.innerHTML = '';
         if (emptyState) emptyState.style.display = 'flex';
       } else {
         if (emptyState) emptyState.style.display = 'none';
-        gridContainer.innerHTML = filtered.map(note => {
+        const cardsHTML = filtered.map(note => {
           const noteFolder = folders.find(f => f.id === note.folder) || { name: '기타취미', icon: '✨' };
           const dateFormatted = note.date ? note.date.replace(/-/g, '.') : '';
+          const isChecked = store.selectedHobbyNotes && store.selectedHobbyNotes.has(note.id);
           
           return `
-            <div class="hobby-note-card" data-hobby-note-id="${note.id}">
+            <div class="hobby-note-card ${isChecked ? 'is-selected' : ''}" data-hobby-note-id="${note.id}">
               <div class="hobby-note-header">
                 <div class="hobby-note-top-row">
-                  <span class="hobby-folder-badge">
-                    <span>${noteFolder.icon || '🎨'}</span>
-                    <span>${escapeHTML(noteFolder.name)}</span>
-                  </span>
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label class="note-card-checkbox-label" title="일지 선택" onclick="event.stopPropagation();">
+                      <input type="checkbox" class="hobby-item-checkbox" data-id="${note.id}" ${isChecked ? 'checked' : ''}>
+                      <span class="custom-card-check"></span>
+                    </label>
+                    <span class="hobby-folder-badge">
+                      <span>${noteFolder.icon || '🎨'}</span>
+                      <span>${escapeHTML(noteFolder.name)}</span>
+                    </span>
+                  </div>
                   <div style="display: flex; align-items: center; gap: 0.35rem;">
-                    <button type="button" class="task-action-btn edit-btn" data-action="edit-hobby-note" data-id="${note.id}" title="메모 수정">✏️</button>
-                    <button type="button" class="task-action-btn delete-btn" data-action="delete-hobby-note" data-id="${note.id}" title="메모 삭제">🗑️</button>
+                    <!-- 퀵 폴더 이동 버튼 -->
+                    <button type="button" class="task-action-btn move-folder-btn" data-action="quick-move-hobby-note" data-id="${note.id}" title="다른 폴더로 이동">📁⇄</button>
+                    <button type="button" class="task-action-btn edit-btn" data-action="edit-hobby-note" data-id="${note.id}" title="일지 수정">✏️</button>
+                    <button type="button" class="task-action-btn delete-btn" data-action="delete-hobby-note" data-id="${note.id}" title="일지 삭제">🗑️</button>
                   </div>
                 </div>
 
@@ -4286,9 +4554,79 @@
             </div>
           `;
         }).join('');
+
+        gridContainer.innerHTML = batchBarHTML + cardsHTML;
       }
 
       this.renderSidebar();
+    },
+
+    openHobbyFolderModal(folderId = null) {
+      const modal = document.getElementById('hobby-folder-modal');
+      const form = document.getElementById('hobby-folder-form');
+      const titleEl = document.getElementById('hobby-folder-modal-title');
+      const editIdEl = document.getElementById('hobby-folder-edit-id');
+      const iconInput = document.getElementById('hobby-input-folder-icon');
+      const nameInput = document.getElementById('hobby-input-folder-name');
+      const grid = document.getElementById('hobby-folder-emoji-grid');
+      const deleteBtn = document.getElementById('btn-delete-hobby-folder');
+      const submitBtn = document.getElementById('btn-submit-hobby-folder');
+
+      if (!modal || !form) return;
+      form.reset();
+
+      let currentIcon = '🎨';
+      let currentName = '';
+
+      if (folderId) {
+        const folder = (store.hobbyFolders || DEFAULT_HOBBY_FOLDERS).find(f => f.id === folderId);
+        if (!folder) return;
+        currentIcon = folder.icon || '🎨';
+        currentName = folder.name || '';
+        if (titleEl) titleEl.textContent = '📁 취미 폴더 수정 & 삭제 💖';
+        if (editIdEl) editIdEl.value = folder.id;
+        if (nameInput) nameInput.value = currentName;
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) {
+          // 'all' (전체보기) 제외하고 모든 폴더 삭제 허용!
+          const isProtected = (folder.id === 'all');
+          deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
+          deleteBtn.dataset.id = folder.id;
+        }
+        if (submitBtn) submitBtn.textContent = '수정 완료 ✨';
+      } else {
+        if (titleEl) titleEl.textContent = '📁 새 취미 폴더 추가';
+        if (editIdEl) editIdEl.value = '';
+        if (nameInput) nameInput.value = '';
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (submitBtn) submitBtn.textContent = '폴더 생성 📁';
+      }
+
+      // Render 24 Emoji Picker Buttons
+      if (grid) {
+        grid.innerHTML = HOBBY_EMOJI_LIST.map(emoji => {
+          const isSel = (emoji === currentIcon);
+          return `
+            <button type="button" class="hobby-emoji-option-btn ${isSel ? 'selected' : ''}" data-hobby-emoji="${emoji}" title="${emoji}">
+              ${emoji}
+            </button>
+          `;
+        }).join('');
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (nameInput) setTimeout(() => nameInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeHobbyFolderModal() {
+      const modal = document.getElementById('hobby-folder-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
     },
 
     openHobbyNoteModal(noteId = null) {
@@ -5689,13 +6027,80 @@
       // 0.3. Delete Health Folder Button Click
       if (target.closest('#btn-delete-health-folder')) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const folderId = target.closest('#btn-delete-health-folder').dataset.id;
-        if (folderId && confirm('정말 이 건강 폴더를 삭제하시겠습니까?\n(폴더 안의 메모는 [일반/기타] 폴더로 안전하게 이동됩니다)')) {
+        if (folderId && folderId !== 'all' && confirm('정말 이 건강 폴더를 삭제하시겠습니까?\n(폴더 안의 메모는 [일반/기타] 폴더로 안전하게 이동됩니다)')) {
           store.deleteHealthFolder(folderId);
           sounds.playDelete();
           UI.closeHealthFolderModal();
           UI.showToast('폴더가 삭제되었고 메모는 안전하게 보관되었어요.', 'info');
           UI.renderHealth();
+          UI.renderSidebar();
+        }
+        return;
+      }
+
+      // 0.4. Batch Move Health Notes
+      if (target.closest('[data-action="batch-move-health-notes"]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const selectEl = document.getElementById('health-batch-target-folder');
+        const targetFolder = selectEl ? selectEl.value : '';
+        if (!targetFolder) {
+          alert('이동할 대상 폴더를 선택해 주세요!');
+          if (selectEl) selectEl.focus();
+          return;
+        }
+        const noteIds = Array.from(store.selectedHealthNotes || []);
+        if (!noteIds.length) {
+          alert('이동할 메모를 먼저 체크박스로 선택해 주세요!');
+          return;
+        }
+        const count = store.moveHealthNotesToFolder(noteIds, targetFolder);
+        store.selectedHealthNotes.clear();
+        sounds.playComplete();
+        confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
+        UI.showToast(`총 ${count}개의 건강 메모가 성공적으로 이동되었어요! 📁✨`, 'success');
+        UI.renderHealth();
+        return;
+      }
+
+      // 0.5. Batch Delete Health Notes
+      if (target.closest('[data-action="batch-delete-health-notes"]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const noteIds = Array.from(store.selectedHealthNotes || []);
+        if (!noteIds.length) return;
+        if (confirm(`선택한 ${noteIds.length}개의 건강 메모를 정말 모두 삭제하시겠습니까?`)) {
+          const count = store.deleteHealthNotesBatch(noteIds);
+          store.selectedHealthNotes.clear();
+          sounds.playDelete();
+          UI.showToast(`총 ${count}개의 건강 메모가 삭제되었어요. 🗑️`, 'info');
+          UI.renderHealth();
+          UI.renderSidebar();
+        }
+        return;
+      }
+
+      // 0.6. Quick Move Single Health Note (원클릭 폴더 변경)
+      const quickMoveHealthBtn = target.closest('[data-action="quick-move-health-note"]');
+      if (quickMoveHealthBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        const noteId = quickMoveHealthBtn.dataset.id;
+        const note = (store.healthNotes || []).find(n => n.id === noteId);
+        if (note) {
+          const nonAllFolders = (store.healthFolders || DEFAULT_HEALTH_FOLDERS).filter(f => f.id !== 'all');
+          const folderPromptList = nonAllFolders.map((f, idx) => `${idx + 1}. ${f.icon || '📁'} ${f.name}`).join('\n');
+          const chosen = prompt(`이동할 폴더의 번호를 입력하세요:\n\n${folderPromptList}`, '1');
+          if (chosen) {
+            const num = parseInt(chosen.trim(), 10);
+            if (num >= 1 && num <= nonAllFolders.length) {
+              const selectedF = nonAllFolders[num - 1];
+              store.moveHealthNotesToFolder([note.id], selectedF.id);
+              sounds.playComplete();
+              UI.showToast(`'${selectedF.name}' 폴더로 메모가 이동되었어요! ✨`, 'success');
+              UI.renderHealth();
+            }
+          }
         }
         return;
       }
@@ -5800,13 +6205,78 @@
         if (typeof e.preventDefault === 'function') e.preventDefault();
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const folderId = target.closest('#btn-delete-hobby-folder').dataset.id;
-        if (folderId && confirm('정말 이 취미 폴더를 삭제하시겠습니까?\n(폴더 안의 일지는 [기타취미] 폴더로 안전하게 이동됩니다)')) {
+        if (folderId && folderId !== 'all' && confirm('정말 이 취미 폴더를 삭제하시겠습니까?\n(폴더 안의 일지는 [기타취미] 폴더로 안전하게 이동됩니다)')) {
           store.deleteHobbyFolder(folderId);
           sounds.playDelete();
           UI.closeHobbyFolderModal();
           UI.showToast('취미 폴더가 삭제되었고 기록은 안전하게 보관되었어요.', 'info');
           UI.renderHobby();
           UI.renderSidebar();
+        }
+        return;
+      }
+
+      // Batch Move Hobby Notes
+      if (target.closest('[data-action="batch-move-hobby-notes"]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const selectEl = document.getElementById('hobby-batch-target-folder');
+        const targetFolder = selectEl ? selectEl.value : '';
+        if (!targetFolder) {
+          alert('이동할 대상 취미 폴더를 선택해 주세요!');
+          if (selectEl) selectEl.focus();
+          return;
+        }
+        const noteIds = Array.from(store.selectedHobbyNotes || []);
+        if (!noteIds.length) {
+          alert('이동할 일지를 먼저 체크박스로 선택해 주세요!');
+          return;
+        }
+        const count = store.moveHobbyNotesToFolder(noteIds, targetFolder);
+        store.selectedHobbyNotes.clear();
+        sounds.playComplete();
+        confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
+        UI.showToast(`총 ${count}개의 취미 일지가 성공적으로 이동되었어요! 🎨✨`, 'success');
+        UI.renderHobby();
+        return;
+      }
+
+      // Batch Delete Hobby Notes
+      if (target.closest('[data-action="batch-delete-hobby-notes"]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const noteIds = Array.from(store.selectedHobbyNotes || []);
+        if (!noteIds.length) return;
+        if (confirm(`선택한 ${noteIds.length}개의 취미 일지를 정말 모두 삭제하시겠습니까?`)) {
+          const count = store.deleteHobbyNotesBatch(noteIds);
+          store.selectedHobbyNotes.clear();
+          sounds.playDelete();
+          UI.showToast(`총 ${count}개의 취미 일지가 삭제되었어요. 🗑️`, 'info');
+          UI.renderHobby();
+          UI.renderSidebar();
+        }
+        return;
+      }
+
+      // Quick Move Single Hobby Note
+      const quickMoveHobbyBtn = target.closest('[data-action="quick-move-hobby-note"]');
+      if (quickMoveHobbyBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        const noteId = quickMoveHobbyBtn.dataset.id;
+        const note = (store.hobbyNotes || []).find(n => n.id === noteId);
+        if (note) {
+          const nonAllFolders = (store.hobbyFolders || DEFAULT_HOBBY_FOLDERS).filter(f => f.id !== 'all');
+          const folderPromptList = nonAllFolders.map((f, idx) => `${idx + 1}. ${f.icon || '🎨'} ${f.name}`).join('\n');
+          const chosen = prompt(`이동할 취미 폴더의 번호를 입력하세요:\n\n${folderPromptList}`, '1');
+          if (chosen) {
+            const num = parseInt(chosen.trim(), 10);
+            if (num >= 1 && num <= nonAllFolders.length) {
+              const selectedF = nonAllFolders[num - 1];
+              store.moveHobbyNotesToFolder([note.id], selectedF.id);
+              sounds.playComplete();
+              UI.showToast(`'${selectedF.name}' 폴더로 일지가 이동되었어요! ✨`, 'success');
+              UI.renderHobby();
+            }
+          }
         }
         return;
       }
@@ -6177,6 +6647,69 @@
       // 18. Close Edit Note Modal Triggers
       if (target.closest('#btn-close-edit-note-modal') || target.closest('#btn-cancel-edit-note-modal')) {
         UI.closeEditNoteModal();
+      }
+    });
+
+    // Global Change Delegation for Batch Checkboxes
+    document.addEventListener('change', (e) => {
+      const target = e.target;
+
+      // Health Note Single Checkbox
+      if (target.classList.contains('health-item-checkbox')) {
+        const id = target.dataset.id;
+        if (!store.selectedHealthNotes) store.selectedHealthNotes = new Set();
+        if (target.checked) {
+          store.selectedHealthNotes.add(id);
+        } else {
+          store.selectedHealthNotes.delete(id);
+        }
+        UI.renderHealth();
+        return;
+      }
+
+      // Health Note Check All
+      if (target.id === 'health-check-all') {
+        if (!store.selectedHealthNotes) store.selectedHealthNotes = new Set();
+        const activeFolder = store.activeHealthFolder || 'all';
+        const allNotes = store.healthNotes || [];
+        const filtered = (activeFolder === 'all') ? allNotes : allNotes.filter(n => n.folder === activeFolder);
+        
+        if (target.checked) {
+          filtered.forEach(n => store.selectedHealthNotes.add(n.id));
+        } else {
+          store.selectedHealthNotes.clear();
+        }
+        UI.renderHealth();
+        return;
+      }
+
+      // Hobby Note Single Checkbox
+      if (target.classList.contains('hobby-item-checkbox')) {
+        const id = target.dataset.id;
+        if (!store.selectedHobbyNotes) store.selectedHobbyNotes = new Set();
+        if (target.checked) {
+          store.selectedHobbyNotes.add(id);
+        } else {
+          store.selectedHobbyNotes.delete(id);
+        }
+        UI.renderHobby();
+        return;
+      }
+
+      // Hobby Note Check All
+      if (target.id === 'hobby-check-all') {
+        if (!store.selectedHobbyNotes) store.selectedHobbyNotes = new Set();
+        const activeFolder = store.activeHobbyFolder || 'all';
+        const allNotes = store.hobbyNotes || [];
+        const filtered = (activeFolder === 'all') ? allNotes : allNotes.filter(n => n.folder === activeFolder);
+        
+        if (target.checked) {
+          filtered.forEach(n => store.selectedHobbyNotes.add(n.id));
+        } else {
+          store.selectedHobbyNotes.clear();
+        }
+        UI.renderHobby();
+        return;
       }
     });
 
