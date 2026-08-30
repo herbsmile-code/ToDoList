@@ -1571,9 +1571,9 @@
           const count = store.tasks.filter(t => t.category === cat.id).length;
           const isActive = store.activeFilter === cat.id ? 'active' : '';
           return `
-            <li class="nav-item category-drag-item ${isActive}" data-cat-id="${cat.id}" data-filter="${cat.id}" draggable="false">
+            <li class="nav-item category-drag-item ${isActive}" data-cat-id="${cat.id}" data-filter="${cat.id}" onclick="window.selectCategoryFilter('${cat.id}', event)">
               <div class="nav-item-left">
-                <span class="category-drag-handle" title="위아래로 드래그하여 순서 변경">⋮⋮</span>
+                <span class="category-drag-handle" title="위아래로 드래그하여 순서 변경" onclick="event.stopPropagation()">⋮⋮</span>
                 <span class="category-dot" style="background-color: ${cat.color}; color: ${cat.color};"></span>
                 <span class="category-title-text">${cat.name}</span>
               </div>
@@ -3756,29 +3756,28 @@
       });
     }
 
-    // 2. Global Click Delegation for other menus
+    // 2. Global Click Delegation for all Navigation Items
     document.addEventListener('click', (e) => {
-      if (Date.now() < suppressNavClickUntil) return;
-      if (isDraggingCategory) return;
-
       const navItem = e.target.closest('.nav-item');
-      if (navItem && navItem.dataset.filter && !navItem.closest('#category-nav-list')) {
-        const newFilter = navItem.dataset.filter;
-        window.selectCategoryFilter(newFilter);
-        return;
+      if (navItem && navItem.dataset.filter) {
+        if (!e.target.closest('.category-drag-handle')) {
+          const newFilter = navItem.dataset.filter;
+          window.selectCategoryFilter(newFilter, e);
+          return;
+        }
       }
 
       const mobileNavBtn = e.target.closest('.mobile-nav-btn');
       if (mobileNavBtn && mobileNavBtn.dataset.mobileNav) {
         const newFilter = mobileNavBtn.dataset.mobileNav;
-        window.selectCategoryFilter(newFilter);
+        window.selectCategoryFilter(newFilter, e);
         return;
       }
 
       const mobilePill = e.target.closest('.mobile-cat-pill');
       if (mobilePill && mobilePill.dataset.filter) {
         const newFilter = mobilePill.dataset.filter;
-        window.selectCategoryFilter(newFilter);
+        window.selectCategoryFilter(newFilter, e);
         return;
       }
 
