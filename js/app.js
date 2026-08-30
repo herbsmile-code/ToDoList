@@ -126,6 +126,12 @@
     { id: 'general', name: '일반/기타', icon: '💊' }
   ];
 
+  const HEALTH_EMOJI_LIST = [
+    '🩺', '🏥', '🤰', '🦷', '💊', '🩹', '💉', '🩸',
+    '👁️', '👂', '🧠', '🫀', '🫁', '🦴', '🧴', '🧘',
+    '🏃', '🥗', '🍎', '🍵', '🛌', '💖', '⭐', '📁'
+  ];
+
   // =========================================================================
   // 0. Utilities
   // =========================================================================
@@ -1522,6 +1528,28 @@
       this.healthFolders.push(newFolder);
       this.save();
       return newFolder;
+    }
+
+    updateHealthFolder(id, updates) {
+      const folder = this.healthFolders.find(f => f.id === id);
+      if (!folder) return null;
+      if (updates.name) folder.name = updates.name.trim();
+      if (updates.icon) folder.icon = updates.icon;
+      this.save();
+      return folder;
+    }
+
+    deleteHealthFolder(id) {
+      const idx = this.healthFolders.findIndex(f => f.id === id);
+      if (idx === -1) return false;
+      this.healthFolders.splice(idx, 1);
+      // Migrate any notes in this deleted folder to 'general'
+      this.healthNotes.forEach(note => {
+        if (note.folder === id) note.folder = 'general';
+      });
+      if (this.activeHealthFolder === id) this.activeHealthFolder = 'all';
+      this.save();
+      return true;
     }
 
     updateStreak() {
@@ -3609,18 +3637,24 @@
       const folders = store.healthFolders || DEFAULT_HEALTH_FOLDERS;
       const allNotes = store.healthNotes || [];
 
-      // 1. Render Folder Tabs
+      // 1. Render Folder Tabs (with edit pencil icon for editable folders)
       if (tabsBar) {
         tabsBar.innerHTML = folders.map(f => {
           const isActive = (f.id === activeFolder);
           const count = f.id === 'all' 
             ? allNotes.length 
             : allNotes.filter(n => n.folder === f.id).length;
+          
+          const editBtn = (f.id !== 'all')
+            ? `<span class="health-folder-edit-btn" data-action="open-edit-health-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정">✏️</span>`
+            : '';
+
           return `
             <button type="button" class="health-folder-tab ${isActive ? 'active' : ''}" data-health-folder-id="${f.id}">
               <span>${f.icon || '📁'}</span>
               <span>${escapeHTML(f.name)}</span>
               <span class="badge" style="font-size: 0.72rem; padding: 1px 6px; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)'}; color: ${isActive ? '#fff' : 'var(--text-muted)'}; border-radius: 10px;">${count}</span>
+              ${editBtn}
             </button>
           `;
         }).join('');
@@ -3750,15 +3784,63 @@
       }
     },
 
-    openHealthFolderModal() {
+    openHealthFolderModal(folderId = null) {
       const modal = document.getElementById('health-folder-modal');
       const form = document.getElementById('health-folder-form');
+      const titleEl = document.getElementById('health-folder-modal-title');
+      const editIdEl = document.getElementById('health-folder-edit-id');
+      const iconInput = document.getElementById('health-input-folder-icon');
       const nameInput = document.getElementById('health-input-folder-name');
+      const grid = document.getElementById('health-folder-emoji-grid');
+      const deleteBtn = document.getElementById('btn-delete-health-folder');
+      const submitBtn = document.getElementById('btn-submit-health-folder');
+
       if (!modal || !form) return;
       form.reset();
+
+      let currentIcon = '🩺';
+      let currentName = '';
+
+      if (folderId) {
+        const folder = (store.healthFolders || DEFAULT_HEALTH_FOLDERS).find(f => f.id === folderId);
+        if (!folder) return;
+        currentIcon = folder.icon || '🩺';
+        currentName = folder.name || '';
+        if (titleEl) titleEl.textContent = '📁 건강 폴더 수정 💖';
+        if (editIdEl) editIdEl.value = folder.id;
+        if (nameInput) nameInput.value = currentName;
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) {
+          const isProtected = (folder.id === 'general' || folder.id === 'obgyn' || folder.id === 'dental' || folder.id === 'surgery' || folder.id === 'all');
+          deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
+          deleteBtn.dataset.id = folder.id;
+        }
+        if (submitBtn) submitBtn.textContent = '수정 완료 ✨';
+      } else {
+        if (titleEl) titleEl.textContent = '📁 새 건강 폴더 추가';
+        if (editIdEl) editIdEl.value = '';
+        if (nameInput) nameInput.value = '';
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (submitBtn) submitBtn.textContent = '폴더 생성 📁';
+      }
+
+      // Render 24 Emoji Picker Buttons
+      if (grid) {
+        grid.innerHTML = HEALTH_EMOJI_LIST.map(emoji => {
+          const isSel = (emoji === currentIcon);
+          return `
+            <button type="button" class="health-emoji-option-btn ${isSel ? 'selected' : ''}" data-emoji="${emoji}" title="${emoji}">
+              ${emoji}
+            </button>
+          `;
+        }).join('');
+      }
+
       modal.style.display = 'flex';
       modal.classList.add('active');
       if (nameInput) setTimeout(() => nameInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
     },
 
     closeHealthFolderModal() {
@@ -4870,6 +4952,43 @@
         return;
       }
 
+      // 0.1. Health Folder Edit Pencil Click
+      const editFolderBtn = target.closest('[data-action="open-edit-health-folder"]');
+      if (editFolderBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        UI.openHealthFolderModal(editFolderBtn.dataset.id);
+        return;
+      }
+
+      // 0.2. Health Emoji Picker Click
+      const emojiBtn = target.closest('.health-emoji-option-btn');
+      if (emojiBtn && emojiBtn.dataset.emoji) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const iconInput = document.getElementById('health-input-folder-icon');
+        if (iconInput) iconInput.value = emojiBtn.dataset.emoji;
+        const grid = document.getElementById('health-folder-emoji-grid');
+        if (grid) {
+          grid.querySelectorAll('.health-emoji-option-btn').forEach(b => b.classList.remove('selected'));
+          emojiBtn.classList.add('selected');
+        }
+        return;
+      }
+
+      // 0.3. Delete Health Folder Button Click
+      if (target.closest('#btn-delete-health-folder')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const folderId = target.closest('#btn-delete-health-folder').dataset.id;
+        if (folderId && confirm('정말 이 건강 폴더를 삭제하시겠습니까?\n(폴더 안의 메모는 [일반/기타] 폴더로 안전하게 이동됩니다)')) {
+          store.deleteHealthFolder(folderId);
+          sounds.playDelete();
+          UI.closeHealthFolderModal();
+          UI.showToast('폴더가 삭제되었고 메모는 안전하게 보관되었어요.', 'info');
+          UI.renderHealth();
+        }
+        return;
+      }
+
       // Health Folder Tab Click
       const healthTab = target.closest('.health-folder-tab');
       if (healthTab && healthTab.dataset.healthFolderId) {
@@ -5338,15 +5457,22 @@
     if (healthFolderForm) {
       healthFolderForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        const id = document.getElementById('health-folder-edit-id')?.value;
         const icon = document.getElementById('health-input-folder-icon')?.value || '🩺';
         const name = document.getElementById('health-input-folder-name')?.value || '';
-        if (name.trim()) {
+        if (!name.trim()) return;
+
+        if (id) {
+          store.updateHealthFolder(id, { name: name.trim(), icon });
+          sounds.playComplete();
+          UI.showToast(`'${name.trim()}' 건강 폴더가 수정되었어요 ✨`, 'info');
+        } else {
           store.addHealthFolder(name.trim(), icon);
           sounds.playAdd();
-          UI.closeHealthFolderModal();
           UI.showToast(`'${name.trim()}' 건강 폴더가 추가되었어요 📁✨`, 'success');
-          UI.renderHealth();
         }
+        UI.closeHealthFolderModal();
+        UI.renderHealth();
       });
     }
 

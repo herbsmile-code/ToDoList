@@ -1603,28 +1603,46 @@
     </div>
   </div>
 
-  <!-- Modal: Add Health Folder Modal (새 폴더 추가) -->
+  <!-- Modal: Add/Edit Health Folder Modal (새 폴더 추가 및 편집) -->
   <div id="health-folder-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
-    <div class="modal-card" style="max-width: 420px;">
+    <div class="modal-card" style="max-width: 460px;">
       <div class="modal-header">
-        <h3 class="modal-title">📁 새 건강 폴더 추가</h3>
+        <h3 class="modal-title" id="health-folder-modal-title">📁 새 건강 폴더 추가</h3>
         <button class="modal-close-btn" data-close-health-folder-modal title="닫기 (Esc)">✕</button>
       </div>
 
       <form id="health-folder-form">
+        <input type="hidden" id="health-folder-edit-id" value="">
+
+        <!-- Emoji Palette Picker -->
         <div class="form-group">
-          <label class="form-label" for="health-input-folder-icon">아이콘 (이모지)</label>
-          <input type="text" id="health-input-folder-icon" class="form-input" value="🩺" maxlength="4" style="width: 70px; text-align: center; font-size: 1.2rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+            <label class="form-label" style="margin: 0;">아이콘 선택 (이모지 24종)</label>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span style="font-size: 0.76rem; color: var(--text-muted);">선택됨:</span>
+              <input type="text" id="health-input-folder-icon" class="form-input" value="🩺" maxlength="4" style="width: 50px; height: 32px; text-align: center; font-size: 1.15rem; padding: 2px; font-weight: bold;" readonly>
+            </div>
+          </div>
+          
+          <div class="health-emoji-picker-grid" id="health-folder-emoji-grid">
+            <!-- 24 emoji buttons dynamically rendered -->
+          </div>
         </div>
 
+        <!-- Folder Name -->
         <div class="form-group">
           <label class="form-label" for="health-input-folder-name">폴더 이름 *</label>
-          <input type="text" id="health-input-folder-name" class="form-input" placeholder="예: 피부과, 안과, 정형외과, 영양제" required>
+          <input type="text" id="health-input-folder-name" class="form-input" placeholder="예: 피부과, 안과, 정형외과, 영양제, 검진" required>
         </div>
 
-        <div class="modal-actions">
-          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-health-folder-modal>취소</button>
-          <button type="submit" class="btn btn-primary">폴더 생성 📁</button>
+        <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" id="btn-delete-health-folder" class="btn" style="display: none; background: rgba(255, 77, 77, 0.1); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.25); font-size: 0.8rem;">
+            🗑️ 폴더 삭제
+          </button>
+          <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-health-folder-modal>취소</button>
+            <button type="submit" id="btn-submit-health-folder" class="btn btn-primary">저장 💖</button>
+          </div>
         </div>
       </form>
     </div>

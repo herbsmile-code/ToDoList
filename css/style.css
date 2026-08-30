@@ -5108,4 +5108,79 @@ body::after {
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
+/* Health Emoji Picker Grid */
+.health-emoji-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.35rem;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.6rem;
+  max-height: 155px;
+  overflow-y: auto;
+}
+
+[data-theme="dark"] .health-emoji-picker-grid {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.health-emoji-option-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1.25rem;
+  padding: 0.35rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.health-emoji-option-btn:hover {
+  transform: scale(1.15);
+  border-color: var(--primary);
+  background: rgba(255, 107, 139, 0.1);
+}
+
+.health-emoji-option-btn.selected {
+  border-color: var(--primary);
+  background: rgba(255, 107, 139, 0.2);
+  box-shadow: 0 0 0 2px var(--primary);
+  transform: scale(1.08);
+}
+
+/* Health Folder Tab Edit Button */
+.health-folder-tab {
+  position: relative;
+  padding-right: 0.65rem;
+}
+
+.health-folder-edit-btn {
+  font-size: 0.72rem;
+  opacity: 0.65;
+  margin-left: 0.25rem;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.health-folder-tab.active .health-folder-edit-btn {
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  opacity: 0.9;
+}
+
+.health-folder-edit-btn:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
 
