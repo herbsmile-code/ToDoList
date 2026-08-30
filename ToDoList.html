@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=8.6">
-  <link rel="stylesheet" href="css/animations.css?v=8.6">
+  <link rel="stylesheet" href="css/style.css?v=8.7">
+  <link rel="stylesheet" href="css/animations.css?v=8.7">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -82,9 +82,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.6)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.7)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v8.6</span>
+          <span>v8.7</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -192,6 +192,31 @@
               <span>보물 지식함 열기</span>
               <span>✨</span>
             </button>
+          </div>
+        </div>
+
+        <!-- Firebase Realtime Sync & Storage Bar Card (Firebase 막대표 복구) -->
+        <div class="sidebar-card cloud-storage-card" id="sidebar-cloud-card" style="margin-top: 0.75rem; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,240,245,0.85));">
+          <div class="sidebar-title" style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="display: flex; align-items: center; gap: 0.35rem;">
+              <span>☁️ Firebase 동기화</span>
+            </span>
+            <span class="cloud-live-dot-badge" id="sidebar-cloud-dot-badge" style="font-size: 0.72rem; font-weight: 700; color: #10b981; background: rgba(16,185,129,0.12); padding: 2px 7px; border-radius: 6px;">🟢 실시간</span>
+          </div>
+          <div class="sidebar-card-body" style="padding-top: 0.3rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-bottom: 0.3rem;">
+              <span>클라우드 저장소 용량</span>
+              <span id="sidebar-cloud-usage-text" style="color: var(--primary); font-weight: 800;">0.28 MB / 1,024 MB</span>
+            </div>
+            <div class="vacation-progress-bar-track" style="height: 7px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;">
+              <div class="vacation-progress-bar-fill" id="sidebar-cloud-progress-bar" style="width: 2.5%; background: linear-gradient(90deg, #ff6b8b, #7048e8);"></div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem;">
+              <span style="font-size: 0.72rem; color: var(--text-dim);" id="sidebar-cloud-sync-status-msg">보안 PIN 암호화 연동 🛡️</span>
+              <button type="button" class="btn" style="padding: 2px 7px; font-size: 0.72rem; background: rgba(255,107,139,0.1); color: var(--primary); font-weight: 700; border-radius: 6px; border: 1px solid rgba(255,107,139,0.25); cursor: pointer;" onclick="window.openCloudModal()">
+                설정 ⚙️
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -373,8 +398,8 @@
               <span class="cal-stat-num cal-stat-completed" id="cal-stat-completed">0개</span>
             </div>
             <div class="cal-stat-item">
-              <span class="cal-stat-label">반차 / 휴가 🌼</span>
-              <span class="cal-stat-num cal-stat-vacation" id="cal-stat-vacation" style="color: #f59f00;">0일</span>
+              <span class="cal-stat-label">🌴 연차사용</span>
+              <span class="cal-stat-num cal-stat-vacation" id="cal-stat-vacation" style="color: #f59f00;">0.0일</span>
             </div>
             <div class="cal-stat-item">
               <span class="cal-stat-label">이달의 달성률</span>
@@ -471,7 +496,7 @@
             </div>
 
             <div class="vacation-stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
-              <div class="vacation-stat-box">
+              <div class="vacation-stat-box clickable-vstat-box active" data-vtype-filter="all" title="클릭하여 전체 연차/휴가 내역 보기">
                 <div class="vacation-stat-title">
                   <span>총 발생 연차</span>
                   <span>🎯</span>
@@ -479,7 +504,7 @@
                 <div class="vacation-stat-num highlight-primary" id="vacation-stat-total">15.0<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span></div>
               </div>
 
-              <div class="vacation-stat-box">
+              <div class="vacation-stat-box clickable-vstat-box" data-vtype-filter="used" title="클릭하여 사용한 연차/반차 내역만 보기">
                 <div class="vacation-stat-title">
                   <span>사용한 연차</span>
                   <span>🌿</span>
@@ -487,7 +512,7 @@
                 <div class="vacation-stat-num highlight-used" id="vacation-stat-used">0.0<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span></div>
               </div>
 
-              <div class="vacation-stat-box">
+              <div class="vacation-stat-box clickable-vstat-box" data-vtype-filter="remain" title="남은 연차 일수">
                 <div class="vacation-stat-title">
                   <span>남은 연차 (잔여)</span>
                   <span>🌸</span>
@@ -495,7 +520,7 @@
                 <div class="vacation-stat-num highlight-remain" id="vacation-stat-remain">15.0<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span></div>
               </div>
 
-              <div class="vacation-stat-box" style="background: rgba(32, 201, 151, 0.08); border-color: rgba(32, 201, 151, 0.25);">
+              <div class="vacation-stat-box clickable-vstat-box" data-vtype-filter="holiday" style="background: rgba(32, 201, 151, 0.08); border-color: rgba(32, 201, 151, 0.25);" title="클릭하여 휴가 내역만 보기">
                 <div class="vacation-stat-title">
                   <span style="color: #0ca678; font-weight: 800;">휴가 사용 (별도)</span>
                   <span>🏖️</span>
@@ -1653,7 +1678,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=8.6"></script>
-  <script src="js/treasure.js?v=8.6"></script>
+  <script src="js/app.js?v=8.7"></script>
+  <script src="js/treasure.js?v=8.7"></script>
 </body>
 </html>

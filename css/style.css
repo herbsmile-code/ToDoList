@@ -4587,4 +4587,42 @@ body::after {
   background: rgba(255, 107, 139, 0.08);
 }
 
+/* Clickable Vacation Stat Box */
+.clickable-vstat-box {
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.clickable-vstat-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(255, 107, 139, 0.15);
+  border-color: var(--primary) !important;
+}
+
+.clickable-vstat-box.active {
+  border: 1.5px solid var(--primary) !important;
+  box-shadow: 0 4px 16px var(--primary-glow) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 240, 245, 0.9)) !important;
+}
+
+[data-theme="dark"] .clickable-vstat-box.active {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(255, 107, 139, 0.15)) !important;
+}
+
+/* Cloud Storage Card in Sidebar */
+.cloud-storage-card {
+  border: 1px solid rgba(255, 107, 139, 0.2);
+  transition: all 0.25s ease;
+}
+
+.cloud-storage-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  border-color: var(--primary);
+}
+
+[data-theme="dark"] .cloud-storage-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(20, 25, 40, 0.95)) !important;
+}
+
 

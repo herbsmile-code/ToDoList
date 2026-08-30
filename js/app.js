@@ -952,6 +952,7 @@
       this.activeWishCat = 'all';
       this.selectedVacationYear = '2026';
       this.selectedVacationMonth = String(new Date().getMonth() + 1); // 이번 달 (8월) 자동 선택
+      this.vacationTypeFilter = 'all'; // 'all' | 'used' | 'holiday'
       this.isReorderMode = false; // 순서변경 모드 토글
       this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'vault'];
       this.searchQuery = '';
@@ -1555,6 +1556,42 @@
         if (vCount) vCount.textContent = vaultFiles.length;
       } catch (e) {}
 
+      // Update Firebase Realtime Sync & Storage Bar Card
+      try {
+        const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
+        const cloudDot = document.getElementById('sidebar-cloud-dot-badge');
+        const cloudUsageText = document.getElementById('sidebar-cloud-usage-text');
+        const cloudProgressBar = document.getElementById('sidebar-cloud-progress-bar');
+        const cloudStatusMsg = document.getElementById('sidebar-cloud-sync-status-msg');
+
+        // Estimate total JSON & Photo/Vault data size
+        const rawJsonBytes = new TextEncoder().encode(localStorage.getItem(STORAGE_KEY) || '').length;
+        let totalVaultBytes = 0;
+        try {
+          const vFiles = await cloudSync.getAllVaultFiles();
+          totalVaultBytes = vFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+        } catch (e) {}
+
+        const totalMB = Math.max(0.15, (rawJsonBytes + totalVaultBytes) / (1024 * 1024));
+        const maxQuotaMB = 1024; // 1 GB free quota
+        const pct = Math.min(100, Math.max(1.5, (totalMB / maxQuotaMB) * 100));
+
+        if (cloudDot) {
+          cloudDot.textContent = isLogged ? '🟢 실시간' : '⚪ 로컬 보관';
+          cloudDot.style.color = isLogged ? '#10b981' : 'var(--text-muted)';
+          cloudDot.style.background = isLogged ? 'rgba(16,185,129,0.12)' : 'rgba(0,0,0,0.05)';
+        }
+        if (cloudUsageText) {
+          cloudUsageText.textContent = `${totalMB.toFixed(2)} MB / ${maxQuotaMB} MB`;
+        }
+        if (cloudProgressBar) {
+          cloudProgressBar.style.width = `${pct}%`;
+        }
+        if (cloudStatusMsg) {
+          cloudStatusMsg.textContent = isLogged ? `키: ${cloudSync.spaceId} 연동 중 🛡️` : '동기화 미연결 (로컬 저장)';
+        }
+      } catch (e) {}
+
       // Render All Categories, Feature Menus & 3 Dividers in Sidebar
       const catContainer = document.getElementById('category-nav-list');
       const reorderBtn = document.getElementById('btn-toggle-reorder-menu');
@@ -1964,7 +2001,16 @@
       const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
       const monthTasks = store.tasks.filter(t => t.dueDate && t.dueDate.startsWith(currentMonthPrefix));
       const monthCompleted = monthTasks.filter(t => t.status === 'completed').length;
-      const monthVacations = monthTasks.filter(t => t.type === 'vacation' || t.type === 'half-off').length;
+      
+      // 연차관리에서 등록된 이번 달 실제 연차 사용 일수 계산
+      let monthVacationDays = 0;
+      (store.vacations || []).forEach(v => {
+        if (v.date && v.date.startsWith(currentMonthPrefix)) {
+          if (v.type === 'holiday' || v.amount === 0) return; // 휴가는 제외
+          monthVacationDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
+        }
+      });
+
       const monthRate = monthTasks.length > 0 ? Math.round((monthCompleted / monthTasks.length) * 100) : 0;
 
       const sTotal = document.getElementById('cal-stat-total');
@@ -1974,7 +2020,7 @@
 
       if (sTotal) sTotal.textContent = `${monthTasks.length}개`;
       if (sComp) sComp.textContent = `${monthCompleted}개`;
-      if (sVac) sVac.textContent = `${monthVacations}일`;
+      if (sVac) sVac.textContent = `${monthVacationDays.toFixed(1)}일`;
       if (sRate) sRate.textContent = `${monthRate}%`;
 
       let cellsHTML = '';
@@ -3083,9 +3129,20 @@
       if (barEl) barEl.style.width = `${stats.pct}%`;
       if (textEl) textEl.textContent = `${stats.pct}% (${stats.used.toFixed(1)}일 / ${stats.total.toFixed(1)}일) 사용 완료`;
 
-      // 1. Current Selected Filters (이번 달 기본 선택)
+      // 1. Current Selected Filters (이번 달 기본 선택 & 통계 카드 필터)
       const currentSelectedYear = store.selectedVacationYear || '2026';
       const currentSelectedMonth = store.selectedVacationMonth || String(new Date().getMonth() + 1);
+      const currentTypeFilter = store.vacationTypeFilter || 'all';
+
+      // Update Active State of Top 4 Stat Boxes
+      document.querySelectorAll('.clickable-vstat-box').forEach(box => {
+        const f = box.dataset.vtypeFilter;
+        if (f === currentTypeFilter || (currentTypeFilter === 'all' && f === 'all')) {
+          box.classList.add('active');
+        } else {
+          box.classList.remove('active');
+        }
+      });
 
       // 2. Populate Year Select Options dynamically from data
       if (yearSelect) {
@@ -3110,32 +3167,43 @@
       });
 
       // 4. Filter Vacations by Year & Month
-      let filtered = (store.vacations || []).slice();
+      let periodFiltered = (store.vacations || []).slice();
       if (currentSelectedYear !== 'all') {
-        filtered = filtered.filter(v => v.date && v.date.startsWith(currentSelectedYear));
+        periodFiltered = periodFiltered.filter(v => v.date && v.date.startsWith(currentSelectedYear));
       }
       if (currentSelectedMonth !== 'all') {
         const mStr = String(currentSelectedMonth).padStart(2, '0');
-        filtered = filtered.filter(v => {
+        periodFiltered = periodFiltered.filter(v => {
           if (!v.date) return false;
           const parts = v.date.split('-');
           return parts[1] === mStr;
         });
       }
 
-      // 5. 사용날짜(date) 최신순 자동 정렬 (등록일과 무관하게 사용날짜 순으로 정렬)
-      filtered.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-
-      // Calculate filtered period stats
+      // Calculate period-wide stats before type filtering
       let periodUsedDays = 0;
       let periodHolidayCount = 0;
-      filtered.forEach(v => {
+      periodFiltered.forEach(v => {
         if (v.type === 'holiday' || v.amount === 0) {
           periodHolidayCount += 1;
           return;
         }
         periodUsedDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
       });
+
+      // 5. Apply Top Stat Box Type Filter (총 발생연차 / 사용한 연차 / 휴가 사용)
+      let filtered = periodFiltered.slice();
+      let typeFilterLabel = '';
+      if (currentTypeFilter === 'used') {
+        filtered = filtered.filter(v => v.type === 'full' || v.type === 'half-am' || v.type === 'half-pm');
+        typeFilterLabel = ' [연차/반차만 보기]';
+      } else if (currentTypeFilter === 'holiday') {
+        filtered = filtered.filter(v => v.type === 'holiday' || v.amount === 0);
+        typeFilterLabel = ' [휴가만 보기]';
+      }
+
+      // 6. 사용날짜(date) 최신순 자동 정렬 (등록일과 무관하게 사용날짜 순으로 정렬)
+      filtered.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
 
       // Update Month Summary Banner (예: 8월 총 연차 2.0개 사용 / 휴가 1개 사용)
       const sumPeriodTitleEl = document.getElementById('vac-summary-period-title');
@@ -3147,7 +3215,7 @@
         : `${currentSelectedMonth}월`;
 
       if (sumPeriodTitleEl) {
-        sumPeriodTitleEl.textContent = `🌸 ${periodLabel} 사용 현황:`;
+        sumPeriodTitleEl.textContent = `🌸 ${periodLabel} 사용 현황${typeFilterLabel}:`;
       }
       if (sumDetailsEl) {
         sumDetailsEl.textContent = `총 연차 ${periodUsedDays.toFixed(1)}개 사용 / 휴가 ${periodHolidayCount}개 사용`;
@@ -4556,6 +4624,25 @@
       }
       if (target.closest('#btn-close-total-vacation-modal') || target.closest('#btn-cancel-total-vacation-modal')) {
         UI.closeTotalVacationModal();
+      }
+
+      // 13.1. Vacation Top Stat Box Click Filter
+      const vstatBox = target.closest('.clickable-vstat-box');
+      if (vstatBox && vstatBox.dataset.vtypeFilter) {
+        const filterType = vstatBox.dataset.vtypeFilter;
+        if (filterType === 'remain') {
+          UI.showToast(`올해 남은 연차는 ${store.getVacationStats().remain.toFixed(1)}일입니다 🌸`, 'info');
+        } else {
+          store.vacationTypeFilter = filterType;
+          UI.renderVacation();
+          if (filterType === 'used') {
+            UI.showToast('사용한 연차/반차 내역만 필터링합니다 🌿', 'info');
+          } else if (filterType === 'holiday') {
+            UI.showToast('휴가(0일 차감) 내역만 필터링합니다 🏖️', 'info');
+          } else {
+            UI.showToast('전체 연차/휴가 내역을 표시합니다 🌸', 'info');
+          }
+        }
       }
 
       // 14. Sites / Bookmarks Action Triggers
