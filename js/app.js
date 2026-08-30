@@ -78,23 +78,20 @@
       version: 'v1.1',
       date: '2026-08-30',
       dateFormatted: '2026년 8월 30일 (오늘)',
-      title: '🌸 연차관리·휴가 전면 개편 & Firebase 즉시 백업 및 UI 안정화 (v1.1)',
+      title: '🌸 2026 라이프 다이어리 대규모 고도화 & 인생 프로젝트·건강·취미·연차·파일보관함 및 실시간 클라우드 무결성 완성 (v1.1)',
       badge: '최신 배포 🌟',
       badgeColor: '#ff6b8b',
-      summary: '연차/반차/휴가 통합 관리 시스템 구축, 월별 달력 연동, Firebase 즉시 백업, 화면 점핑 방지 및 UI 인터랙션 대폭 강화',
+      summary: '🏢 인생 대형 프로젝트(왕숙 입주/시험관) 로드맵, 🩺 건강관리 & 🎨 취미활동 폴더 분할 및 일괄 이동, 🏖️ 0일 차감 휴가 분리, 📁 2GB IndexedDB 무제한 파일보관함, ✏️ 메모·파일 삭제 동기화 무결성 및 사이드바 유연한 구분선 완비',
       details: [
-        '🏥 건강관리 신설: 산부인과, 치아, 수술계획 등 전용 폴더 분류 및 넉넉한 대형 진료 메모장 지원 (제목, 진료일, 병원명, 진료비 기록)',
-        '🏖️ 연차관리 신설: 총 발생연차, 사용한 연차, 남은 연차, 휴가(0일 차감) 4대 통계 카드 탑재',
-        '📅 사용날짜(YYYY-MM-DD) 기준 최신순 자동 정렬 및 월별 실시간 요약 배너 추가',
-        '🎯 통계 카드 원클릭 필터링: [사용한 연차/반차만 보기], [전체 기간 휴가만 보기] 지원',
-        '🗓️ 월별 달력 연동: 상단 통계에 "🌴 연차사용" 실제 일수 실시간 계산 연동 및 개발기록 팝업 칩 탑재',
-        '💎 보물지식함 클라우드 게이지 바 복구 & 6개단위 페이지네이션(1,2,3,4...) 복원',
-        '☁️ Firebase 즉시 백업: 다운로드 창 없이 클라우드로 1초 만에 안전하게 즉시 백업 & 업로드',
-        '🌐 사이트 바로가기 북마크 신설 (국세청, 노션 등 자주 가는 링크 모음)',
-        '✏️ 사이드바 카테고리 순서변경 토글 모드 및 드래그 구분선 3개 지원',
-        '🚀 새로고침 시 개발기록 및 메뉴 순서 사라짐 방지 패치',
-        '🖱️ 메뉴 전환 시 화면이 맨 위로 튀어 올라가는 점핑 현상 완전 제거',
-        '📋 1일 단위 버전 관리 정책 수립 및 오늘 개발분 v1.1 정립'
+        '🏢 인생 대형 프로젝트 (Roadmap & Milestones) 신설: 왕숙 신도시 아파트 입주, 소중한 아기 천사 맞이(시험관 준비) 등 인생의 큰 프로젝트 목표 설정, 단계별 중도금 납부/사전점검/입주일 및 시술 단계별 마일스톤 관리, D-Day & 실시간 프로그레스 바, 폭죽 완료 체크 및 24종 감성 이모지 피커 완비',
+        '🩺 건강관리 (Health Manager) 고도화: 건강검진, 산부인과, 치아, 수술계획, 일반 등 맞춤 폴더 분류, 다중 메모 선택 및 다른 폴더로 일괄 이동(Batch Move), 폴더별 편집/삭제(삭제 시 메모 일반 폴더로 자동 안전 이관) 및 대용량 진료 메모/진료비 기록 지원',
+        '🎨 취미활동 일지 (Hobby & Life Journal) 고도화: 운동, 피아노, 그림, 독서 등 다양한 취미 카테고리 폴더 지원, 폴더 편집 및 삭제, 다중 취미 일지 일괄 폴더 이동 및 시간/장소 꼼꼼한 기록',
+        '🏖️ 연차·반차 & 0일 차감 휴가 분리 관리: 총 발생연차(15일 등 설정), 사용한 연차, 남은 연차 통계 및 연차 차감 없는 0일 휴가(경조사/포상 등) 별도 카운트, 년도별/월별 내역 필터링 및 월별 실시간 요약 배너 탑재',
+        '📁 파일 보관함 2GB 무제한 IndexedDB 구축: 브라우저 5MB 한계를 극복한 로컬 IndexedDB 스토리지 엔진 도입, 엑셀/PDF/이미지 등 대용량 파일 드래그 앤 드롭 업로드 & 안전한 다운로드',
+        '✏️ 끄적끄적 메모장 & 파일보관함 삭제 무결성 완전 확보: 팝업 확인 삭제 시 실시간 클라우드 동기화 덮어쓰기 레이스 컨디션 및 파일보관함 Fallback 자동 복원 루프 원천 차단 (삭제 즉시 영구 파기 & 클라우드 전파)',
+        '🧭 사이드바 유연한 구분선 & 정렬: 업무 메뉴 아래 구분선(divider-1), 연차관리 아래 구분선(divider-vacation) 등 요청에 따른 유연한 구분선 배치 및 카테고리 순서 편집 모드 완비',
+        '💎 보물지식함 & 신혼 가계부 연동 강화: 보물지식함 6단위 페이지네이션(1,2,3,4...), 2026년 신혼 가계부 12개월 엑셀 템플릿 양식 다운로드 및 자동 분석 차트 복구',
+        '🛡️ AES-256 E2EE 종단간 암호화 실시간 Firebase 클라우드 동기화: 0.01ms 즉시 암호화/복호화 캐시 엔진 및 로컬 최신 상태 우선 동기화 보장'
       ]
     },
     {
@@ -5378,17 +5375,19 @@
                   ${log.badge}
                 </span>
               </div>
-              <button type="button" class="btn btn-sm" style="font-size: 0.74rem; background: rgba(0,0,0,0.04); color: var(--primary); font-weight: 700; padding: 3px 8px; border-radius: 6px;" onclick="UI.openDevLogModal('${log.version}')">
-                🔍 팝업 요약
+              <button type="button" class="btn btn-sm btn-devlog-popup" style="font-size: 0.78rem; background: linear-gradient(135deg, rgba(255,107,139,0.12), rgba(112,72,232,0.12)); color: var(--primary); font-weight: 800; padding: 5px 12px; border-radius: 8px; border: 1px solid rgba(255,107,139,0.25);" onclick="UI.openDevLogModal('${log.version}')">
+                🔍 팝업상세
               </button>
             </div>
 
             <h3 class="devlog-card-title">${log.title}</h3>
             <div class="devlog-summary-box">💬 ${log.summary}</div>
 
-            <ul class="devlog-items-list">
-              ${log.details.map(item => `<li>${item}</li>`).join('')}
-            </ul>
+            <div style="display: flex; justify-content: flex-end; margin-top: 0.25rem;">
+              <button type="button" class="btn btn-sm btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.15rem; font-weight: 700;" onclick="UI.openDevLogModal('${log.version}')">
+                <span>📋 상세 개발 내역 팝업 보기</span>
+              </button>
+            </div>
           </div>
         `;
       }).join('');
