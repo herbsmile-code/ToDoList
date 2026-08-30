@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=8.7">
-  <link rel="stylesheet" href="css/animations.css?v=8.7">
+  <link rel="stylesheet" href="css/style.css?v=8.8">
+  <link rel="stylesheet" href="css/animations.css?v=8.8">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -82,9 +82,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.7)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.8)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v8.7</span>
+          <span>v8.8</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -1426,10 +1426,10 @@
       </div>
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         <div>
-          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">데이터 백업 (내보내기)</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">작성한 모든 할 일, 끄적끄적 메모, 가계부, 위시리스트 데이터를 JSON 파일로 다운로드합니다.</p>
-          <button type="button" id="btn-export-data" class="btn" style="width: 100%; background: var(--primary-light); color: var(--primary);">
-            💾 JSON 데이터 다운로드
+          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">☁️ Firebase 클라우드 즉시 백업 & 업로드</h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">내 모든 일정, 끄적끄적 메모, 가계부, 위시리스트, 사진, 연차 데이터를 Firebase 클라우드에 1초 만에 안전하게 즉시 백업/업로드합니다.</p>
+          <button type="button" id="btn-export-data" class="btn" style="width: 100%; background: linear-gradient(135deg, #ff6b8b, #7048e8); color: #ffffff; font-weight: 800; padding: 0.65rem; border-radius: 10px; box-shadow: 0 4px 12px rgba(255, 107, 139, 0.25);">
+            ☁️ Firebase에 즉시 백업 & 업로드하기 💖
           </button>
         </div>
 
@@ -1678,7 +1678,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=8.7"></script>
-  <script src="js/treasure.js?v=8.7"></script>
+  <script src="js/app.js?v=8.8"></script>
+  <script src="js/treasure.js?v=8.8"></script>
 </body>
 </html>

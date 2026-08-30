@@ -3198,8 +3198,9 @@
         filtered = filtered.filter(v => v.type === 'full' || v.type === 'half-am' || v.type === 'half-pm');
         typeFilterLabel = ' [연차/반차만 보기]';
       } else if (currentTypeFilter === 'holiday') {
-        filtered = filtered.filter(v => v.type === 'holiday' || v.amount === 0);
-        typeFilterLabel = ' [휴가만 보기]';
+        // 사용자의 요구사항: 휴가사용(별도) 선택 시 전체 년도(모든 월 포함) 사용내역 모두 표시
+        filtered = (store.vacations || []).filter(v => v.type === 'holiday' || v.amount === 0);
+        typeFilterLabel = ' [전체 기간 휴가]';
       }
 
       // 6. 사용날짜(date) 최신순 자동 정렬 (등록일과 무관하게 사용날짜 순으로 정렬)
@@ -3214,19 +3215,25 @@
         ? `${currentSelectedYear === 'all' ? '전체' : currentSelectedYear + '년'}` 
         : `${currentSelectedMonth}월`;
 
-      if (sumPeriodTitleEl) {
-        sumPeriodTitleEl.textContent = `🌸 ${periodLabel} 사용 현황${typeFilterLabel}:`;
-      }
-      if (sumDetailsEl) {
-        sumDetailsEl.textContent = `총 연차 ${periodUsedDays.toFixed(1)}개 사용 / 휴가 ${periodHolidayCount}개 사용`;
-      }
-      if (sumBadgeEl) {
-        sumBadgeEl.textContent = `총 ${filtered.length}건`;
-      }
-
-      if (countEl) {
-        const holidayNote = periodHolidayCount > 0 ? ` · 휴가 ${periodHolidayCount}건` : '';
-        countEl.textContent = `총 ${filtered.length}건 (연차 ${periodUsedDays.toFixed(1)}일${holidayNote})`;
+      if (currentTypeFilter === 'holiday') {
+        if (sumPeriodTitleEl) sumPeriodTitleEl.textContent = '🏖️ 전체 기간(모든 년도/월) 휴가 현황:';
+        if (sumDetailsEl) sumDetailsEl.textContent = `총 휴가 ${filtered.length}개 사용 완료 (0일 차감 / 개인 일정)`;
+        if (sumBadgeEl) sumBadgeEl.textContent = `총 ${filtered.length}건`;
+        if (countEl) countEl.textContent = `전체 휴가 ${filtered.length}건 (0일 차감)`;
+      } else {
+        if (sumPeriodTitleEl) {
+          sumPeriodTitleEl.textContent = `🌸 ${periodLabel} 사용 현황${typeFilterLabel}:`;
+        }
+        if (sumDetailsEl) {
+          sumDetailsEl.textContent = `총 연차 ${periodUsedDays.toFixed(1)}개 사용 / 휴가 ${periodHolidayCount}개 사용`;
+        }
+        if (sumBadgeEl) {
+          sumBadgeEl.textContent = `총 ${filtered.length}건`;
+        }
+        if (countEl) {
+          const holidayNote = periodHolidayCount > 0 ? ` · 휴가 ${periodHolidayCount}건` : '';
+          countEl.textContent = `총 ${filtered.length}건 (연차 ${periodUsedDays.toFixed(1)}일${holidayNote})`;
+        }
       }
 
       if (!listEl) return;
@@ -3413,7 +3420,10 @@
   window.openCloudModal = () => UI.openCloudModal();
   window.closeCloudModal = () => UI.closeCloudModal();
   window.selectCategoryFilter = (catId, event) => {
-    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (event) {
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+      if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    }
     const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
     if (!isLogged) {
       UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
@@ -3421,7 +3431,7 @@
       return;
     }
     store.activeFilter = catId;
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    // 화면 점핑 방지: scrollTo 제거하여 현재 스크롤 위치 완벽 유지
     UI.renderTasks();
     UI.renderSidebar();
   };
@@ -4638,7 +4648,7 @@
           if (filterType === 'used') {
             UI.showToast('사용한 연차/반차 내역만 필터링합니다 🌿', 'info');
           } else if (filterType === 'holiday') {
-            UI.showToast('휴가(0일 차감) 내역만 필터링합니다 🏖️', 'info');
+            UI.showToast('전체 기간(모든 년도/월)의 휴가 사용 내역을 모두 표시합니다 🏖️', 'info');
           } else {
             UI.showToast('전체 연차/휴가 내역을 표시합니다 🌸', 'info');
           }
@@ -5334,30 +5344,22 @@
       });
     }
 
-    // Settings Data Export & Import & Reset
+    // Settings: Immediate Cloud Backup & Upload to Firebase
     const exportBtn = document.getElementById('btn-export-data');
     if (exportBtn) {
-      exportBtn.addEventListener('click', () => {
-        const jsonStr = JSON.stringify({
-          appName: 'Todolist JY',
-          tasks: store.tasks,
-          categories: store.categories,
-          wishlist: store.wishlist,
-          photos: store.photos,
-          notes: store.notes,
-          honeymoonData: store.honeymoonData,
-          ledgerFiles: store.ledgerFiles,
-          exportedAt: new Date().toISOString()
-        }, null, 2);
-
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Todolist_JY_Backup_${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        UI.showToast('백업 파일이 다운로드되었어요! 💾', 'success');
+      exportBtn.addEventListener('click', async () => {
+        try {
+          store.saveLocalOnly();
+          await cloudSync.pushTasksToCloud();
+          sounds.playComplete();
+          if (window.confetti && window.confetti.burst) {
+            window.confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
+          }
+          UI.showToast('모든 데이터가 Firebase 클라우드에 안전하게 즉시 백업/업로드되었어요! ☁️💖✨', 'success');
+          UI.renderSidebar();
+        } catch (err) {
+          UI.showToast('Firebase 백업 중 오류가 발생했어요. 동기화 키를 확인해주세요.', 'danger');
+        }
       });
     }
 
