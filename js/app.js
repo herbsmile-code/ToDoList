@@ -15,6 +15,34 @@
 (function() {
   'use strict';
 
+  // Global Navigation Bridge Handler
+  window._handleSelectFilter = function(filter) {
+    try {
+      if (window.cloudSync && (!window.cloudSync.spaceId || !window.cloudSync.pin)) {
+        if (window.UI) {
+          window.UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
+          window.UI.openCloudModal();
+        }
+        return;
+      }
+      if (window.store) {
+        window.store.activeFilter = filter;
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        if (window.UI) {
+          window.UI.renderTasks();
+          window.UI.renderSidebar();
+        }
+      }
+    } catch (e) {
+      console.warn('Navigation error:', e);
+    }
+  };
+
+  window.selectCategoryFilter = function(catId, event) {
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    window._handleSelectFilter(catId);
+  };
+
   // Dynamic Real Today Date Helper (YYYY-MM-DD)
   function getRealTodayStr() {
     const d = new Date();
@@ -790,6 +818,7 @@
   }
 
   const cloudSync = new CloudSyncManager();
+  window.cloudSync = cloudSync;
 
   // =========================================================================
   // 4. Default Mock Data & Categories
@@ -1416,6 +1445,7 @@
   }
 
   const store = new Store();
+  window.store = store;
 
   // =========================================================================
   // 6. UI View Engine
@@ -5100,7 +5130,12 @@
 
       bindEvents();
       cloudSync.init();
+      if (window._pendingFilter) {
+        store.activeFilter = window._pendingFilter;
+        window._pendingFilter = null;
+      }
       UI.renderTasks();
+      UI.renderSidebar();
     } catch (err) {
       console.error('initApp fatal error:', err);
       const box = document.getElementById('debug-error-banner') || (function() {
