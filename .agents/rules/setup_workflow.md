@@ -22,3 +22,7 @@ This rule defines the user's standardized 5-step development workflow (1~5번 �
 
 5. **5단계: 5번 셋업 (`/commit`) - 영구 백업 & 표준 커밋**
    - Conventional Git commit and push to remote repository for safe permanent backup.
+
+## 📌 버전 관리 정책 (Versioning Policy)
+- 버전 업데이트는 **하루(1일)를 기준**으로 합니다.
+- 하루에 수정이나 커밋을 여러 번 진행하더라도 같은 날짜 안에서는 소수점 판올림을 남발하지 않고 **1일 단위 버전(예: 어제 v1.0 -> 오늘 v1.1)**을 유지합니다.
