@@ -763,11 +763,30 @@
                 if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations);
                 if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
                 if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
-                if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
                 if (data.healthNotes !== undefined) store.healthNotes = normalizeArray(data.healthNotes);
-                if (data.healthFolders !== undefined && Array.isArray(data.healthFolders)) store.healthFolders = data.healthFolders;
+                if (data.healthFolders !== undefined && Array.isArray(data.healthFolders)) {
+                  let hFolders = data.healthFolders.slice();
+                  DEFAULT_HEALTH_FOLDERS.forEach(defF => {
+                    if (!hFolders.some(f => f && f.id === defF.id)) {
+                      const genIdx = hFolders.findIndex(f => f && f.id === 'general');
+                      if (genIdx !== -1) hFolders.splice(genIdx, 0, Object.assign({}, defF));
+                      else hFolders.push(Object.assign({}, defF));
+                    }
+                  });
+                  store.healthFolders = hFolders;
+                }
                 if (data.hobbyNotes !== undefined) store.hobbyNotes = normalizeArray(data.hobbyNotes);
-                if (data.hobbyFolders !== undefined && Array.isArray(data.hobbyFolders)) store.hobbyFolders = data.hobbyFolders;
+                if (data.hobbyFolders !== undefined && Array.isArray(data.hobbyFolders)) {
+                  let hbFolders = data.hobbyFolders.slice();
+                  DEFAULT_HOBBY_FOLDERS.forEach(defF => {
+                    if (!hbFolders.some(f => f && f.id === defF.id)) {
+                      const genIdx = hbFolders.findIndex(f => f && f.id === 'general');
+                      if (genIdx !== -1) hbFolders.splice(genIdx, 0, Object.assign({}, defF));
+                      else hbFolders.push(Object.assign({}, defF));
+                    }
+                  });
+                  store.hobbyFolders = hbFolders;
+                }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
                   const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
                   let order = data.sidebarMenuOrder.slice();
@@ -793,6 +812,16 @@
                   defaultOrder.forEach(id => {
                     if (!order.includes(id)) order.push(id);
                   });
+
+                  // Ensure divider-1 is positioned RIGHT BEFORE hobby
+                  const d1Idx = order.indexOf('divider-1');
+                  const hIdx = order.indexOf('hobby');
+                  if (d1Idx !== -1 && hIdx !== -1 && d1Idx !== hIdx - 1) {
+                    order.splice(d1Idx, 1);
+                    const newHIdx = order.indexOf('hobby');
+                    order.splice(newHIdx, 0, 'divider-1');
+                  }
+
                   store.sidebarMenuOrder = order;
                 }
                 if (Array.isArray(data.vaultFiles)) {
@@ -1105,10 +1134,28 @@
       const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
       const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
       const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
-      const userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS;
+      let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS.slice();
       const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
-      const userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS;
+      let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS.slice();
       const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
+
+      // Ensure all default health folders (including checkup) exist
+      DEFAULT_HEALTH_FOLDERS.forEach(defF => {
+        if (!userHealthFolders.some(f => f && f.id === defF.id)) {
+          const genIdx = userHealthFolders.findIndex(f => f && f.id === 'general');
+          if (genIdx !== -1) userHealthFolders.splice(genIdx, 0, Object.assign({}, defF));
+          else userHealthFolders.push(Object.assign({}, defF));
+        }
+      });
+
+      // Ensure all default hobby folders exist
+      DEFAULT_HOBBY_FOLDERS.forEach(defF => {
+        if (!userHobbyFolders.some(f => f && f.id === defF.id)) {
+          const genIdx = userHobbyFolders.findIndex(f => f && f.id === 'general');
+          if (genIdx !== -1) userHobbyFolders.splice(genIdx, 0, Object.assign({}, defF));
+          else userHobbyFolders.push(Object.assign({}, defF));
+        }
+      });
 
       const combinedTasks = userTasks.filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
       const combinedWishlist = userWishlist.filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
@@ -1156,6 +1203,8 @@
       // Sidebar menu items order with 3 dividers, hobby, health, and devlog
       const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       let finalOrder = userSidebarOrder ? userSidebarOrder.slice() : defaultOrder;
+
+      // 1. Ensure essential items exist
       if (!finalOrder.includes('hobby')) {
         const healthIdx = finalOrder.indexOf('health');
         if (healthIdx !== -1) finalOrder.splice(healthIdx, 0, 'hobby');
@@ -1175,10 +1224,18 @@
         if (vaultIdx !== -1) finalOrder.splice(vaultIdx, 0, 'devlog');
         else finalOrder.push('devlog');
       }
-      // Ensure all essential default items exist
       defaultOrder.forEach(id => {
         if (!finalOrder.includes(id)) finalOrder.push(id);
       });
+
+      // 2. Ensure divider-1 is positioned RIGHT BEFORE hobby (취미활동 메뉴 위에 구분선)
+      const d1Idx = finalOrder.indexOf('divider-1');
+      const hIdx = finalOrder.indexOf('hobby');
+      if (d1Idx !== -1 && hIdx !== -1 && d1Idx !== hIdx - 1) {
+        finalOrder.splice(d1Idx, 1);
+        const newHIdx = finalOrder.indexOf('hobby');
+        finalOrder.splice(newHIdx, 0, 'divider-1');
+      }
 
       this.tasks = combinedTasks;
       this.wishlist = combinedWishlist;
@@ -1560,10 +1617,13 @@
     }
 
     deleteHealthNote(id) {
-      const idx = this.healthNotes.findIndex(n => n.id === id);
+      if (!id) return false;
+      const targetId = String(id).trim();
+      const idx = this.healthNotes.findIndex(n => n && String(n.id).trim() === targetId);
       if (idx === -1) return false;
       this.healthNotes.splice(idx, 1);
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return true;
     }
 
@@ -1577,7 +1637,8 @@
         icon: icon || '🩺'
       };
       this.healthFolders.push(newFolder);
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return newFolder;
     }
 
@@ -1586,7 +1647,8 @@
       if (!folder) return null;
       if (updates.name) folder.name = updates.name.trim();
       if (updates.icon) folder.icon = updates.icon;
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return folder;
     }
 
@@ -1599,7 +1661,8 @@
         if (note.folder === id) note.folder = 'general';
       });
       if (this.activeHealthFolder === id) this.activeHealthFolder = 'all';
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return true;
     }
 
@@ -1617,7 +1680,8 @@
       };
       this.hobbyNotes.unshift(newNote);
       this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return newNote;
     }
 
@@ -1626,15 +1690,19 @@
       if (!note) return null;
       Object.assign(note, updates, { updatedAt: Date.now() });
       this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return note;
     }
 
     deleteHobbyNote(id) {
-      const idx = this.hobbyNotes.findIndex(n => n.id === id);
+      if (!id) return false;
+      const targetId = String(id).trim();
+      const idx = this.hobbyNotes.findIndex(n => n && String(n.id).trim() === targetId);
       if (idx === -1) return false;
       this.hobbyNotes.splice(idx, 1);
-      this.save();
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
       return true;
     }
 
@@ -3121,6 +3189,39 @@
       } catch (e) {
         console.error('Error loading vault files:', e);
       }
+    },
+
+    getFileIcon(fileName = '') {
+      const ext = (fileName || '').split('.').pop().toLowerCase();
+      if (['xlsx', 'xls', 'csv'].includes(ext)) return { icon: '📊', type: 'excel' };
+      if (['pdf'].includes(ext)) return { icon: '📑', type: 'pdf' };
+      if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return { icon: '🖼️', type: 'image' };
+      if (['doc', 'docx', 'hwp', 'hwpx', 'txt'].includes(ext)) return { icon: '📄', type: 'doc' };
+      if (['zip', 'rar', '7z', 'tar'].includes(ext)) return { icon: '📦', type: 'archive' };
+      if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext)) return { icon: '🎵', type: 'audio' };
+      if (['mp4', 'mov', 'avi', 'mkv'].includes(ext)) return { icon: '🎬', type: 'video' };
+      return { icon: '📁', type: 'file' };
+    },
+
+    formatBytes(bytes = 0) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    },
+
+    openFileUploadModal() {
+      const modal = document.getElementById('upload-file-modal');
+      const form = document.getElementById('file-upload-form');
+      if (!modal || !form) return;
+      form.reset();
+      modal.classList.add('active');
+    },
+
+    closeFileUploadModal() {
+      const modal = document.getElementById('upload-file-modal');
+      if (modal) modal.classList.remove('active');
     },
 
     // =======================================================================
@@ -5286,6 +5387,153 @@
       });
     }
 
+    // File Vault Form Submit
+    const fileUploadForm = document.getElementById('file-upload-form');
+    if (fileUploadForm) {
+      fileUploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('modal-vault-file-input');
+        const note = (document.getElementById('modal-vault-file-note')?.value || '').trim();
+
+        if (!input || !input.files || input.files.length === 0) return;
+        const file = input.files[0];
+
+        try {
+          const reader = new FileReader();
+          reader.onload = async () => {
+            const newFile = {
+              id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              dataUrl: reader.result,
+              note: note,
+              createdAt: Date.now()
+            };
+
+            await cloudSync.saveVaultFiles([newFile]);
+            sounds.playAdd();
+            confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+            UI.closeFileUploadModal();
+            UI.showToast(`'${file.name}' 파일이 보관함에 안전하게 저장되었어요! 💾✨`, 'success');
+            UI.renderFilesVault();
+            UI.renderSidebar();
+            cloudSync.pushTasksToCloud(true);
+          };
+          reader.readAsDataURL(file);
+        } catch (err) {
+          console.error(err);
+          UI.showToast('파일 업로드 중 오류가 발생했어요.', 'danger');
+        }
+      });
+    }
+
+    // File Vault Dropzone & Hidden Input Handling
+    const vaultDropzone = document.getElementById('vault-dropzone');
+    const vaultHiddenInput = document.getElementById('vault-file-hidden-input');
+    if (vaultDropzone && vaultHiddenInput) {
+      vaultDropzone.addEventListener('click', (e) => {
+        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+          vaultHiddenInput.click();
+        }
+      });
+
+      vaultHiddenInput.addEventListener('change', async () => {
+        if (!vaultHiddenInput.files || vaultHiddenInput.files.length === 0) return;
+        const filesList = Array.from(vaultHiddenInput.files);
+        
+        try {
+          const newFiles = [];
+          for (const file of filesList) {
+            const dataUrl = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+
+            newFiles.push({
+              id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              dataUrl: dataUrl,
+              note: '',
+              createdAt: Date.now()
+            });
+          }
+
+          await cloudSync.saveVaultFiles(newFiles);
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+          UI.showToast(`총 ${newFiles.length}개 파일이 보관함에 안전하게 저장되었어요! 📁✨`, 'success');
+          UI.renderFilesVault();
+          UI.renderSidebar();
+          cloudSync.pushTasksToCloud(true);
+        } catch (err) {
+          console.error(err);
+          UI.showToast('파일 보관 중 오류가 발생했어요.', 'danger');
+        }
+        vaultHiddenInput.value = '';
+      });
+
+      // Drag & Drop
+      ['dragenter', 'dragover'].forEach(eventName => {
+        vaultDropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          vaultDropzone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        vaultDropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          vaultDropzone.classList.remove('dragover');
+        });
+      });
+
+      vaultDropzone.addEventListener('drop', async (e) => {
+        const dt = e.dataTransfer;
+        const files = dt ? Array.from(dt.files) : [];
+        if (!files.length) return;
+
+        try {
+          const newFiles = [];
+          for (const file of files) {
+            const dataUrl = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+
+            newFiles.push({
+              id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              dataUrl: dataUrl,
+              note: '',
+              createdAt: Date.now()
+            });
+          }
+
+          await cloudSync.saveVaultFiles(newFiles);
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+          UI.showToast(`총 ${newFiles.length}개 파일이 드롭되어 보관함에 저장되었어요! 📂✨`, 'success');
+          UI.renderFilesVault();
+          UI.renderSidebar();
+          cloudSync.pushTasksToCloud(true);
+        } catch (err) {
+          console.error(err);
+          UI.showToast('파일 보관 중 오류가 발생했어요.', 'danger');
+        }
+      });
+    }
+
     // Wishlist Tabs Click
     const wishTabs = document.getElementById('wishlist-filter-tabs');
     if (wishTabs) {
@@ -5473,12 +5721,14 @@
       const deleteHealthBtn = target.closest('[data-action="delete-health-note"]');
       if (deleteHealthBtn) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const hId = deleteHealthBtn.dataset.id;
         if (hId && confirm('이 건강 기록 메모를 정말 삭제하시겠습니까?')) {
           store.deleteHealthNote(hId);
           sounds.playDelete();
           UI.showToast('건강 메모가 삭제되었어요.', 'danger');
           UI.renderHealth();
+          UI.renderSidebar();
         }
         return;
       }
@@ -5487,6 +5737,7 @@
       const copyHealthBtn = target.closest('[data-action="copy-health-note"]');
       if (copyHealthBtn) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const hId = copyHealthBtn.dataset.id;
         const note = (store.healthNotes || []).find(n => n.id === hId);
         if (note && navigator.clipboard) {
@@ -5547,6 +5798,7 @@
       // Delete Hobby Folder Button Click
       if (target.closest('#btn-delete-hobby-folder')) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const folderId = target.closest('#btn-delete-hobby-folder').dataset.id;
         if (folderId && confirm('정말 이 취미 폴더를 삭제하시겠습니까?\n(폴더 안의 일지는 [기타취미] 폴더로 안전하게 이동됩니다)')) {
           store.deleteHobbyFolder(folderId);
@@ -5554,6 +5806,7 @@
           UI.closeHobbyFolderModal();
           UI.showToast('취미 폴더가 삭제되었고 기록은 안전하게 보관되었어요.', 'info');
           UI.renderHobby();
+          UI.renderSidebar();
         }
         return;
       }
@@ -5571,6 +5824,7 @@
       const editHobbyBtn = target.closest('[data-action="edit-hobby-note"]');
       if (editHobbyBtn) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
         UI.openHobbyNoteModal(editHobbyBtn.dataset.id);
         return;
       }
@@ -5579,12 +5833,14 @@
       const deleteHobbyBtn = target.closest('[data-action="delete-hobby-note"]');
       if (deleteHobbyBtn) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const hId = deleteHobbyBtn.dataset.id;
         if (hId && confirm('이 취미 활동 일지를 정말 삭제하시겠습니까?')) {
           store.deleteHobbyNote(hId);
           sounds.playDelete();
           UI.showToast('취미 기록이 삭제되었어요.', 'danger');
           UI.renderHobby();
+          UI.renderSidebar();
         }
         return;
       }
