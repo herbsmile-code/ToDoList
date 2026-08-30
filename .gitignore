@@ -25,4 +25,7 @@ build/
 .vscode/
 .DS_Store
 Thumbs.db
-*.log
+# Temporary Test / Dump Files
+chrome_dom.html
+test_full.html
+*.tmp
