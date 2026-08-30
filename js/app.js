@@ -751,6 +751,7 @@
 
     async fetchLatestFromCloud(force = false) {
       if (!this.spaceId || !this.pin) return;
+      if (this.isPushing) return; // Prevent race conditions while local mutation is uploading
       const key = this.getStorageKey();
 
       try {
@@ -769,8 +770,11 @@
             }
 
             if (data && typeof data === 'object') {
-              const remoteUpdated = data.updatedAt || 0;
-              if (force || remoteUpdated > this.lastSyncedUpdatedAt) {
+              const remoteUpdated = Number(data.updatedAt) || 0;
+              const localUpdated = Number(this.lastSyncedUpdatedAt) || 0;
+
+              // Only accept cloud data if cloud is strictly NEWER than local state
+              if (remoteUpdated > localUpdated) {
                 this.lastSyncedUpdatedAt = remoteUpdated;
                 if (data.tasks !== undefined) {
                   store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
@@ -912,10 +916,10 @@
                   store.sidebarMenuOrder = order;
                 }
                 if (Array.isArray(data.vaultFiles)) {
-                  const localVault = await this.getAllVaultFiles();
+                  const localVault = await VaultDBEngine.getAll();
                   // Clean Smart Merge: Preserve local dataUrl if cloud copy is lightweight metadata
                   const mergedFiles = data.vaultFiles.map(cloudF => {
-                    const localMatch = localVault.find(l => l && l.id === cloudF.id);
+                    const localMatch = (localVault || []).find(l => l && l.id === cloudF.id);
                     if (localMatch && localMatch.dataUrl && !cloudF.dataUrl) {
                       return Object.assign({}, cloudF, { dataUrl: localMatch.dataUrl });
                     }
@@ -933,13 +937,16 @@
                 if (!rawResponse.isEncrypted) {
                   await this.pushTasksToCloud();
                 }
+              } else if (localUpdated > remoteUpdated && force) {
+                // Local is newer and force sync was requested -> upload local truth to cloud
+                await this.pushTasksToCloud(true);
               }
             }
           } else if (!rawResponse) {
             // 클라우드가 비어있다면 현재 로컬 데이터를 즉시 클라우드로 암호화 업로드
             const vFiles = await this.getAllVaultFiles();
             if (store.tasks.length > 0 || store.notes.length > 0 || store.photos.length > 0 || store.wishlist.length > 0 || vFiles.length > 0 || (store.projects && store.projects.length > 0)) {
-              await this.pushTasksToCloud();
+              await this.pushTasksToCloud(true);
             }
           }
         }
@@ -950,6 +957,7 @@
 
     async pushTasksToCloud(immediate = false) {
       if (!this.spaceId || !this.pin) return;
+      this.lastSyncedUpdatedAt = Date.now();
       
       if (this.pushDebounceTimer) {
         clearTimeout(this.pushDebounceTimer);
@@ -967,6 +975,7 @@
 
     async _executePushTasksToCloud() {
       if (!this.spaceId || !this.pin) return;
+      this.isPushing = true;
       const key = this.getStorageKey();
       const vaultFiles = await this.getAllVaultFiles();
       
@@ -979,6 +988,9 @@
         }
         return f;
       });
+
+      const nowTs = Date.now();
+      this.lastSyncedUpdatedAt = nowTs;
 
       const rawPayload = {
         tasks: store.tasks,
@@ -998,11 +1010,10 @@
         hobbyNotes: store.hobbyNotes,
         hobbyFolders: store.hobbyFolders,
         projects: store.projects,
-        updatedAt: Date.now()
+        updatedAt: nowTs
       };
 
       try {
-        this.lastSyncedUpdatedAt = rawPayload.updatedAt;
         // Zero-Knowledge E2EE AES-GCM 256-bit Encryption (cached key for 0.01ms speed)
         const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, this.pin);
 
@@ -1014,6 +1025,8 @@
         });
       } catch (e) {
         console.warn('RTDB sync push error:', e);
+      } finally {
+        this.isPushing = false;
       }
     }
 
@@ -1026,12 +1039,12 @@
       // 모바일 앱/화면 복귀 시 즉시 동기화
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden && this.spaceId && this.pin) {
-          this.fetchLatestFromCloud(true);
+          this.fetchLatestFromCloud(false);
         }
       });
       window.addEventListener('focus', () => {
         if (this.spaceId && this.pin) {
-          this.fetchLatestFromCloud(true);
+          this.fetchLatestFromCloud(false);
         }
       });
     }
@@ -1054,7 +1067,7 @@
             const files = await this.getAllVaultFiles();
             files.unshift(fileItem);
             await this.saveVaultFiles(files);
-            await this.pushTasksToCloud();
+            await this.pushTasksToCloud(true);
             resolve(fileItem);
           } catch (err) {
             reject(err);
@@ -1068,12 +1081,19 @@
     async getAllVaultFiles() {
       try {
         const idbFiles = await VaultDBEngine.getAll();
-        if (idbFiles && idbFiles.length > 0) return idbFiles;
-        const raw = localStorage.getItem('todolist_jy_vault_files');
-        const lsFiles = raw ? JSON.parse(raw) : [];
-        if (lsFiles.length > 0) {
-          await VaultDBEngine.saveAll(lsFiles);
-          return lsFiles;
+        // Return indexedDB files directly (if empty, it means 0 files)
+        if (Array.isArray(idbFiles) && idbFiles.length > 0) return idbFiles;
+
+        // Legacy 1-time migration only if never migrated
+        const migratedKey = 'todolist_jy_vault_migrated_v2';
+        if (!localStorage.getItem(migratedKey)) {
+          localStorage.setItem(migratedKey, 'true');
+          const raw = localStorage.getItem('todolist_jy_vault_files');
+          const lsFiles = raw ? JSON.parse(raw) : [];
+          if (lsFiles.length > 0) {
+            await VaultDBEngine.saveAll(lsFiles);
+            return lsFiles;
+          }
         }
         return [];
       } catch (e) {
@@ -1087,17 +1107,8 @@
       try {
         await VaultDBEngine.addFiles(newItems);
         const all = await this.getAllVaultFiles();
-        // Update metadata in localStorage as backup
-        const metaOnly = all.map(f => ({
-          id: f.id,
-          name: f.name,
-          size: f.size,
-          type: f.type,
-          note: f.note,
-          createdAt: f.createdAt
-        }));
-        localStorage.setItem('todolist_jy_vault_meta', JSON.stringify(metaOnly));
-        this.pushTasksToCloud();
+        await this.saveVaultFiles(all);
+        await this.pushTasksToCloud(true);
         return all;
       } catch (e) {
         console.error('addVaultFiles error:', e);
@@ -1107,7 +1118,7 @@
 
     async saveVaultFiles(files) {
       try {
-        await VaultDBEngine.saveAll(files);
+        await VaultDBEngine.saveAll(files || []);
         const metaOnly = (files || []).map(f => ({
           id: f.id,
           name: f.name,
@@ -1117,6 +1128,7 @@
           createdAt: f.createdAt
         }));
         localStorage.setItem('todolist_jy_vault_meta', JSON.stringify(metaOnly));
+        localStorage.setItem('todolist_jy_vault_files', JSON.stringify(metaOnly));
       } catch (e) {
         console.warn('saveVaultFiles error:', e);
       }
@@ -1138,6 +1150,9 @@
             localStorage.setItem('todolist_jy_vault_meta', JSON.stringify(mList));
           }
         } catch (e) {}
+
+        const remaining = await this.getAllVaultFiles();
+        await this.saveVaultFiles(remaining);
 
         this.lastSyncedUpdatedAt = Date.now();
         await this.pushTasksToCloud(true);
