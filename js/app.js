@@ -4494,17 +4494,30 @@
         UI.openEditNoteModal(noteId);
       }
 
-      // 6.4. Delete Note
+      // 6.4. Delete Note (원클릭 즉시 삭제 & 딜레이 없는 반응성)
       if (target.closest('[data-action="delete-note"]')) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
         const btn = target.closest('[data-action="delete-note"]');
-        const noteId = btn.dataset.noteId;
-        if (confirm('정말 삭제하시겠습니까?')) {
-          store.deleteNote(noteId);
-          sounds.playDelete();
-          UI.showToast('메모가 삭제되었어요', 'danger');
+        const noteId = btn.dataset.noteId || (btn.closest('.note-card') ? btn.closest('.note-card').dataset.noteId : '');
+        if (!noteId) return;
+
+        const card = btn.closest('.note-card');
+        if (card) {
+          card.style.transition = 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)';
+          card.style.opacity = '0';
+          card.style.transform = 'scale(0.85) translateY(-6px)';
+        }
+
+        store.deleteNote(noteId);
+        sounds.playDelete();
+        UI.showToast('메모가 즉시 삭제되었어요 🗑️', 'danger');
+
+        setTimeout(() => {
           UI.renderNotes();
           UI.renderSidebar();
-        }
+        }, 180);
+        return;
       }
 
       // 7. Download Ledger Excel
