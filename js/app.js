@@ -3110,7 +3110,7 @@
       });
 
       // 4. Filter Vacations by Year & Month
-      let filtered = store.vacations || [];
+      let filtered = (store.vacations || []).slice();
       if (currentSelectedYear !== 'all') {
         filtered = filtered.filter(v => v.date && v.date.startsWith(currentSelectedYear));
       }
@@ -3123,6 +3123,9 @@
         });
       }
 
+      // 5. 사용날짜(date) 최신순 자동 정렬 (등록일과 무관하게 사용날짜 순으로 정렬)
+      filtered.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+
       // Calculate filtered period stats
       let periodUsedDays = 0;
       let periodHolidayCount = 0;
@@ -3134,9 +3137,28 @@
         periodUsedDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
       });
 
+      // Update Month Summary Banner (예: 8월 총 연차 2.0개 사용 / 휴가 1개 사용)
+      const sumPeriodTitleEl = document.getElementById('vac-summary-period-title');
+      const sumDetailsEl = document.getElementById('vac-summary-details');
+      const sumBadgeEl = document.getElementById('vac-summary-badge');
+
+      const periodLabel = currentSelectedMonth === 'all' 
+        ? `${currentSelectedYear === 'all' ? '전체' : currentSelectedYear + '년'}` 
+        : `${currentSelectedMonth}월`;
+
+      if (sumPeriodTitleEl) {
+        sumPeriodTitleEl.textContent = `🌸 ${periodLabel} 사용 현황:`;
+      }
+      if (sumDetailsEl) {
+        sumDetailsEl.textContent = `총 연차 ${periodUsedDays.toFixed(1)}개 사용 / 휴가 ${periodHolidayCount}개 사용`;
+      }
+      if (sumBadgeEl) {
+        sumBadgeEl.textContent = `총 ${filtered.length}건`;
+      }
+
       if (countEl) {
-        const holidayNote = periodHolidayCount > 0 ? ` (휴가 ${periodHolidayCount}건)` : '';
-        countEl.textContent = `총 ${filtered.length}건 / 연차 ${periodUsedDays.toFixed(1)}일 사용${holidayNote}`;
+        const holidayNote = periodHolidayCount > 0 ? ` · 휴가 ${periodHolidayCount}건` : '';
+        countEl.textContent = `총 ${filtered.length}건 (연차 ${periodUsedDays.toFixed(1)}일${holidayNote})`;
       }
 
       if (!listEl) return;

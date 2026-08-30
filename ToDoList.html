@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=8.5">
-  <link rel="stylesheet" href="css/animations.css?v=8.5">
+  <link rel="stylesheet" href="css/style.css?v=8.6">
+  <link rel="stylesheet" href="css/animations.css?v=8.6">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -82,9 +82,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.5)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.6)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v8.5</span>
+          <span>v8.6</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -550,6 +550,15 @@
               <button type="button" class="vac-m-pill" data-v-month="10">10월</button>
               <button type="button" class="vac-m-pill" data-v-month="11">11월</button>
               <button type="button" class="vac-m-pill" data-v-month="12">12월</button>
+            </div>
+
+            <!-- Month / Period Realtime Usage Summary Banner -->
+            <div id="vacation-month-summary-bar" style="background: linear-gradient(135deg, rgba(255, 107, 139, 0.08), rgba(255, 192, 203, 0.12)); border: 1px solid rgba(255, 107, 139, 0.22); border-radius: 10px; padding: 0.55rem 0.85rem; font-size: 0.84rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; justify-content: space-between; margin-top: 0.45rem; flex-wrap: wrap; gap: 0.35rem;">
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <span id="vac-summary-period-title">🌸 8월 사용 현황:</span>
+                <span id="vac-summary-details" style="color: var(--text-main); font-weight: 700;">총 연차 0.0일 사용 / 휴가 0개 사용</span>
+              </div>
+              <span id="vac-summary-badge" style="font-size: 0.76rem; background: var(--primary); color: #fff; padding: 2px 7px; border-radius: var(--radius-full);">총 0건</span>
             </div>
 
             <div id="vacation-history-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
@@ -1644,7 +1653,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=8.5"></script>
-  <script src="js/treasure.js?v=8.5"></script>
+  <script src="js/app.js?v=8.6"></script>
+  <script src="js/treasure.js?v=8.6"></script>
 </body>
 </html>
