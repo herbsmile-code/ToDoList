@@ -1542,9 +1542,9 @@
           const count = store.tasks.filter(t => t.category === cat.id).length;
           const isActive = store.activeFilter === cat.id ? 'active' : '';
           return `
-            <li class="nav-item category-drag-item ${isActive}" draggable="true" data-cat-id="${cat.id}" data-filter="${cat.id}">
+            <li class="nav-item category-drag-item ${isActive}" data-cat-id="${cat.id}" data-filter="${cat.id}" onclick="window.selectCategoryFilter('${cat.id}', event)">
               <div class="nav-item-left">
-                <span class="category-drag-handle" title="위아래로 드래그하여 순서 변경">⋮⋮</span>
+                <span class="category-drag-handle" draggable="true" title="위아래로 드래그하여 순서 변경" onclick="event.stopPropagation()">⋮⋮</span>
                 <span class="category-dot" style="background-color: ${cat.color}; color: ${cat.color};"></span>
                 <span>${cat.name}</span>
               </div>
@@ -3153,6 +3153,19 @@
   window.UI = UI;
   window.openCloudModal = () => UI.openCloudModal();
   window.closeCloudModal = () => UI.closeCloudModal();
+  window.selectCategoryFilter = (catId, event) => {
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
+    if (!isLogged) {
+      UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
+      UI.openCloudModal();
+      return;
+    }
+    store.activeFilter = catId;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    UI.renderTasks();
+    UI.renderSidebar();
+  };
 
   // =========================================================================
   // 7. Standard Honeymoon Template Generator & Smart Forward-Fill Excel Parser

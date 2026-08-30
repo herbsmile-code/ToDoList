@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=7.8">
-  <link rel="stylesheet" href="css/animations.css?v=7.8">
+  <link rel="stylesheet" href="css/style.css?v=7.9">
+  <link rel="stylesheet" href="css/animations.css?v=7.9">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -72,9 +72,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.8)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v7.9)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v7.8</span>
+          <span>v7.9</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -109,42 +109,42 @@
         <div class="sidebar-card">
           <div class="sidebar-title">다이어리 & 플래너 📌</div>
           <ul class="nav-list" id="main-nav-list">
-            <li class="nav-item nav-item-calendar" data-filter="calendar-month" id="nav-filter-calendar-month" title="2026년 8월 기준 월별 달력 (반차/휴가 개나리색 표시)">
+            <li class="nav-item nav-item-calendar" data-filter="calendar-month" id="nav-filter-calendar-month" onclick="window.selectCategoryFilter('calendar-month')" title="2026년 8월 기준 월별 달력 (반차/휴가 개나리색 표시)">
               <div class="nav-item-left">
                 <span>🗓️</span>
                 <span>월별 달력</span>
               </div>
               <span class="nav-pill-badge">8월</span>
             </li>
-            <li class="nav-item active" data-filter="all" id="nav-filter-all">
+            <li class="nav-item active" data-filter="all" id="nav-filter-all" onclick="window.selectCategoryFilter('all')">
               <div class="nav-item-left">
                 <span>📋</span>
                 <span>모든 할 일</span>
               </div>
               <span class="nav-count" id="nav-count-all">0</span>
             </li>
-            <li class="nav-item" data-filter="upcoming" id="nav-filter-upcoming">
+            <li class="nav-item" data-filter="upcoming" id="nav-filter-upcoming" onclick="window.selectCategoryFilter('upcoming')">
               <div class="nav-item-left">
                 <span>⏰</span>
                 <span>다가오는 일정</span>
               </div>
               <span class="nav-count" id="nav-count-upcoming">0</span>
             </li>
-            <li class="nav-item" data-filter="overdue" id="nav-filter-overdue">
+            <li class="nav-item" data-filter="overdue" id="nav-filter-overdue" onclick="window.selectCategoryFilter('overdue')">
               <div class="nav-item-left">
                 <span>⚠️</span>
                 <span>기한 지연</span>
               </div>
               <span class="nav-count" id="nav-count-overdue">0</span>
             </li>
-            <li class="nav-item" data-filter="pinned" id="nav-filter-pinned">
+            <li class="nav-item" data-filter="pinned" id="nav-filter-pinned" onclick="window.selectCategoryFilter('pinned')">
               <div class="nav-item-left">
                 <span>💖</span>
                 <span>중요 표시</span>
               </div>
               <span class="nav-count" id="nav-count-pinned">0</span>
             </li>
-            <li class="nav-item" data-filter="completed" id="nav-filter-completed">
+            <li class="nav-item" data-filter="completed" id="nav-filter-completed" onclick="window.selectCategoryFilter('completed')">
               <div class="nav-item-left">
                 <span>✨</span>
                 <span>완료된 목록</span>
@@ -167,7 +167,7 @@
           <!-- Extra Features: Vacation, Photos, Notes, Ledger, Wishlist, Sites & File Vault -->
           <ul class="nav-list" style="margin-top: 0.65rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
             <!-- Vacation Tracker Menu Item (연차관리) -->
-            <li class="nav-item vacation-nav-item" data-filter="vacation" id="nav-filter-vacation" title="회사 총 연차/반차 사용 현황 및 잔여 일수 관리">
+            <li class="nav-item vacation-nav-item" data-filter="vacation" id="nav-filter-vacation" onclick="window.selectCategoryFilter('vacation')" title="회사 총 연차/반차 사용 현황 및 잔여 일수 관리">
               <div class="nav-item-left">
                 <span>🏖️</span>
                 <span>연차관리</span>
@@ -175,7 +175,7 @@
               <span class="nav-count" id="nav-count-vacation">0</span>
             </li>
             <!-- Photos / Polaroid Gallery Menu Item (기록) -->
-            <li class="nav-item photos-nav-item" data-filter="photos" id="nav-filter-photos" title="폴라로이드 감성 사진 & 추억 기록 보관함">
+            <li class="nav-item photos-nav-item" data-filter="photos" id="nav-filter-photos" onclick="window.selectCategoryFilter('photos')" title="폴라로이드 감성 사진 & 추억 기록 보관함">
               <div class="nav-item-left">
                 <span>📸</span>
                 <span>기록</span>
@@ -184,7 +184,7 @@
             </li>
             <li class="sidebar-nav-divider"></li>
             <!-- Notes / Doodle Menu Item (끄적끄적) -->
-            <li class="nav-item notes-nav-item" data-filter="notes" id="nav-filter-notes" title="자유롭게 생각을 적는 간단한 메모장">
+            <li class="nav-item notes-nav-item" data-filter="notes" id="nav-filter-notes" onclick="window.selectCategoryFilter('notes')" title="자유롭게 생각을 적는 간단한 메모장">
               <div class="nav-item-left">
                 <span>✏️</span>
                 <span>끄적끄적</span>
@@ -192,7 +192,7 @@
               <span class="nav-count" id="nav-count-notes">0</span>
             </li>
             <!-- Household Ledger Menu Item (가계부) -->
-            <li class="nav-item ledger-nav-item" data-filter="ledger" id="nav-filter-ledger" title="가계부 엑셀 업로드 및 월별 지출 비교">
+            <li class="nav-item ledger-nav-item" data-filter="ledger" id="nav-filter-ledger" onclick="window.selectCategoryFilter('ledger')" title="가계부 엑셀 업로드 및 월별 지출 비교">
               <div class="nav-item-left">
                 <span>💰</span>
                 <span>가계부</span>
@@ -200,7 +200,7 @@
               <span class="nav-count" id="nav-count-ledger">0</span>
             </li>
             <!-- Wishlist Menu Item (위시리스트) -->
-            <li class="nav-item wishlist-nav-item" data-filter="wishlist" id="nav-filter-wishlist" title="사고 싶은 것, 가고 싶은 곳 위시 보관함">
+            <li class="nav-item wishlist-nav-item" data-filter="wishlist" id="nav-filter-wishlist" onclick="window.selectCategoryFilter('wishlist')" title="사고 싶은 것, 가고 싶은 곳 위시 보관함">
               <div class="nav-item-left">
                 <span>🎁</span>
                 <span>위시리스트</span>
@@ -208,7 +208,7 @@
               <span class="nav-count" id="nav-count-wishlist">0</span>
             </li>
             <!-- Sites / Bookmarks Menu Item (사이트) -->
-            <li class="nav-item sites-nav-item" data-filter="sites" id="nav-filter-sites" title="자주 가는 사이트 바로가기 & 메모">
+            <li class="nav-item sites-nav-item" data-filter="sites" id="nav-filter-sites" onclick="window.selectCategoryFilter('sites')" title="자주 가는 사이트 바로가기 & 메모">
               <div class="nav-item-left">
                 <span>🌐</span>
                 <span>사이트</span>
@@ -216,7 +216,7 @@
               <span class="nav-count" id="nav-count-sites">0</span>
             </li>
             <!-- File Vault Menu Item (파일 보관함) -->
-            <li class="nav-item vault-nav-item" data-filter="vault" id="nav-filter-vault" title="엑셀, 메모장 등 파일 보관소">
+            <li class="nav-item vault-nav-item" data-filter="vault" id="nav-filter-vault" onclick="window.selectCategoryFilter('vault')" title="엑셀, 메모장 등 파일 보관소">
               <div class="nav-item-left">
                 <span>📁</span>
                 <span>파일 보관함</span>
@@ -262,15 +262,17 @@
 
         <!-- Mobile Horizontal Scrollable Category Pills -->
         <div class="mobile-category-bar" id="mobile-category-bar">
-          <button type="button" class="mobile-cat-pill" data-filter="calendar-month">🗓️ 월별달력</button>
-          <button type="button" class="mobile-cat-pill active" data-filter="all">🌸 전체</button>
-          <button type="button" class="mobile-cat-pill" data-filter="vacation">🏖️ 연차</button>
-          <button type="button" class="mobile-cat-pill" data-filter="photos">📸 기록</button>
-          <button type="button" class="mobile-cat-pill" data-filter="notes">📝 끄적끄적</button>
-          <button type="button" class="mobile-cat-pill" data-filter="ledger">💍 가계부</button>
-          <button type="button" class="mobile-cat-pill" data-filter="wishlist">🎁 위시</button>
-          <button type="button" class="mobile-cat-pill" data-filter="sites">🌐 사이트</button>
-          <button type="button" class="mobile-cat-pill" data-filter="pinned">💖 중요</button>
+          <button type="button" class="mobile-cat-pill" data-filter="calendar-month" onclick="window.selectCategoryFilter('calendar-month')">🗓️ 월별달력</button>
+          <button type="button" class="mobile-cat-pill active" data-filter="all" onclick="window.selectCategoryFilter('all')">🌸 전체</button>
+          <button type="button" class="mobile-cat-pill" data-filter="personal" onclick="window.selectCategoryFilter('personal')">🌸 개인</button>
+          <button type="button" class="mobile-cat-pill" data-filter="work" onclick="window.selectCategoryFilter('work')">💼 업무</button>
+          <button type="button" class="mobile-cat-pill" data-filter="vacation" onclick="window.selectCategoryFilter('vacation')">🏖️ 연차</button>
+          <button type="button" class="mobile-cat-pill" data-filter="photos" onclick="window.selectCategoryFilter('photos')">📸 기록</button>
+          <button type="button" class="mobile-cat-pill" data-filter="notes" onclick="window.selectCategoryFilter('notes')">📝 끄적끄적</button>
+          <button type="button" class="mobile-cat-pill" data-filter="ledger" onclick="window.selectCategoryFilter('ledger')">💍 가계부</button>
+          <button type="button" class="mobile-cat-pill" data-filter="wishlist" onclick="window.selectCategoryFilter('wishlist')">🎁 위시</button>
+          <button type="button" class="mobile-cat-pill" data-filter="sites" onclick="window.selectCategoryFilter('sites')">🌐 사이트</button>
+          <button type="button" class="mobile-cat-pill" data-filter="pinned" onclick="window.selectCategoryFilter('pinned')">💖 중요</button>
         </div>
 
         <!-- ===================================================================
@@ -1652,7 +1654,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=7.8"></script>
-  <script src="js/treasure.js?v=7.8"></script>
+  <script src="js/app.js?v=7.9"></script>
+  <script src="js/treasure.js?v=7.9"></script>
 </body>
 </html>
