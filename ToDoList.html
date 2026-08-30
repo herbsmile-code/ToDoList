@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=8.3">
-  <link rel="stylesheet" href="css/animations.css?v=8.3">
+  <link rel="stylesheet" href="css/style.css?v=8.4">
+  <link rel="stylesheet" href="css/animations.css?v=8.4">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -82,9 +82,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.3)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.4)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v8.3</span>
+          <span>v8.4</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -165,74 +165,14 @@
         </div>
 
         <!-- Category Tag Filters, Notes, Ledger, Wishlist & File Vault -->
+        <!-- Category & Feature Menu Navigation (All Reorderable by Drag & Drop) -->
         <div class="sidebar-card">
           <div class="sidebar-title">
-            <span>카테고리 태그 🏷️</span>
+            <span>카테고리 & 기능 메뉴 🏷️</span>
             <span class="sidebar-hint">드래그로 순서 변경</span>
           </div>
           <ul class="nav-list" id="category-nav-list">
-            <!-- Dynamically populated categories -->
-          </ul>
-          
-          <!-- Extra Features: Vacation, Photos, Notes, Ledger, Wishlist, Sites & File Vault -->
-          <ul class="nav-list" style="margin-top: 0.65rem; border-top: 1px dashed var(--border-color); padding-top: 0.5rem;">
-            <!-- Vacation Tracker Menu Item (연차관리) -->
-            <li class="nav-item vacation-nav-item" data-filter="vacation" id="nav-filter-vacation" onclick="window.selectCategoryFilter('vacation')" title="회사 총 연차/반차 사용 현황 및 잔여 일수 관리">
-              <div class="nav-item-left">
-                <span>🏖️</span>
-                <span>연차관리</span>
-              </div>
-              <span class="nav-count" id="nav-count-vacation">0</span>
-            </li>
-            <!-- Photos / Polaroid Gallery Menu Item (기록) -->
-            <li class="nav-item photos-nav-item" data-filter="photos" id="nav-filter-photos" onclick="window.selectCategoryFilter('photos')" title="폴라로이드 감성 사진 & 추억 기록 보관함">
-              <div class="nav-item-left">
-                <span>📸</span>
-                <span>기록</span>
-              </div>
-              <span class="nav-count" id="nav-count-photos">0</span>
-            </li>
-            <li class="sidebar-nav-divider"></li>
-            <!-- Notes / Doodle Menu Item (끄적끄적) -->
-            <li class="nav-item notes-nav-item" data-filter="notes" id="nav-filter-notes" onclick="window.selectCategoryFilter('notes')" title="자유롭게 생각을 적는 간단한 메모장">
-              <div class="nav-item-left">
-                <span>✏️</span>
-                <span>끄적끄적</span>
-              </div>
-              <span class="nav-count" id="nav-count-notes">0</span>
-            </li>
-            <!-- Household Ledger Menu Item (가계부) -->
-            <li class="nav-item ledger-nav-item" data-filter="ledger" id="nav-filter-ledger" onclick="window.selectCategoryFilter('ledger')" title="가계부 엑셀 업로드 및 월별 지출 비교">
-              <div class="nav-item-left">
-                <span>💰</span>
-                <span>가계부</span>
-              </div>
-              <span class="nav-count" id="nav-count-ledger">0</span>
-            </li>
-            <!-- Wishlist Menu Item (위시리스트) -->
-            <li class="nav-item wishlist-nav-item" data-filter="wishlist" id="nav-filter-wishlist" onclick="window.selectCategoryFilter('wishlist')" title="사고 싶은 것, 가고 싶은 곳 위시 보관함">
-              <div class="nav-item-left">
-                <span>🎁</span>
-                <span>위시리스트</span>
-              </div>
-              <span class="nav-count" id="nav-count-wishlist">0</span>
-            </li>
-            <!-- Sites / Bookmarks Menu Item (사이트) -->
-            <li class="nav-item sites-nav-item" data-filter="sites" id="nav-filter-sites" onclick="window.selectCategoryFilter('sites')" title="자주 가는 사이트 바로가기 & 메모">
-              <div class="nav-item-left">
-                <span>🌐</span>
-                <span>사이트</span>
-              </div>
-              <span class="nav-count" id="nav-count-sites">0</span>
-            </li>
-            <!-- File Vault Menu Item (파일 보관함) -->
-            <li class="nav-item vault-nav-item" data-filter="vault" id="nav-filter-vault" onclick="window.selectCategoryFilter('vault')" title="엑셀, 메모장 등 파일 보관소">
-              <div class="nav-item-left">
-                <span>📁</span>
-                <span>파일 보관함</span>
-              </div>
-              <span class="nav-count" id="nav-count-vault">0</span>
-            </li>
+            <!-- Dynamically populated all categories & feature menus -->
           </ul>
         </div>
 
@@ -566,21 +506,50 @@
             </div>
           </div>
 
-          <!-- Vacation Timeline / History List -->
+          <!-- Vacation Timeline / History List (with Year & Month Filters) -->
           <div class="vacation-timeline-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-              <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--text-main);">📅 연차 / 반차 사용 내역</h3>
-              <span id="vacation-history-count" style="font-size: 0.8rem; color: var(--text-muted);">총 0건</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+              <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
+                <span>📅 연차 / 반차 / 휴가 사용 내역</span>
+              </h3>
+              
+              <!-- Year Filter Dropdown -->
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <label for="vacation-filter-year" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted);">년도:</label>
+                <select id="vacation-filter-year" class="form-select" style="padding: 0.35rem 0.65rem; font-size: 0.8rem; border-radius: 8px; width: auto; font-weight: 700;">
+                  <option value="all">전체 년도</option>
+                  <option value="2026" selected>2026년</option>
+                  <option value="2025">2025년</option>
+                </select>
+                <span id="vacation-history-count" style="font-size: 0.8rem; color: var(--text-muted); margin-left: 0.4rem;">총 0건 (0.0일)</span>
+              </div>
             </div>
 
-            <div id="vacation-history-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <!-- Month Filter Pill Tabs -->
+            <div class="vacation-month-tabs-bar" style="display: flex; gap: 0.35rem; overflow-x: auto; padding: 0.4rem 0.2rem; margin-top: 0.35rem; -webkit-overflow-scrolling: touch; scrollbar-width: none;" id="vacation-month-pills">
+              <button type="button" class="vac-m-pill active" data-v-month="all">전체</button>
+              <button type="button" class="vac-m-pill" data-v-month="1">1월</button>
+              <button type="button" class="vac-m-pill" data-v-month="2">2월</button>
+              <button type="button" class="vac-m-pill" data-v-month="3">3월</button>
+              <button type="button" class="vac-m-pill" data-v-month="4">4월</button>
+              <button type="button" class="vac-m-pill" data-v-month="5">5월</button>
+              <button type="button" class="vac-m-pill" data-v-month="6">6월</button>
+              <button type="button" class="vac-m-pill" data-v-month="7">7월</button>
+              <button type="button" class="vac-m-pill" data-v-month="8">8월</button>
+              <button type="button" class="vac-m-pill" data-v-month="9">9월</button>
+              <button type="button" class="vac-m-pill" data-v-month="10">10월</button>
+              <button type="button" class="vac-m-pill" data-v-month="11">11월</button>
+              <button type="button" class="vac-m-pill" data-v-month="12">12월</button>
+            </div>
+
+            <div id="vacation-history-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
               <!-- Dynamically populated vacation item cards -->
             </div>
 
             <div id="vacation-empty-state" class="empty-state" style="display: none; padding: 2.5rem 1rem;">
               <div class="empty-state-icon">🏖️</div>
-              <h3>아직 등록된 연차/반차 내역이 없어요</h3>
-              <p>연차나 반차를 사용하셨다면 '+ 연차/반차 등록' 버튼을 눌러 기록해 보세요 🌸</p>
+              <h3>해당 기간에 등록된 연차/휴가 내역이 없어요</h3>
+              <p>연차, 반차 또는 휴가를 사용하셨다면 '+ 연차/반차 등록' 버튼을 눌러 기록해 보세요 🌸</p>
             </div>
           </div>
         </div>
@@ -1575,11 +1544,12 @@
         <input type="hidden" id="vacation-edit-id" value="">
 
         <div class="form-group">
-          <label class="form-label" for="vacation-input-type">연차 구분 *</label>
+          <label class="form-label" for="vacation-input-type">연차 / 휴가 구분 *</label>
           <select id="vacation-input-type" class="form-select" required>
-            <option value="full" selected>연차 (1.0일) 🌴</option>
-            <option value="half-am">오전 반차 (0.5일) 🌅</option>
-            <option value="half-pm">오후 반차 (0.5일) 🌇</option>
+            <option value="full" selected>연차 (1.0일 차감) 🌴</option>
+            <option value="half-am">오전 반차 (0.5일 차감) 🌅</option>
+            <option value="half-pm">오후 반차 (0.5일 차감) 🌇</option>
+            <option value="holiday">휴가 (0일 차감 / 개인 일정 확인용) 🏖️</option>
           </select>
         </div>
 
@@ -1664,7 +1634,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=8.3"></script>
-  <script src="js/treasure.js?v=8.3"></script>
+  <script src="js/app.js?v=8.4"></script>
+  <script src="js/treasure.js?v=8.4"></script>
 </body>
 </html>

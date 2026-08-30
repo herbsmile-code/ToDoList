@@ -950,6 +950,9 @@
       this.activeFilter = 'all';
       this.activePriority = 'all';
       this.activeWishCat = 'all';
+      this.selectedVacationYear = '2026';
+      this.selectedVacationMonth = 'all';
+      this.sidebarMenuOrder = ['personal', 'work', 'vacation', 'photos', 'notes', 'ledger', 'wishlist', 'sites', 'vault'];
       this.searchQuery = '';
       this.sortBy = 'dueDate';
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
@@ -981,6 +984,7 @@
       const userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
       const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
       const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
+      const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
 
       const combinedTasks = userTasks.filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
       const combinedWishlist = userWishlist.filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
@@ -1023,6 +1027,13 @@
         if (!task.category || !validCatIds.has(task.category)) {
           task.category = 'personal';
         }
+      });
+
+      // Sidebar menu items order
+      const defaultOrder = ['personal', 'work', 'vacation', 'photos', 'notes', 'ledger', 'wishlist', 'sites', 'vault'];
+      let finalOrder = userSidebarOrder ? userSidebarOrder.filter(id => defaultOrder.includes(id)) : defaultOrder;
+      defaultOrder.forEach(id => {
+        if (!finalOrder.includes(id)) finalOrder.push(id);
       });
 
       this.tasks = combinedTasks;
@@ -1270,10 +1281,13 @@
     // --- Vacation Manager Methods ---
     addVacation(data) {
       const type = data.type || 'full';
-      const amount = (type === 'full') ? 1.0 : 0.5;
+      let amount = 1.0;
+      if (type === 'half-am' || type === 'half-pm') amount = 0.5;
+      else if (type === 'holiday') amount = 0.0;
+
       const newVacation = {
         id: 'vacation-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        type: type, // 'full' (1.0) | 'half-am' (0.5) | 'half-pm' (0.5)
+        type: type, // 'full' (1.0) | 'half-am' (0.5) | 'half-pm' (0.5) | 'holiday' (0.0)
         amount: amount,
         date: data.date || getRealTodayStr(),
         reason: (data.reason || '').trim(),
@@ -1304,6 +1318,7 @@
       const total = Number(this.totalVacationDays) || 15.0;
       let used = 0;
       this.vacations.forEach(v => {
+        if (v.type === 'holiday' || v.amount === 0) return; // 휴가는 연차수 차감 제외 (0일)
         used += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
       });
       const remain = Math.max(0, total - used);
@@ -1532,20 +1547,42 @@
         if (vCount) vCount.textContent = vaultFiles.length;
       } catch (e) {}
 
-      // Render Categories in Sidebar (Desktop)
+      // Render All Categories & Feature Menus in Sidebar (Desktop - 100% Reorderable)
       const catContainer = document.getElementById('category-nav-list');
       if (catContainer) {
-        catContainer.innerHTML = store.categories.map(cat => {
-          const count = store.tasks.filter(t => t.category === cat.id).length;
-          const isActive = store.activeFilter === cat.id ? 'active' : '';
+        let vaultCount = 0;
+        try {
+          const vaultFiles = await cloudSync.getAllVaultFiles();
+          vaultCount = vaultFiles.length;
+        } catch (e) {}
+
+        const itemMeta = {
+          'personal': { name: '개인 🌸', icon: '', color: '#f06595', count: store.tasks.filter(t => t.category === 'personal').length },
+          'work': { name: '업무 💼', icon: '', color: '#868e96', count: store.tasks.filter(t => t.category === 'work').length },
+          'vacation': { name: '연차관리', icon: '🏖️', count: store.vacations.length },
+          'photos': { name: '기록', icon: '📸', count: store.photos.length },
+          'notes': { name: '끄적끄적', icon: '✏️', count: store.notes.length },
+          'ledger': { name: '가계부', icon: '💰', count: store.ledgerFiles.length },
+          'wishlist': { name: '위시리스트', icon: '🎁', count: store.wishlist.length },
+          'sites': { name: '사이트', icon: '🌐', count: store.sites.length },
+          'vault': { name: '파일 보관함', icon: '📁', count: vaultCount }
+        };
+
+        catContainer.innerHTML = store.sidebarMenuOrder.map(id => {
+          const meta = itemMeta[id] || { name: id, icon: '📌', count: 0 };
+          const isActive = store.activeFilter === id ? 'active' : '';
+          const iconHTML = meta.icon 
+            ? `<span>${meta.icon}</span>` 
+            : `<span class="category-dot" style="background-color: ${meta.color || '#ff6b8b'}; color: ${meta.color || '#ff6b8b'};"></span>`;
+
           return `
-            <li class="nav-item category-drag-item ${isActive}" data-cat-id="${cat.id}" data-filter="${cat.id}" onclick="window.selectCategoryFilter('${cat.id}', event)">
+            <li class="nav-item category-drag-item ${isActive}" data-cat-id="${id}" data-filter="${id}" onclick="window.selectCategoryFilter('${id}', event)">
               <div class="nav-item-left">
                 <span class="category-drag-handle" title="위아래로 드래그하여 순서 변경" onclick="event.stopPropagation()">⋮⋮</span>
-                <span class="category-dot" style="background-color: ${cat.color}; color: ${cat.color};"></span>
-                <span class="category-title-text">${cat.name}</span>
+                ${iconHTML}
+                <span class="category-title-text">${meta.name}</span>
               </div>
-              <span class="nav-count">${count}</span>
+              <span class="nav-count" id="nav-count-${id}">${meta.count}</span>
             </li>
           `;
         }).join('');
@@ -2966,26 +3003,88 @@
       const listEl = document.getElementById('vacation-history-list');
       const emptyEl = document.getElementById('vacation-empty-state');
       const countEl = document.getElementById('vacation-history-count');
+      const yearSelect = document.getElementById('vacation-filter-year');
 
       if (totalEl) totalEl.innerHTML = `${stats.total.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
       if (usedEl) usedEl.innerHTML = `${stats.used.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
       if (remainEl) remainEl.innerHTML = `${stats.remain.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
       if (barEl) barEl.style.width = `${stats.pct}%`;
       if (textEl) textEl.textContent = `${stats.pct}% (${stats.used.toFixed(1)}일 / ${stats.total.toFixed(1)}일) 사용 완료`;
-      if (countEl) countEl.textContent = `총 ${store.vacations.length}건`;
+
+      // 1. Populate Year Select Options dynamically from data
+      if (yearSelect) {
+        const yearsSet = new Set(['2026', '2025']);
+        (store.vacations || []).forEach(v => {
+          if (v.date) {
+            const y = v.date.split('-')[0];
+            if (y) yearsSet.add(y);
+          }
+        });
+        const currentSelectedYear = store.selectedVacationYear || '2026';
+        const sortedYears = Array.from(yearsSet).sort().reverse();
+        yearSelect.innerHTML = `<option value="all">전체 년도</option>` + sortedYears.map(y => `<option value="${y}" ${y === currentSelectedYear ? 'selected' : ''}>${y}년</option>`).join('');
+      }
+
+      // 2. Update Month Pills Active Class
+      const currentSelectedMonth = store.selectedVacationMonth || 'all';
+      document.querySelectorAll('#vacation-month-pills .vac-m-pill').forEach(pill => {
+        if (pill.dataset.vMonth === currentSelectedMonth) {
+          pill.classList.add('active');
+        } else {
+          pill.classList.remove('active');
+        }
+      });
+
+      // 3. Filter Vacations by Year & Month
+      let filtered = store.vacations || [];
+      if (currentSelectedYear !== 'all') {
+        filtered = filtered.filter(v => v.date && v.date.startsWith(currentSelectedYear));
+      }
+      if (currentSelectedMonth !== 'all') {
+        const mStr = String(currentSelectedMonth).padStart(2, '0');
+        filtered = filtered.filter(v => {
+          if (!v.date) return false;
+          const parts = v.date.split('-');
+          return parts[1] === mStr;
+        });
+      }
+
+      // Calculate filtered period used days
+      let periodUsedDays = 0;
+      filtered.forEach(v => {
+        if (v.type === 'holiday' || v.amount === 0) return;
+        periodUsedDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
+      });
+
+      if (countEl) {
+        countEl.textContent = `총 ${filtered.length}건 (${periodUsedDays.toFixed(1)}일 사용)`;
+      }
 
       if (!listEl) return;
 
-      if (store.vacations.length === 0) {
+      if (filtered.length === 0) {
         listEl.innerHTML = '';
         if (emptyEl) emptyEl.style.display = 'flex';
       } else {
         if (emptyEl) emptyEl.style.display = 'none';
-        listEl.innerHTML = store.vacations.map(v => {
+        listEl.innerHTML = filtered.map(v => {
+          const isHoliday = (v.type === 'holiday');
           const isFull = (v.type === 'full');
           const isAm = (v.type === 'half-am');
-          const badgeClass = isFull ? 'full' : (isAm ? 'half-am' : 'half-pm');
-          const badgeLabel = isFull ? '🌴 연차 (1.0일)' : (isAm ? '🌅 오전 반차 (0.5일)' : '🌇 오후 반차 (0.5일)');
+          
+          let badgeClass = 'half-pm';
+          let badgeLabel = '🌇 오후 반차 (0.5일)';
+          if (isHoliday) {
+            badgeClass = 'badge-vacation-holiday';
+            badgeLabel = '🏖️ 휴가 (0일 / 개인 확인용)';
+          } else if (isFull) {
+            badgeClass = 'full';
+            badgeLabel = '🌴 연차 (1.0일 차감)';
+          } else if (isAm) {
+            badgeClass = 'half-am';
+            badgeLabel = '🌅 오전 반차 (0.5일 차감)';
+          }
+
           const dateStr = v.date ? v.date.replace(/-/g, '.') : '';
 
           return `
@@ -3645,17 +3744,17 @@
         const targetCatId = targetItem.dataset.catId;
         if (targetCatId === draggedCatId) return;
 
-        const fromIdx = store.categories.findIndex(c => c.id === draggedCatId);
-        const toIdx = store.categories.findIndex(c => c.id === targetCatId);
+        const fromIdx = store.sidebarMenuOrder.indexOf(draggedCatId);
+        const toIdx = store.sidebarMenuOrder.indexOf(targetCatId);
         if (fromIdx !== -1 && toIdx !== -1) {
-          const [movedCat] = store.categories.splice(fromIdx, 1);
+          const [movedId] = store.sidebarMenuOrder.splice(fromIdx, 1);
           const rect = targetItem.getBoundingClientRect();
           const midY = rect.top + rect.height / 2;
           const insertIdx = (e.clientY < midY) ? toIdx : toIdx + 1;
-          store.categories.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, movedCat);
+          store.sidebarMenuOrder.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, movedId);
           store.save();
           UI.renderSidebar();
-          UI.showToast('카테고리 순서가 변경되었어요! 🏷️✨', 'info');
+          UI.showToast('메뉴 순서가 변경되었어요! 🏷️✨', 'info');
         }
         draggedCatId = null;
         document.querySelectorAll('.category-drag-item').forEach(el => {
@@ -3709,15 +3808,15 @@
           suppressNavClickUntil = Date.now() + 250;
           const targetCatId = touchTargetItem.dataset.catId;
           if (targetCatId && targetCatId !== draggedCatId) {
-            const fromIdx = store.categories.findIndex(c => c.id === draggedCatId);
-            const toIdx = store.categories.findIndex(c => c.id === targetCatId);
+            const fromIdx = store.sidebarMenuOrder.indexOf(draggedCatId);
+            const toIdx = store.sidebarMenuOrder.indexOf(targetCatId);
             if (fromIdx !== -1 && toIdx !== -1) {
-              const [movedCat] = store.categories.splice(fromIdx, 1);
+              const [movedId] = store.sidebarMenuOrder.splice(fromIdx, 1);
               const insertIdx = touchTargetItem.classList.contains('drag-over-top') ? toIdx : toIdx + 1;
-              store.categories.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, movedCat);
+              store.sidebarMenuOrder.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, movedId);
               store.save();
               UI.renderSidebar();
-              UI.showToast('카테고리 순서가 변경되었어요! 🏷️✨', 'info');
+              UI.showToast('메뉴 순서가 변경되었어요! 🏷️✨', 'info');
             }
           }
         }
@@ -4406,6 +4505,24 @@
       }
     });
 
+    // Vacation Year Filter Change
+    const vacationYearSelect = document.getElementById('vacation-filter-year');
+    if (vacationYearSelect) {
+      vacationYearSelect.addEventListener('change', (e) => {
+        store.selectedVacationYear = e.target.value;
+        UI.renderVacation();
+      });
+    }
+
+    // Vacation Month Pill Tab Click Delegation
+    document.addEventListener('click', (e) => {
+      const vacPill = e.target.closest('.vac-m-pill');
+      if (vacPill && vacPill.dataset.vMonth) {
+        store.selectedVacationMonth = vacPill.dataset.vMonth;
+        UI.renderVacation();
+      }
+    });
+
     // Form Submissions for Vacation & Sites
     const vacationForm = document.getElementById('vacation-form');
     if (vacationForm) {
@@ -4417,7 +4534,11 @@
         store.addVacation({ type, date, reason });
         sounds.playComplete();
         UI.closeVacationModal();
-        UI.showToast('연차/반차가 성공적으로 등록되었어요 🏖️💖', 'success');
+        if (type === 'holiday') {
+          UI.showToast('휴가 일정이 등록되었어요 (연차 미차감) 🏖️✨', 'success');
+        } else {
+          UI.showToast('연차/반차가 성공적으로 등록되었어요 🌴💖', 'success');
+        }
         UI.renderVacation();
       });
     }

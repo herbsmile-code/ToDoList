@@ -4519,4 +4519,43 @@ body::after {
   border-top: 1px solid var(--border-color);
 }
 
+/* Vacation Month Pill Tabs */
+.vac-m-pill {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vac-m-pill:hover {
+  background: rgba(255, 107, 139, 0.1);
+  color: var(--primary);
+  border-color: rgba(255, 107, 139, 0.3);
+}
+
+.vac-m-pill.active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: var(--primary) !important;
+  box-shadow: 0 2px 8px var(--primary-glow);
+}
+
+[data-theme="dark"] .vac-m-pill {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Holiday Badge (0일 차감 개인 휴가) */
+.badge-vacation-holiday {
+  background: rgba(32, 201, 151, 0.15) !important;
+  color: #0ca678 !important;
+  border: 1px solid rgba(32, 201, 151, 0.35) !important;
+  font-weight: 800;
+}
+
 
