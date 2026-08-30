@@ -18,19 +18,34 @@
   // Global Navigation Bridge Handler
   window._handleSelectFilter = function(filter) {
     try {
-      if (window.cloudSync && (!window.cloudSync.spaceId || !window.cloudSync.pin)) {
-        if (window.UI) {
-          window.UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
-          window.UI.openCloudModal();
-        }
-        return;
-      }
       if (window.store) {
         window.store.activeFilter = filter;
         window.scrollTo({ top: 0, behavior: 'instant' });
         if (window.UI) {
           window.UI.renderTasks();
           window.UI.renderSidebar();
+
+          // 시각적 피드백 토스트
+          const catMap = {
+            'personal': '🌸 개인 카테고리로 이동했어요!',
+            'work': '💼 업무 카테고리로 이동했어요!',
+            'all': '📋 모든 할 일 목록으로 이동했어요!',
+            'upcoming': '⏰ 다가오는 일정으로 이동했어요!',
+            'overdue': '⚠️ 기한 지연 일정으로 이동했어요!',
+            'pinned': '💖 중요한 일정으로 이동했어요!',
+            'completed': '✨ 완료된 목록으로 이동했어요!',
+            'calendar-month': '🗓️ 월별 달력으로 이동했어요!',
+            'vacation': '🏖️ 연차관리로 이동했어요!',
+            'photos': '📸 기록 보관함으로 이동했어요!',
+            'notes': '✏️ 끄적끄적 메모장으로 이동했어요!',
+            'ledger': '💰 가계부로 이동했어요!',
+            'wishlist': '🎁 위시리스트로 이동했어요!',
+            'sites': '🌐 사이트 모음으로 이동했어요!',
+            'vault': '📁 파일 보관함으로 이동했어요!'
+          };
+          if (catMap[filter]) {
+            window.UI.showToast(catMap[filter], 'info');
+          }
         }
       }
     } catch (e) {
@@ -1522,22 +1537,6 @@
     },
 
     async renderSidebar() {
-      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
-
-      if (!isLogged) {
-        const counts = ['all', 'upcoming', 'overdue', 'pinned', 'completed', 'photos', 'notes', 'ledger', 'wishlist', 'vault', 'vacation', 'sites'];
-        counts.forEach(k => {
-          const el = document.getElementById(`nav-count-${k}`);
-          if (el) el.textContent = '🔒';
-        });
-
-        const catContainer = document.getElementById('category-nav-list');
-        if (catContainer) {
-          catContainer.innerHTML = `<li style="padding: 0.85rem 0.5rem; font-size: 0.82rem; color: var(--text-dim); text-align: center;">🔐 로그인 시 표시됩니다</li>`;
-        }
-        return;
-      }
-
       const stats = store.getStats();
       const counts = {
         all: store.tasks.length,
@@ -1720,17 +1719,7 @@
 
       const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, vacationView, sitesView];
 
-      if (!isLogged) {
-        if (lockedScreen && lockedScreen.style.display !== 'flex') lockedScreen.style.display = 'flex';
-        allViews.forEach(v => {
-          if (v && v.style.display !== 'none') v.style.display = 'none';
-        });
-        if (mobileBar && mobileBar.style.display !== 'none') mobileBar.style.display = 'none';
-        this.updateNavHighlight();
-        return;
-      }
-
-      if (lockedScreen && lockedScreen.style.display !== 'none') lockedScreen.style.display = 'none';
+      if (lockedScreen) lockedScreen.style.display = 'none';
       if (mobileBar && mobileBar.style.display !== 'flex') mobileBar.style.display = 'flex';
 
       // Atomic Target View Switching
@@ -3598,50 +3587,25 @@
 
     document.addEventListener('click', (e) => {
       if (Date.now() < suppressNavClickUntil) return;
-      const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
       const navItem = e.target.closest('.nav-item');
       if (navItem && navItem.dataset.filter) {
-        if (!isLogged) {
-          UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
-          UI.openCloudModal();
-          return;
-        }
         const newFilter = navItem.dataset.filter;
-        store.activeFilter = newFilter;
-        window.scrollTo({ top: 0, behavior: 'instant' });
-        UI.renderTasks();
-        UI.renderSidebar();
+        window.selectCategoryFilter(newFilter);
         return;
       }
 
       const mobileNavBtn = e.target.closest('.mobile-nav-btn');
       if (mobileNavBtn && mobileNavBtn.dataset.mobileNav) {
-        if (!isLogged) {
-          UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
-          UI.openCloudModal();
-          return;
-        }
         const newFilter = mobileNavBtn.dataset.mobileNav;
-        store.activeFilter = newFilter;
-        window.scrollTo({ top: 0, behavior: 'instant' });
-        UI.renderTasks();
-        UI.renderSidebar();
+        window.selectCategoryFilter(newFilter);
         return;
       }
 
       const mobilePill = e.target.closest('.mobile-cat-pill');
       if (mobilePill && mobilePill.dataset.filter) {
-        if (!isLogged) {
-          UI.showToast('동기화 로그인(잠금 해제)을 하셔야 다이어리를 보실 수 있어요 🔐', 'info');
-          UI.openCloudModal();
-          return;
-        }
         const newFilter = mobilePill.dataset.filter;
-        store.activeFilter = newFilter;
-        window.scrollTo({ top: 0, behavior: 'instant' });
-        UI.renderTasks();
-        UI.renderSidebar();
+        window.selectCategoryFilter(newFilter);
         return;
       }
 
