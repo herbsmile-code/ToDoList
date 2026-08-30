@@ -551,7 +551,8 @@
       const views = [
         'tasks-view-container', 'files-view-container', 'wishlist-view-container',
         'photos-view-container', 'notes-view-container', 'ledger-view-container',
-        'calendar-month-view-container', 'calendar-week-view-container'
+        'calendar-month-view-container', 'calendar-week-view-container',
+        'vacation-view-container', 'sites-view-container'
       ].map(id => document.getElementById(id));
 
       const isLogged = !!(this.spaceId && this.pin);
@@ -579,6 +580,8 @@
       try { UI.renderLedger(); } catch (e) {}
       try { UI.renderCalendarMonth(); } catch (e) {}
       try { UI.renderCalendarWeek(); } catch (e) {}
+      try { UI.renderVacation(); } catch (e) {}
+      try { UI.renderSites(); } catch (e) {}
       try { UI.renderSidebar(); } catch (e) {}
     }
 
@@ -605,13 +608,40 @@
               const remoteUpdated = data.updatedAt || 0;
               if (force || remoteUpdated > this.lastSyncedUpdatedAt) {
                 this.lastSyncedUpdatedAt = remoteUpdated;
-                if (data.tasks !== undefined) store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
-                if (data.categories !== undefined && normalizeArray(data.categories).length) store.categories = normalizeArray(data.categories);
+                if (data.tasks !== undefined) {
+                  store.tasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
+                  store.tasks.forEach(t => {
+                    if (!t.category || (t.category !== 'personal' && t.category !== 'work')) {
+                      t.category = 'personal';
+                    }
+                  });
+                }
+                if (data.categories !== undefined && normalizeArray(data.categories).length) {
+                  let cats = normalizeArray(data.categories).filter(c => c && c.id && (c.id === 'personal' || c.id === 'work' || c.id === 'schedule'));
+                  cats = cats.map(c => {
+                    if (c.id === 'personal' || c.id === 'schedule') return { id: 'personal', name: '개인 🌸', color: '#f06595' };
+                    if (c.id === 'work') return { id: 'work', name: '업무 💼', color: '#868e96' };
+                    return null;
+                  }).filter(Boolean);
+                  const seen = new Set();
+                  cats = cats.filter(c => {
+                    if (seen.has(c.id)) return false;
+                    seen.add(c.id);
+                    return true;
+                  });
+                  DEFAULT_CATEGORIES.forEach(def => {
+                    if (!cats.some(c => c.id === def.id)) cats.push(def);
+                  });
+                  store.categories = cats;
+                }
                 if (data.wishlist !== undefined) store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
                 if (data.photos !== undefined) store.photos = normalizeArray(data.photos).filter(p => p && p.id);
                 if (data.notes !== undefined) store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
                 if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
                 if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
+                if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations);
+                if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
+                if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
                 if (Array.isArray(data.vaultFiles)) {
                   await this.saveVaultFiles(data.vaultFiles);
                   try { UI.renderFilesVault(); } catch (e) {}
@@ -990,6 +1020,9 @@
       this.ledgerFiles = combinedLedgerFiles;
       this.categories = finalCategories;
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
+      this.vacations = userVacations;
+      this.totalVacationDays = userTotalVacationDays;
+      this.sites = userSites;
 
       try {
         const streakRaw = localStorage.getItem(STREAK_KEY);
@@ -1010,6 +1043,9 @@
           notes: this.notes,
           honeymoonData: this.honeymoonData,
           ledgerFiles: this.ledgerFiles,
+          vacations: this.vacations,
+          totalVacationDays: this.totalVacationDays,
+          sites: this.sites,
           updatedAt: Date.now()
         }));
         localStorage.setItem(STREAK_KEY, JSON.stringify(this.streak));
@@ -3529,11 +3565,10 @@
           return;
         }
         const newFilter = navItem.dataset.filter;
-        if (store.activeFilter !== newFilter) {
-          store.activeFilter = newFilter;
-          window.scrollTo({ top: 0, behavior: 'instant' });
-          UI.renderTasks();
-        }
+        store.activeFilter = newFilter;
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        UI.renderTasks();
+        UI.renderSidebar();
         return;
       }
 
@@ -3545,11 +3580,10 @@
           return;
         }
         const newFilter = mobileNavBtn.dataset.mobileNav;
-        if (store.activeFilter !== newFilter) {
-          store.activeFilter = newFilter;
-          window.scrollTo({ top: 0, behavior: 'instant' });
-          UI.renderTasks();
-        }
+        store.activeFilter = newFilter;
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        UI.renderTasks();
+        UI.renderSidebar();
         return;
       }
 
@@ -3561,11 +3595,10 @@
           return;
         }
         const newFilter = mobilePill.dataset.filter;
-        if (store.activeFilter !== newFilter) {
-          store.activeFilter = newFilter;
-          window.scrollTo({ top: 0, behavior: 'instant' });
-          UI.renderTasks();
-        }
+        store.activeFilter = newFilter;
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        UI.renderTasks();
+        UI.renderSidebar();
         return;
       }
 
@@ -3600,8 +3633,9 @@
     if (catNavList) {
       let draggedCatId = null;
       let touchTargetItem = null;
+      let touchMoved = false;
 
-      // 1. Desktop Mouse Drag & Drop
+      // 1. Desktop Mouse Drag & Drop (Only when dragging handle or item)
       catNavList.addEventListener('dragstart', (e) => {
         const item = e.target.closest('.category-drag-item');
         if (!item) return;
@@ -3612,7 +3646,6 @@
       });
 
       catNavList.addEventListener('dragend', (e) => {
-        suppressNavClickUntil = Date.now() + 350;
         const item = e.target.closest('.category-drag-item');
         if (item) item.classList.remove('dragging');
         document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
@@ -3644,7 +3677,7 @@
 
       catNavList.addEventListener('drop', (e) => {
         e.preventDefault();
-        suppressNavClickUntil = Date.now() + 350;
+        suppressNavClickUntil = Date.now() + 250;
         const targetItem = e.target.closest('.category-drag-item');
         if (!targetItem || !draggedCatId) return;
         const targetCatId = targetItem.dataset.catId;
@@ -3666,18 +3699,25 @@
         document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
       });
 
-      // 2. Mobile Touch Drag & Drop
+      // 2. Mobile Touch Drag & Drop (Only when touching the handle icon ⋮⋮)
       catNavList.addEventListener('touchstart', (e) => {
-        const handle = e.target.closest('.category-drag-handle') || e.target.closest('.category-drag-item');
-        if (!handle) return;
+        const handle = e.target.closest('.category-drag-handle');
+        if (!handle) {
+          draggedCatId = null;
+          touchTargetItem = null;
+          touchMoved = false;
+          return;
+        }
         const item = e.target.closest('.category-drag-item');
         if (!item) return;
         draggedCatId = item.dataset.catId;
+        touchMoved = false;
         item.classList.add('touch-dragging');
       }, { passive: true });
 
       catNavList.addEventListener('touchmove', (e) => {
         if (!draggedCatId) return;
+        touchMoved = true;
         const touch = e.touches[0];
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
         if (!target) return;
@@ -3697,8 +3737,8 @@
       }, { passive: true });
 
       catNavList.addEventListener('touchend', (e) => {
-        suppressNavClickUntil = Date.now() + 350;
-        if (draggedCatId && touchTargetItem) {
+        if (draggedCatId && touchMoved && touchTargetItem) {
+          suppressNavClickUntil = Date.now() + 250;
           const targetCatId = touchTargetItem.dataset.catId;
           if (targetCatId && targetCatId !== draggedCatId) {
             const fromIdx = store.categories.findIndex(c => c.id === draggedCatId);
@@ -3715,6 +3755,7 @@
         }
         draggedCatId = null;
         touchTargetItem = null;
+        touchMoved = false;
         document.querySelectorAll('.category-drag-item').forEach(el => el.classList.remove('touch-dragging', 'drag-over-top', 'drag-over-bottom'));
       });
     }
