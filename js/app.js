@@ -785,20 +785,7 @@
         const reader = new FileReader();
         reader.onload = async (e) => {
           try {
-            const fileItem = {
-              id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-              name: fileObj.name,
-              size: fileObj.size,
-              type: fileObj.type,
-              note: note || '',
-              createdAt: Date.now(),
-              dataUrl: e.target.result
-            };
-
-            const files = await this.getAllVaultFiles();
-            files.unshift(fileItem);
-            await this.saveVaultFiles(files);
-            await this.pushTasksToCloud();
+            const fileItem = store.addVaultFile(fileObj, note, e.target.result);
             resolve(fileItem);
           } catch (err) {
             reject(err);
@@ -810,25 +797,174 @@
     }
 
     async getAllVaultFiles() {
+      return store.vaultFiles || [];
+    }
+
+    async saveVaultFiles(files) {
+      store.vaultFiles = files || [];
+      store.saveLocalOnly();
+    }
+
+    async deleteVaultFile(fileId) {
+      store.deleteVaultFile(fileId);
+    }
+
+    // --- Manual Cloud Backups (단일 최신 백업본 덮어쓰기 형태) ---
+    async createManualCloudBackup() {
+      if (!this.spaceId || !this.pin) {
+        throw new Error('클라우드 로그인이 필요합니다.');
+      }
+      const key = this.getStorageKey();
+      const vaultFiles = await this.getAllVaultFiles();
+      const timestamp = Date.now();
+      const dateStr = new Date(timestamp).toLocaleString('ko-KR', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+
+      const rawPayload = {
+        tasks: store.tasks || [],
+        categories: store.categories || [],
+        wishlist: store.wishlist || [],
+        photos: store.photos || [],
+        notes: store.notes || [],
+        vaultFiles: vaultFiles,
+        honeymoonData: store.honeymoonData || {},
+        ledgerFiles: store.ledgerFiles || [],
+        createdAt: timestamp,
+        backupName: `${dateStr} 백업`,
+        counts: {
+          tasks: (store.tasks || []).length,
+          notes: (store.notes || []).length,
+          photos: (store.photos || []).length,
+          vault: vaultFiles.length,
+          wishlist: (store.wishlist || []).length,
+          ledger: (store.ledgerFiles || []).length
+        }
+      };
+
+      const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, this.pin);
+      // 단일 최신 백업본으로 덮어쓰기
+      const url = `${this.activeUrl}/manual_backups/${key}/latest.json`;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(encryptedBody)
+      });
+
+      if (!res.ok) throw new Error('Firebase 백업 저장 실패');
+      return rawPayload;
+    }
+
+    async getManualCloudBackups() {
+      if (!this.spaceId || !this.pin) return [];
+      const key = this.getStorageKey();
       try {
-        const raw = localStorage.getItem('todolist_jy_vault_files');
-        return raw ? JSON.parse(raw) : [];
+        const url = `${this.activeUrl}/manual_backups/${key}.json`;
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const data = await res.json();
+        if (!data || typeof data !== 'object') return [];
+
+        // 1. 단일 latest.json 확인
+        if (data.latest) {
+          try {
+            const decrypted = await E2EESecurityEngine.decrypt(data.latest, this.pin);
+            if (decrypted && typeof decrypted === 'object') {
+              return [{
+                id: 'latest',
+                timestamp: decrypted.createdAt || Date.now(),
+                backupName: decrypted.backupName || new Date(decrypted.createdAt || Date.now()).toLocaleString('ko-KR'),
+                counts: decrypted.counts || {
+                  tasks: (decrypted.tasks || []).length,
+                  notes: (decrypted.notes || []).length,
+                  photos: (decrypted.photos || []).length,
+                  vault: (decrypted.vaultFiles || []).length
+                }
+              }];
+            }
+          } catch (e) {}
+        }
+
+        // 2. 레거시 타임스탬프 백업이 있을 경우 최신 1개 선택
+        const entries = Object.entries(data).filter(([k]) => k !== 'latest');
+        if (entries.length) {
+          entries.sort((a, b) => (Number(b[0]) || 0) - (Number(a[0]) || 0));
+          const [tKey, encryptedBody] = entries[0];
+          try {
+            const decrypted = await E2EESecurityEngine.decrypt(encryptedBody, this.pin);
+            if (decrypted && typeof decrypted === 'object') {
+              return [{
+                id: 'latest',
+                timestamp: Number(tKey) || decrypted.createdAt || Date.now(),
+                backupName: decrypted.backupName || new Date(Number(tKey) || Date.now()).toLocaleString('ko-KR'),
+                counts: decrypted.counts || {
+                  tasks: (decrypted.tasks || []).length,
+                  notes: (decrypted.notes || []).length,
+                  photos: (decrypted.photos || []).length,
+                  vault: (decrypted.vaultFiles || []).length
+                }
+              }];
+            }
+          } catch (e) {}
+        }
+
+        return [];
       } catch (e) {
+        console.warn('Failed to fetch cloud backup:', e);
         return [];
       }
     }
 
-    async saveVaultFiles(files) {
-      try {
-        localStorage.setItem('todolist_jy_vault_files', JSON.stringify(files));
-      } catch (e) {}
+    async restoreManualCloudBackup() {
+      if (!this.spaceId || !this.pin) throw new Error('로그인이 필요합니다.');
+      const key = this.getStorageKey();
+      
+      let encryptedBody = null;
+      // latest.json 먼저 조회
+      const resLatest = await fetch(`${this.activeUrl}/manual_backups/${key}/latest.json`);
+      if (resLatest.ok) {
+        encryptedBody = await resLatest.json();
+      }
+      
+      if (!encryptedBody) {
+        // 레거시 탐색
+        const resAll = await fetch(`${this.activeUrl}/manual_backups/${key}.json`);
+        if (resAll.ok) {
+          const allData = await resAll.json();
+          if (allData && typeof allData === 'object') {
+            const entries = Object.entries(allData);
+            if (entries.length) {
+              entries.sort((a, b) => (Number(b[0]) || 0) - (Number(a[0]) || 0));
+              encryptedBody = entries[0][1];
+            }
+          }
+        }
+      }
+
+      if (!encryptedBody) throw new Error('백업 데이터를 불러오지 못했습니다.');
+      const data = await E2EESecurityEngine.decrypt(encryptedBody, this.pin);
+
+      if (!data || typeof data !== 'object') throw new Error('올바른 백업 데이터가 아닙니다.');
+
+      if (Array.isArray(data.tasks)) store.tasks = data.tasks;
+      if (Array.isArray(data.categories)) store.categories = data.categories;
+      if (Array.isArray(data.wishlist)) store.wishlist = data.wishlist;
+      if (Array.isArray(data.photos)) store.photos = data.photos;
+      if (Array.isArray(data.notes)) store.notes = data.notes;
+      if (Array.isArray(data.vaultFiles)) store.vaultFiles = data.vaultFiles;
+      if (data.honeymoonData) store.honeymoonData = data.honeymoonData;
+      if (Array.isArray(data.ledgerFiles)) store.ledgerFiles = data.ledgerFiles;
+
+      store.save();
+      await this.pushTasksToCloud(true);
+      return data;
     }
 
-    async deleteVaultFile(fileId) {
-      const files = await this.getAllVaultFiles();
-      const filtered = files.filter(f => f.id !== fileId);
-      await this.saveVaultFiles(filtered);
-      await this.pushTasksToCloud();
+    async deleteManualCloudBackup() {
+      if (!this.spaceId || !this.pin) return;
+      const key = this.getStorageKey();
+      const url = `${this.activeUrl}/manual_backups/${key}.json`;
+      await fetch(url, { method: 'DELETE' });
     }
   }
 
@@ -944,6 +1080,7 @@
       this.wishlist = [];
       this.photos = [];
       this.notes = [];
+      this.vaultFiles = [];
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.ledgerFiles = [];
       this.selectedLedgerMonth = 7; // Default to July (latest written month)
@@ -1044,6 +1181,7 @@
       this.photos = combinedPhotos;
       this.notes = combinedNotes;
       this.ledgerFiles = combinedLedgerFiles;
+      this.vaultFiles = combinedVaultFiles;
       this.categories = finalCategories;
       this.sidebarMenuOrder = finalOrder;
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
@@ -1069,6 +1207,7 @@
           wishlist: this.wishlist,
           photos: this.photos,
           notes: this.notes,
+          vaultFiles: this.vaultFiles,
           honeymoonData: this.honeymoonData,
           ledgerFiles: this.ledgerFiles,
           vacations: this.vacations,
@@ -1076,6 +1215,7 @@
           sites: this.sites,
           updatedAt: Date.now()
         }));
+        localStorage.setItem('todolist_jy_vault_files', JSON.stringify(this.vaultFiles || []));
         localStorage.setItem(STREAK_KEY, JSON.stringify(this.streak));
       } catch (e) {}
     }
@@ -1083,6 +1223,32 @@
     save() {
       this.saveLocalOnly();
       cloudSync.pushTasksToCloud();
+    }
+
+    // --- Vault Files Methods ---
+    addVaultFile(fileObj, note = '', dataUrl = '') {
+      const newFile = {
+        id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        name: fileObj.name,
+        size: fileObj.size,
+        type: fileObj.type,
+        note: (note || '').trim(),
+        createdAt: Date.now(),
+        dataUrl: dataUrl
+      };
+      if (!this.vaultFiles) this.vaultFiles = [];
+      this.vaultFiles.unshift(newFile);
+      this.save();
+      return newFile;
+    }
+
+    deleteVaultFile(fileId) {
+      if (!this.vaultFiles) return false;
+      const idx = this.vaultFiles.findIndex(f => f.id === fileId);
+      if (idx === -1) return false;
+      this.vaultFiles.splice(idx, 1);
+      this.save();
+      return true;
     }
 
     // --- Task Methods ---
@@ -4108,7 +4274,10 @@
     const settingsBtn = document.getElementById('btn-settings-modal');
     if (settingsBtn) settingsBtn.addEventListener('click', () => {
       const modal = document.getElementById('settings-modal');
-      if (modal) modal.classList.add('active');
+      if (modal) {
+        modal.classList.add('active');
+        UI.renderCloudBackupsList();
+      }
     });
 
     const openFileBtn = document.getElementById('btn-open-file-upload');
@@ -4292,6 +4461,40 @@
     const ledgerHiddenInput = document.getElementById('ledger-file-hidden-input');
     if (ledgerDropzone && ledgerHiddenInput) {
       ledgerDropzone.addEventListener('click', () => ledgerHiddenInput.click());
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        ledgerDropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          ledgerDropzone.classList.add('drag-active');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        ledgerDropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          ledgerDropzone.classList.remove('drag-active');
+        }, false);
+      });
+
+      ledgerDropzone.addEventListener('drop', async (e) => {
+        const dt = e.dataTransfer;
+        const files = dt ? dt.files : null;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        try {
+          await parseHoneymoonExcelFile(file, 'auto', 0, '드롭존 엑셀 등록');
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 60);
+          UI.showToast(`'${file.name}' 신혼 가계부가 분석되어 반영되었어요! 💍📊✨`, 'success');
+          UI.renderLedger();
+          UI.renderSidebar();
+        } catch (err) {
+          UI.showToast('가계부 엑셀 분석 실패: ' + (err.message || err), 'danger');
+        }
+      });
+
       ledgerHiddenInput.addEventListener('change', async () => {
         if (!ledgerHiddenInput.files || ledgerHiddenInput.files.length === 0) return;
         const file = ledgerHiddenInput.files[0];
@@ -4305,6 +4508,7 @@
         } catch (err) {
           UI.showToast('가계부 엑셀 분석 실패', 'danger');
         }
+        ledgerHiddenInput.value = '';
       });
     }
 
@@ -5181,6 +5385,75 @@
       });
     }
 
+    // Vault Dropzone & Hidden Input
+    const dropzone = document.getElementById('vault-dropzone');
+    const hiddenFileInput = document.getElementById('vault-file-hidden-input');
+    if (dropzone && hiddenFileInput) {
+      dropzone.addEventListener('click', () => hiddenFileInput.click());
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('drag-active');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('drag-active');
+        }, false);
+      });
+
+      dropzone.addEventListener('drop', async (e) => {
+        const dt = e.dataTransfer;
+        const files = dt ? dt.files : null;
+        if (!files || files.length === 0) return;
+
+        let successCount = 0;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          try {
+            await cloudSync.saveFileToVault(file, '드래그 앤 드롭 보관');
+            successCount++;
+          } catch (err) {
+            console.error('File vault drop error:', err);
+          }
+        }
+
+        if (successCount > 0) {
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+          UI.showToast(`${successCount}개 파일이 안전하게 보관되었어요! 💾✨`, 'success');
+          UI.renderFilesVault();
+          UI.renderSidebar();
+        } else {
+          UI.showToast('파일 보관 처리 중 문제가 발생했어요', 'danger');
+        }
+      });
+
+      hiddenFileInput.addEventListener('change', async () => {
+        if (!hiddenFileInput.files || hiddenFileInput.files.length === 0) return;
+        let successCount = 0;
+        for (let i = 0; i < hiddenFileInput.files.length; i++) {
+          const file = hiddenFileInput.files[i];
+          try {
+            await cloudSync.saveFileToVault(file, '');
+            successCount++;
+          } catch (err) {}
+        }
+        hiddenFileInput.value = '';
+        if (successCount > 0) {
+          sounds.playAdd();
+          UI.showToast(`${successCount}개 파일이 보관되었어요! 💾✨`, 'success');
+          UI.renderFilesVault();
+          UI.renderSidebar();
+        }
+      });
+    }
+
     // 2-Step Cloud Sync Form Submit (Cloud-wide Master Verification)
     const syncForm = document.getElementById('sync-2step-form');
     if (syncForm) {
@@ -5324,22 +5597,30 @@
       });
     }
 
-    // Vault Dropzone & Hidden Input
-    const dropzone = document.getElementById('vault-dropzone');
-    const hiddenFileInput = document.getElementById('vault-file-hidden-input');
-    if (dropzone && hiddenFileInput) {
-      dropzone.addEventListener('click', () => hiddenFileInput.click());
-      hiddenFileInput.addEventListener('change', async () => {
-        if (!hiddenFileInput.files || hiddenFileInput.files.length === 0) return;
-        const file = hiddenFileInput.files[0];
+    // Settings Data Export (Firebase Cloud Snapshot Only)
+    const exportBtn = document.getElementById('btn-export-data');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', async () => {
+        const origBtnText = exportBtn.innerHTML;
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<span>⏳</span> <span>Firebase 클라우드 백업 저장 중...</span>';
+
         try {
-          await cloudSync.saveFileToVault(file, '');
-          sounds.playAdd();
-          UI.showToast(`'${file.name}' 파일이 보관되었어요! 💾`, 'success');
-          UI.renderFilesVault();
-          UI.renderSidebar();
-        } catch (err) {
-          UI.showToast('파일 보관 실패', 'danger');
+          if (cloudSync.spaceId && cloudSync.pin) {
+            await cloudSync.createManualCloudBackup();
+            try { sounds.playAdd(); } catch (err) {}
+            UI.showToast('Firebase 클라우드 백업이 안전하게 저장되었어요! ☁️✨', 'success');
+            UI.renderCloudBackupsList();
+          } else {
+            UI.showToast('클라우드 동기화 로그인(스페이스 ID & PIN) 후 백업할 수 있어요 🔐', 'info');
+            UI.openCloudModal();
+          }
+        } catch (e) {
+          console.error('Manual cloud backup failed:', e);
+          UI.showToast('클라우드 백업 저장 실패: ' + (e.message || e), 'danger');
+        } finally {
+          exportBtn.disabled = false;
+          exportBtn.innerHTML = origBtnText;
         }
       });
     }
@@ -5378,6 +5659,7 @@
               if (Array.isArray(data.wishlist)) store.wishlist = data.wishlist;
               if (Array.isArray(data.photos)) store.photos = data.photos;
               if (Array.isArray(data.notes)) store.notes = data.notes;
+              if (Array.isArray(data.vaultFiles)) store.vaultFiles = data.vaultFiles;
               if (data.honeymoonData) store.honeymoonData = data.honeymoonData;
               if (Array.isArray(data.ledgerFiles)) store.ledgerFiles = data.ledgerFiles;
               store.save();
@@ -5397,12 +5679,13 @@
     const resetDemoBtn = document.getElementById('btn-reset-demo');
     if (resetDemoBtn) {
       resetDemoBtn.addEventListener('click', () => {
-        if (confirm('정말 삭제하시겠습니까?')) {
+        if (confirm('모든 데이터를 초기화하시겠습니까?')) {
           store.tasks = [];
           store.categories = DEFAULT_CATEGORIES;
           store.wishlist = [];
           store.photos = [];
           store.notes = [];
+          store.vaultFiles = [];
           store.ledgerFiles = [];
           store.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
           store.save();
@@ -5414,6 +5697,80 @@
       });
     }
   }
+
+  // =========================================================================
+  // 8.5. Firebase Storage & Usage Calculation Engine
+  // =========================================================================
+  function calculateFirebaseStorageUsage() {
+    // Firebase Realtime Database Free Spark Plan Quota: 1 GB = 1,073,741,824 Bytes
+    const MAX_FIREBASE_SPARK_BYTES = 1024 * 1024 * 1024;
+
+    function getByteLen(obj) {
+      if (!obj) return 0;
+      try {
+        const str = (typeof obj === 'string') ? obj : JSON.stringify(obj);
+        if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str).length;
+        if (typeof Blob !== 'undefined') return new Blob([str]).size;
+        return encodeURIComponent(str).replace(/%[A-F\d]{2}/g, 'U').length;
+      } catch (e) {
+        try {
+          const str = (typeof obj === 'string') ? obj : JSON.stringify(obj);
+          return str.length;
+        } catch (e2) {
+          return 0;
+        }
+      }
+    }
+
+    const tasksSize = getByteLen(store.tasks || []);
+    const notesSize = getByteLen(store.notes || []);
+    const wishlistSize = getByteLen(store.wishlist || []);
+    const photosSize = getByteLen(store.photos || []);
+    const ledgerSize = getByteLen({ data: store.honeymoonData || {}, files: store.ledgerFiles || [] });
+    const vaultSize = getByteLen(store.vaultFiles || []);
+    const categoriesSize = getByteLen(store.categories || []);
+
+    let treasureSize = 0;
+    try {
+      const rawT = localStorage.getItem('zentask_treasures');
+      if (rawT) treasureSize = getByteLen(rawT);
+    } catch (e) {}
+
+    const totalUsedBytes = tasksSize + notesSize + wishlistSize + photosSize + ledgerSize + vaultSize + categoriesSize + treasureSize;
+    const usagePercentage = (totalUsedBytes / MAX_FIREBASE_SPARK_BYTES) * 100;
+    const remainingBytes = Math.max(0, MAX_FIREBASE_SPARK_BYTES - totalUsedBytes);
+
+    function formatBytesPrecise(bytes) {
+      if (bytes === 0) return '0 B';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+
+    return {
+      totalUsedBytes,
+      maxBytes: MAX_FIREBASE_SPARK_BYTES,
+      formattedUsed: formatBytesPrecise(totalUsedBytes),
+      formattedMax: '1.0 GB (1,024 MB)',
+      formattedRemaining: formatBytesPrecise(remainingBytes),
+      percentage: usagePercentage,
+      percentageStr: usagePercentage < 0.001 
+        ? usagePercentage.toFixed(4) + '%' 
+        : (usagePercentage < 0.01 ? usagePercentage.toFixed(3) + '%' : usagePercentage.toFixed(2) + '%'),
+      breakdown: {
+        vault: { label: '📂 파일보관함', bytes: vaultSize, formatted: formatBytesPrecise(vaultSize) },
+        photos: { label: '📸 사진첩', bytes: photosSize, formatted: formatBytesPrecise(photosSize) },
+        notes: { label: '✏️ 끄적끄적 메모', bytes: notesSize, formatted: formatBytesPrecise(notesSize) },
+        tasks: { label: '📋 할 일 & 일정', bytes: tasksSize, formatted: formatBytesPrecise(tasksSize) },
+        ledger: { label: '💰 가계부 & 엑셀', bytes: ledgerSize, formatted: formatBytesPrecise(ledgerSize) },
+        wishlist: { label: '🎁 위시리스트', bytes: wishlistSize, formatted: formatBytesPrecise(wishlistSize) },
+        treasures: { label: '💎 보물 지식', bytes: treasureSize, formatted: formatBytesPrecise(treasureSize) }
+      }
+    };
+  }
+
+  window.calculateFirebaseStorageUsage = calculateFirebaseStorageUsage;
 
   // =========================================================================
   // 9. Application Bootstrap

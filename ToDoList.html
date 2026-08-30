@@ -946,7 +946,7 @@
 
           <!-- Dropzone -->
           <div class="file-upload-card" id="vault-dropzone">
-            <input type="file" id="vault-file-hidden-input" style="display: none;">
+            <input type="file" id="vault-file-hidden-input" multiple style="display: none;">
             <div class="file-upload-icon">📂</div>
             <div class="file-upload-title">이곳을 클릭하거나 파일을 끌어다 놓으세요</div>
             <div class="file-upload-desc">엑셀(.xlsx, .csv), 메모장(.txt), PDF, 이미지 등 모든 파일 지원 (집/회사 어디서나 다운로드)</div>
@@ -1433,12 +1433,27 @@
           </button>
         </div>
 
+        <!-- Firebase Manual Cloud Backup Status -->
+        <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.85rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+            <h4 style="font-size: 0.88rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 0.3rem;">
+              <span>🕒</span> <span>Firebase 클라우드 백업 현황</span>
+            </h4>
+            <button type="button" id="btn-refresh-cloud-backups" class="btn btn-sm" style="padding: 2px 8px; font-size: 0.72rem; background: rgba(0,0,0,0.05);">🔄 새로고침</button>
+          </div>
+          <div id="cloud-backups-list-container" style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <div style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 0.75rem 0;">
+              Firebase 클라우드 백업을 불러오는 중... ☁️
+            </div>
+          </div>
+        </div>
+
         <div>
-          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">데이터 복원 (가져오기)</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">백업한 JSON 파일을 업로드하여 복원합니다.</p>
+          <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">PC 백업 파일 복원 (가져오기)</h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">컴퓨터에 저장해 둔 JSON 백업 파일을 업로드하여 복원합니다.</p>
           <input type="file" id="import-file-input" accept=".json" style="display: none;">
           <button type="button" class="btn" style="width: 100%; background: rgba(0,0,0,0.05); color: var(--text-main);" onclick="document.getElementById('import-file-input').click()">
-            📂 백업 파일 불러오기
+            📂 PC 백업 파일 불러오기
           </button>
         </div>
 
@@ -1505,6 +1520,55 @@
           <h3>아직 등록된 보물이 없어요</h3>
           <p>새로운 개발 지식이나 꿀팁을 등록하여 나만의 보물 지식함을 채워보세요 ✨</p>
           <button class="btn btn-primary" id="btn-tr-empty-add">+ 첫 보물 추가하기</button>
+        </div>
+
+        <!-- Pagination Controls for Treasure Grid (6개 초과 시 1, 2, 3, 4 ... 페이지 넘김) -->
+        <div id="tr-pagination-container" class="tr-pagination-container" style="display: none;"></div>
+
+        <!-- Firebase Cloud Storage Usage Gauge & Percentage Dashboard -->
+        <div id="tr-storage-gauge-container" class="tr-storage-gauge-container">
+          <div class="tr-storage-gauge-card">
+            <div class="tr-storage-header">
+              <div class="tr-storage-title">
+                <span class="storage-icon" style="font-size: 1.25rem;">☁️</span>
+                <div>
+                  <strong>Firebase 실시간 클라우드 저장용량</strong>
+                  <span class="storage-badge-live">🟢 실시간 동기화 활성</span>
+                </div>
+              </div>
+              <div class="tr-storage-actions">
+                <button type="button" class="btn-refresh-storage" id="btn-refresh-storage-gauge" title="클라우드 저장 공간 다시 계산">
+                  <span>🔄</span> <span>실시간 새로고침</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="storage-bar-wrapper">
+              <div class="storage-bar-track">
+                <div class="storage-bar-fill" style="width: 1%;"></div>
+              </div>
+            </div>
+
+            <div class="storage-meta-row">
+              <div class="storage-usage-stats">
+                <span class="usage-primary"><strong>실시간 계산 중...</strong> / 1.0 GB (1,024 MB)</span>
+                <span class="usage-percentage">(안전 보관 중)</span>
+              </div>
+              <div class="storage-remaining">
+                <span>남은 무료 용량: <strong>1,024 MB</strong></span>
+              </div>
+            </div>
+
+            <div class="storage-breakdown-chips">
+              <span class="breakdown-chip">📂 파일보관함</span>
+              <span class="breakdown-chip">📸 사진첩</span>
+              <span class="breakdown-chip">✏️ 끄적끄적 메모</span>
+              <span class="breakdown-chip">📋 할 일/일정</span>
+              <span class="breakdown-chip">💰 가계부</span>
+              <span class="breakdown-chip">💎 보물 지식</span>
+              <span class="breakdown-chip">🎁 위시리스트</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

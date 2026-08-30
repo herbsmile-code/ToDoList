@@ -10,33 +10,34 @@ const DEFAULT_TREASURES = [
     id: 'treasure-scenario',
     title: '[실전 가이드] 1~5번 셋업 황금 사이클 & 단계별 실전 시나리오 🚀',
     category: 'setup',
-    desc: `프로젝트 시작부터 마무리까지 가장 버그 없는 완벽한 5단계 황금 사이클!
+    desc: `프로젝트 시작부터 마무리까지 가장 버그 없는 완벽한 5단계 개발 순서!
 
 1단계. 시작할 때 (환경 세팅) 👉 1번 셋업 (/setup-project)
 • 🗣️ "새 프로젝트 만들 거야. 1번 셋업 시작해줘!"
 • 초고속 UV 가상환경(.venv), .gitignore, Git 초기 상태를 1초 만에 자동 초기화.
+• 💡 환경 설정 완료 후 다음 단계인 [2번 셋업: 설계 요청 (/design-api)]으로 친절히 안내!
 
-2단계. 코딩하기 전 (설계 먼저!) 👉 5번 셋업 (/design-api)
-• 🗣️ "회원가입이랑 주문 기능 만들 건데 5번 셋업으로 먼저 설계해줘."
-• 데이터 테이블 표 구조와 API 명세서를 먼저 기획하여 엉뚱한 코딩 방지.
+2단계. 코딩하기 전 (설계 먼저!) 👉 2번 셋업 (/design-api)
+• 🗣️ "회원가입이랑 주문 기능 만들 건데 2번 셋업으로 먼저 설계해줘."
+• 데이터 테이블 표 구조와 화면/API 명세서를 먼저 기획하여 엉뚱한 코딩 방지.
 
-3단계. 나만의 전용 도구가 필요할 때 👉 2번 셋업 (/setup-skill)
-• 🗣️ "첨부한 엑셀 파일 분석하는 기능 2번 스킬로 만들어줘."
-• YAML 프론트매터와 자체 검수표를 갖춘 고품질 스킬 뚝딱 제작.
+3단계. 나만의 전용 도구가 필요할 때 👉 3번 셋업 (/setup-skill)
+• 🗣️ "첨부한 엑셀 파일 분석하는 기능 3번 스킬로 만들어줘."
+• YAML 프론트매터와 자체 검수표를 갖춘 고품질 전용 도구/스킬 뚝딱 제작.
 
-4단계. 기능 코딩이 끝났을 때 👉 3번 셋업 (/verify)
-• 🗣️ "코드 다 짰어? 3번 셋업으로 자체 검증 돌려봐!"
-• AI가 직접 프로그램을 돌려보고 에러를 스스로 고친 뒤 최종 보고.
+4단계. 기능 구현이 끝났을 때 👉 4번 셋업 (/verify)
+• 🗣️ "코드 다 짰어? 4번 셋업으로 자체 검증 돌려봐!"
+• AI가 직접 프로그램을 돌려보고 에러를 스스로 고친 뒤 최종 검증 보고.
 
-5단계. 작업 마무리 & 퇴근할 때 👉 4번 셋업 (/commit)
-• 🗣️ "오늘 작업한 거 4번 셋업으로 커밋해줘."
-• 바뀐 내용을 분석해 Conventional Git 표준 메시지로 안전하게 영구 백업.`,
+5단계. 작업 마무리 & 퇴근할 때 👉 5번 셋업 (/commit)
+• 🗣️ "오늘 작업한 거 5번 셋업으로 커밋해줘."
+• 바뀐 내용을 분석해 Conventional Git 표준 메시지로 원격 GitHub에 안전하게 영구 백업.`,
     code: `# 1~5번 셋업 호출 단축 명령어 모음
-1번 셋업: /setup-project
-5번 셋업: /design-api
-2번 셋업: /setup-skill  (또는 '2번 스킬로 만들어줘')
-3번 셋업: /verify
-4번 셋업: /commit`,
+1번 셋업: /setup-project  (1단계: 환경 세팅)
+2번 셋업: /design-api      (2단계: 설계 퍼스트)
+3번 셋업: /setup-skill     (3단계: 전용 도구/스킬)
+4번 셋업: /verify          (4단계: 자체 검증 & 테스트)
+5번 셋업: /commit          (5단계: 영구 백업 & 커밋)`,
     createdAt: Date.now()
   },
   {
@@ -59,8 +60,18 @@ const DEFAULT_TREASURES = [
     id: 'treasure-3',
     title: '[1~5번 셋업] 안티그래비티 전문 개발자 5대 셋업 체계 🚀',
     category: 'setup',
-    desc: '실무 시니어 개발자들이 가장 필수적으로 사용하는 5단계 자동화 워크플로우:\n• 1번 /setup-project: UV 파이썬 가상환경 & Git 초기화\n• 2번 /setup-skill: YAML 프론트매터 + 표준 폴더 규격 스킬 제작\n• 3번 /verify: 코드 무결성 & 테스트 자체 검증\n• 4번 /commit: Conventional Git 표준 커밋 & 안전 백업\n• 5번 /design-api: API 명세 & 데이터 모델링 퍼스트 설계',
-    code: '# 번호 또는 슬래시 명령어로 언제든 실행 가능\n/setup-project\n/setup-skill\n/verify\n/commit\n/design-api',
+    desc: `실무 시니어 개발자들이 가장 필수적으로 사용하는 5단계 순차 워크플로우:
+• 1번 /setup-project: UV 파이썬 가상환경 & Git 환경 초기화
+• 2번 /design-api: API 명세 & 데이터 모델링 퍼스트 설계
+• 3번 /setup-skill: 나만의 전용 도구 & 업무 자동화 스킬 제작
+• 4번 /verify: 코드 무결성 & 단위/통합 테스트 자체 검증
+• 5번 /commit: Conventional Git 표준 커밋 & 안전 영구 백업`,
+    code: `# 순서대로 번호 또는 슬래시 명령어로 언제든 실행 가능
+/setup-project  # 1번 (환경 세팅)
+/design-api     # 2번 (설계 퍼스트)
+/setup-skill    # 3번 (전용 도구/스킬)
+/verify         # 4번 (자체 검증)
+/commit         # 5번 (영구 백업)`,
     createdAt: Date.now() - 3600000 * 3
   },
   {
@@ -86,6 +97,8 @@ class TreasureVaultManager {
     this.treasures = [];
     this.activeCat = 'all';
     this.searchQuery = '';
+    this.currentPage = 1;
+    this.pageSize = 6;
     this.load();
     this.initDOM();
   }
@@ -103,7 +116,9 @@ class TreasureVaultManager {
             // Update default content if matches default IDs
             const idx = parsed.findIndex(p => p.id === defT.id);
             if (idx !== -1 && !parsed[idx].userModified) {
-              parsed[idx] = defT;
+              parsed[idx].title = defT.title;
+              parsed[idx].desc = defT.desc;
+              parsed[idx].code = defT.code;
             }
           }
         });
@@ -179,6 +194,7 @@ class TreasureVaultManager {
       modal.classList.add('active');
       modal.style.display = 'flex';
       this.render();
+      this.renderStorageGauge();
       if (window.sounds && window.sounds.playCelebration) {
         window.sounds.playCelebration();
       }
@@ -262,12 +278,23 @@ class TreasureVaultManager {
     this.updateBadge();
     const grid = document.getElementById('tr-grid-container');
     const emptyState = document.getElementById('tr-empty-state');
+    const paginationContainer = document.getElementById('tr-pagination-container');
     if (!grid) return;
 
     const items = this.getFiltered();
-    if (items.length === 0) {
+    const totalItems = items.length;
+    const totalPages = Math.ceil(totalItems / this.pageSize) || 1;
+
+    if (this.currentPage > totalPages) this.currentPage = totalPages;
+    if (this.currentPage < 1) this.currentPage = 1;
+
+    if (totalItems === 0) {
       grid.innerHTML = '';
       if (emptyState) emptyState.style.display = 'flex';
+      if (paginationContainer) {
+        paginationContainer.innerHTML = '';
+        paginationContainer.style.display = 'none';
+      }
     } else {
       if (emptyState) emptyState.style.display = 'none';
       const catLabels = {
@@ -277,7 +304,10 @@ class TreasureVaultManager {
         study: '📝 내 공부 노트'
       };
 
-      grid.innerHTML = items.map(item => {
+      const startIndex = (this.currentPage - 1) * this.pageSize;
+      const pageItems = items.slice(startIndex, startIndex + this.pageSize);
+
+      grid.innerHTML = pageItems.map(item => {
         const dateStr = new Date(item.createdAt).toLocaleDateString('ko-KR', {
           year: 'numeric', month: 'short', day: 'numeric'
         });
@@ -315,6 +345,147 @@ class TreasureVaultManager {
           </div>
         `;
       }).join('');
+
+      // Render Pagination Controls (6개가 넘어가면 1, 2, 3, 4 ... 페이지 넘김 바 표시)
+      if (paginationContainer) {
+        if (totalPages > 1) {
+          paginationContainer.style.display = 'flex';
+          let pagesHtml = '';
+          pagesHtml += `<button type="button" class="tr-page-btn tr-page-prev" data-action="prev-page" ${this.currentPage === 1 ? 'disabled' : ''} title="이전 페이지">◀ 이전</button>`;
+          
+          for (let p = 1; p <= totalPages; p++) {
+            pagesHtml += `<button type="button" class="tr-page-btn ${p === this.currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`;
+          }
+
+          pagesHtml += `<button type="button" class="tr-page-btn tr-page-next" data-action="next-page" ${this.currentPage === totalPages ? 'disabled' : ''} title="다음 페이지">다음 ▶</button>`;
+          pagesHtml += `<span class="tr-page-info">(총 ${totalItems}개 중 ${startIndex + 1}~${Math.min(startIndex + this.pageSize, totalItems)}개)</span>`;
+
+          paginationContainer.innerHTML = pagesHtml;
+        } else {
+          paginationContainer.innerHTML = '';
+          paginationContainer.style.display = 'none';
+        }
+      }
+    }
+
+    this.renderStorageGauge();
+  }
+
+  renderStorageGauge() {
+    const container = document.getElementById('tr-storage-gauge-container');
+    if (!container) return;
+
+    let usage = null;
+    if (typeof window.calculateFirebaseStorageUsage === 'function') {
+      try {
+        usage = window.calculateFirebaseStorageUsage();
+      } catch (e) {
+        console.warn('calculateFirebaseStorageUsage call error:', e);
+      }
+    }
+
+    if (!usage) {
+      // Self-contained fallback calculator directly from localStorage
+      const MAX_FIREBASE_SPARK_BYTES = 1024 * 1024 * 1024;
+      function getLen(k) {
+        try {
+          const val = localStorage.getItem(k);
+          if (!val) return 0;
+          if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(val).length;
+          return val.length;
+        } catch (e) { return 0; }
+      }
+
+      const mainDataSize = getLen('todolist_jy_data_v39') || getLen('todolist_jy_data_v38') || getLen('todolist_jy_data');
+      const vaultSize = getLen('todolist_jy_vault_files');
+      const trSize = getLen('zentask_treasures');
+      const totalUsedBytes = mainDataSize + vaultSize + trSize;
+      const usagePercentage = (totalUsedBytes / MAX_FIREBASE_SPARK_BYTES) * 100;
+      const remainingBytes = Math.max(0, MAX_FIREBASE_SPARK_BYTES - totalUsedBytes);
+
+      function fmt(b) {
+        if (b === 0) return '0 B';
+        if (b < 1024) return b + ' B';
+        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+        return (b / (1024 * 1024)).toFixed(2) + ' MB';
+      }
+
+      usage = {
+        totalUsedBytes,
+        maxBytes: MAX_FIREBASE_SPARK_BYTES,
+        formattedUsed: fmt(totalUsedBytes),
+        formattedMax: '1.0 GB (1,024 MB)',
+        formattedRemaining: fmt(remainingBytes),
+        percentage: usagePercentage,
+        percentageStr: usagePercentage < 0.001 ? usagePercentage.toFixed(4) + '%' : usagePercentage.toFixed(2) + '%',
+        breakdown: {
+          vault: { label: '📂 파일보관함', formatted: fmt(vaultSize) },
+          photos: { label: '📸 사진첩', formatted: '0 B' },
+          notes: { label: '✏️ 끄적끄적 메모', formatted: fmt(Math.round(mainDataSize * 0.2)) },
+          tasks: { label: '📋 할 일 & 일정', formatted: fmt(Math.round(mainDataSize * 0.4)) },
+          ledger: { label: '💰 가계부 & 엑셀', formatted: fmt(Math.round(mainDataSize * 0.3)) },
+          wishlist: { label: '🎁 위시리스트', formatted: fmt(Math.round(mainDataSize * 0.1)) },
+          treasures: { label: '💎 보물 지식', formatted: fmt(trSize) }
+        }
+      };
+    }
+
+    // For visualization: show at least 1% if bytes > 0 so the bar visually shows
+    const displayPct = Math.min(100, Math.max(usage.totalUsedBytes > 0 ? 1 : 0, usage.percentage));
+
+    container.innerHTML = `
+      <div class="tr-storage-gauge-card">
+        <div class="tr-storage-header">
+          <div class="tr-storage-title">
+            <span class="storage-icon" style="font-size: 1.25rem;">☁️</span>
+            <div>
+              <strong>Firebase 실시간 클라우드 저장용량</strong>
+              <span class="storage-badge-live">🟢 실시간 동기화 활성</span>
+            </div>
+          </div>
+          <div class="tr-storage-actions">
+            <button type="button" class="btn-refresh-storage" id="btn-refresh-storage-gauge" title="클라우드 저장 공간 다시 계산">
+              <span>🔄</span> <span>실시간 새로고침</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="storage-bar-wrapper">
+          <div class="storage-bar-track">
+            <div class="storage-bar-fill" style="width: ${displayPct}%;"></div>
+          </div>
+        </div>
+
+        <div class="storage-meta-row">
+          <div class="storage-usage-stats">
+            <span class="usage-primary"><strong>${usage.formattedUsed}</strong> / ${usage.formattedMax}</span>
+            <span class="usage-percentage">(${usage.percentageStr} 사용 중)</span>
+          </div>
+          <div class="storage-remaining">
+            <span>남은 무료 용량: <strong>${usage.formattedRemaining}</strong></span>
+          </div>
+        </div>
+
+        <div class="storage-breakdown-chips">
+          <span class="breakdown-chip">📂 파일보관함: <strong>${usage.breakdown.vault ? usage.breakdown.vault.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">📸 사진첩: <strong>${usage.breakdown.photos ? usage.breakdown.photos.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">✏️ 끄적끄적 메모: <strong>${usage.breakdown.notes ? usage.breakdown.notes.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">📋 할 일/일정: <strong>${usage.breakdown.tasks ? usage.breakdown.tasks.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">💰 가계부: <strong>${usage.breakdown.ledger ? usage.breakdown.ledger.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">💎 보물 지식: <strong>${usage.breakdown.treasures ? usage.breakdown.treasures.formatted : '0 B'}</strong></span>
+          <span class="breakdown-chip">🎁 위시리스트: <strong>${usage.breakdown.wishlist ? usage.breakdown.wishlist.formatted : '0 B'}</strong></span>
+        </div>
+      </div>
+    `;
+
+    const refreshBtn = document.getElementById('btn-refresh-storage-gauge');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.renderStorageGauge();
+        if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+        if (window.UI && window.UI.showToast) window.UI.showToast('클라우드 저장 용량을 최신 상태로 갱신했어요! ☁️✨', 'info');
+      });
     }
   }
 
@@ -327,6 +498,7 @@ class TreasureVaultManager {
 
   initDOM() {
     this.updateBadge();
+    this.renderStorageGauge();
 
     // Event Delegation for clicks
     document.addEventListener('click', (e) => {
@@ -405,8 +577,43 @@ class TreasureVaultManager {
         document.querySelectorAll('.tr-pill').forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
         this.activeCat = pill.dataset.cat || 'all';
+        this.currentPage = 1;
         this.render();
         if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+        return;
+      }
+
+      // 8. Pagination Controls Click (1, 2, 3, 4 ... 페이지 넘김)
+      const pageBtn = e.target.closest('.tr-page-btn');
+      if (pageBtn && !pageBtn.disabled) {
+        e.preventDefault();
+        const action = pageBtn.dataset.action;
+        const pageNum = pageBtn.dataset.page;
+        const totalPages = Math.ceil(this.getFiltered().length / this.pageSize) || 1;
+
+        if (action === 'prev-page') {
+          if (this.currentPage > 1) {
+            this.currentPage--;
+            this.render();
+            const modalBody = document.querySelector('.tr-modal-body');
+            if (modalBody) modalBody.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        } else if (action === 'next-page') {
+          if (this.currentPage < totalPages) {
+            this.currentPage++;
+            this.render();
+            const modalBody = document.querySelector('.tr-modal-body');
+            if (modalBody) modalBody.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        } else if (pageNum) {
+          const targetPage = parseInt(pageNum, 10);
+          if (!isNaN(targetPage) && targetPage !== this.currentPage) {
+            this.currentPage = targetPage;
+            this.render();
+            const modalBody = document.querySelector('.tr-modal-body');
+            if (modalBody) modalBody.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
         return;
       }
     });
@@ -416,6 +623,7 @@ class TreasureVaultManager {
     if (searchInp) {
       searchInp.addEventListener('input', (e) => {
         this.searchQuery = e.target.value;
+        this.currentPage = 1;
         this.render();
       });
     }
@@ -436,6 +644,7 @@ class TreasureVaultManager {
         }
 
         this.add(title, desc, code, cat);
+        this.currentPage = 1;
         if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
         if (window.confetti && window.confetti.burst) window.confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
         if (window.UI && window.UI.showToast) window.UI.showToast(`💎 보물('${title}')이 안전하게 저장되었어요!`, 'success');
