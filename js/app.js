@@ -5597,34 +5597,6 @@
       });
     }
 
-    // Settings Data Export (Firebase Cloud Snapshot Only)
-    const exportBtn = document.getElementById('btn-export-data');
-    if (exportBtn) {
-      exportBtn.addEventListener('click', async () => {
-        const origBtnText = exportBtn.innerHTML;
-        exportBtn.disabled = true;
-        exportBtn.innerHTML = '<span>⏳</span> <span>Firebase 클라우드 백업 저장 중...</span>';
-
-        try {
-          if (cloudSync.spaceId && cloudSync.pin) {
-            await cloudSync.createManualCloudBackup();
-            try { sounds.playAdd(); } catch (err) {}
-            UI.showToast('Firebase 클라우드 백업이 안전하게 저장되었어요! ☁️✨', 'success');
-            UI.renderCloudBackupsList();
-          } else {
-            UI.showToast('클라우드 동기화 로그인(스페이스 ID & PIN) 후 백업할 수 있어요 🔐', 'info');
-            UI.openCloudModal();
-          }
-        } catch (e) {
-          console.error('Manual cloud backup failed:', e);
-          UI.showToast('클라우드 백업 저장 실패: ' + (e.message || e), 'danger');
-        } finally {
-          exportBtn.disabled = false;
-          exportBtn.innerHTML = origBtnText;
-        }
-      });
-    }
-
     // Settings: Immediate Cloud Backup & Upload to Firebase
     const exportBtn = document.getElementById('btn-export-data');
     if (exportBtn) {
