@@ -951,8 +951,9 @@
       this.activePriority = 'all';
       this.activeWishCat = 'all';
       this.selectedVacationYear = '2026';
-      this.selectedVacationMonth = 'all';
-      this.sidebarMenuOrder = ['personal', 'work', 'vacation', 'photos', 'notes', 'ledger', 'wishlist', 'sites', 'vault'];
+      this.selectedVacationMonth = String(new Date().getMonth() + 1); // 이번 달 (8월) 자동 선택
+      this.isReorderMode = false; // 순서변경 모드 토글
+      this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'vault'];
       this.searchQuery = '';
       this.sortBy = 'dueDate';
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
@@ -1029,9 +1030,10 @@
         }
       });
 
-      // Sidebar menu items order
-      const defaultOrder = ['personal', 'work', 'vacation', 'photos', 'notes', 'ledger', 'wishlist', 'sites', 'vault'];
-      let finalOrder = userSidebarOrder ? userSidebarOrder.filter(id => defaultOrder.includes(id)) : defaultOrder;
+      // Sidebar menu items order with 3 dividers
+      const defaultOrder = ['personal', 'work', 'divider-1', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'vault'];
+      let finalOrder = userSidebarOrder ? userSidebarOrder.slice() : defaultOrder;
+      // Ensure all essential default items exist
       defaultOrder.forEach(id => {
         if (!finalOrder.includes(id)) finalOrder.push(id);
       });
@@ -1042,6 +1044,7 @@
       this.notes = combinedNotes;
       this.ledgerFiles = combinedLedgerFiles;
       this.categories = finalCategories;
+      this.sidebarMenuOrder = finalOrder;
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.vacations = userVacations;
       this.totalVacationDays = userTotalVacationDays;
@@ -1061,6 +1064,7 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
           tasks: this.tasks,
           categories: this.categories,
+          sidebarMenuOrder: this.sidebarMenuOrder,
           wishlist: this.wishlist,
           photos: this.photos,
           notes: this.notes,
@@ -1317,13 +1321,17 @@
     getVacationStats() {
       const total = Number(this.totalVacationDays) || 15.0;
       let used = 0;
+      let holidayCount = 0;
       this.vacations.forEach(v => {
-        if (v.type === 'holiday' || v.amount === 0) return; // 휴가는 연차수 차감 제외 (0일)
+        if (v.type === 'holiday' || v.amount === 0) {
+          holidayCount += 1;
+          return; // 휴가는 연차수 차감 제외 (0일)
+        }
         used += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
       });
       const remain = Math.max(0, total - used);
       const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
-      return { total, used, remain, pct };
+      return { total, used, remain, pct, holidayCount };
     }
 
     // --- Sites / Bookmarks Methods ---
@@ -1547,8 +1555,28 @@
         if (vCount) vCount.textContent = vaultFiles.length;
       } catch (e) {}
 
-      // Render All Categories & Feature Menus in Sidebar (Desktop - 100% Reorderable)
+      // Render All Categories, Feature Menus & 3 Dividers in Sidebar
       const catContainer = document.getElementById('category-nav-list');
+      const reorderBtn = document.getElementById('btn-toggle-reorder-menu');
+      const reorderIcon = document.getElementById('reorder-btn-icon');
+      const reorderText = document.getElementById('reorder-btn-text');
+
+      if (reorderBtn) {
+        if (store.isReorderMode) {
+          reorderBtn.style.background = '#10b981';
+          reorderBtn.style.color = '#ffffff';
+          reorderBtn.style.borderColor = '#059669';
+          if (reorderIcon) reorderIcon.textContent = '✓';
+          if (reorderText) reorderText.textContent = '완료';
+        } else {
+          reorderBtn.style.background = 'rgba(255, 107, 139, 0.1)';
+          reorderBtn.style.color = 'var(--primary)';
+          reorderBtn.style.borderColor = 'rgba(255, 107, 139, 0.25)';
+          if (reorderIcon) reorderIcon.textContent = '✏️';
+          if (reorderText) reorderText.textContent = '순서변경';
+        }
+      }
+
       if (catContainer) {
         let vaultCount = 0;
         try {
@@ -1568,24 +1596,66 @@
           'vault': { name: '파일 보관함', icon: '📁', count: vaultCount }
         };
 
-        catContainer.innerHTML = store.sidebarMenuOrder.map(id => {
+        let itemsHTML = '';
+        if (store.isReorderMode) {
+          itemsHTML += `
+            <li class="reorder-info-banner" style="padding: 0.4rem 0.6rem; margin-bottom: 0.35rem; background: rgba(255,107,139,0.08); border-radius: 8px; border: 1px dashed var(--primary); font-size: 0.75rem; color: var(--primary); font-weight: 700; text-align: center; list-style: none;">
+              ✨ 항목을 위아래로 끌어 순서를 변경하세요
+            </li>
+          `;
+        }
+
+        itemsHTML += store.sidebarMenuOrder.map(id => {
+          const isDivider = id.startsWith('divider');
+          if (isDivider) {
+            if (store.isReorderMode) {
+              return `
+                <li class="nav-item category-drag-item divider-reorder-item" data-cat-id="${id}" draggable="true" style="padding: 0.35rem 0.5rem; background: rgba(0,0,0,0.03); border: 1px dashed var(--border-color); margin: 0.25rem 0; border-radius: 6px; cursor: grab;">
+                  <div class="nav-item-left" style="width: 100%; justify-content: space-between;">
+                    <span class="category-drag-handle" style="display: inline-block;">⋮⋮</span>
+                    <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 700; letter-spacing: 2px;">────── 구분선 ──────</span>
+                    <span style="font-size: 0.7rem; color: var(--text-dim);">☰</span>
+                  </div>
+                </li>
+              `;
+            } else {
+              return `
+                <li class="sidebar-nav-divider" data-cat-id="${id}" style="height: 1px; background: var(--border-color); margin: 0.45rem 0.3rem; opacity: 0.75; list-style: none;"></li>
+              `;
+            }
+          }
+
           const meta = itemMeta[id] || { name: id, icon: '📌', count: 0 };
           const isActive = store.activeFilter === id ? 'active' : '';
           const iconHTML = meta.icon 
             ? `<span>${meta.icon}</span>` 
             : `<span class="category-dot" style="background-color: ${meta.color || '#ff6b8b'}; color: ${meta.color || '#ff6b8b'};"></span>`;
 
-          return `
-            <li class="nav-item category-drag-item ${isActive}" data-cat-id="${id}" data-filter="${id}" onclick="window.selectCategoryFilter('${id}', event)">
-              <div class="nav-item-left">
-                <span class="category-drag-handle" title="위아래로 드래그하여 순서 변경" onclick="event.stopPropagation()">⋮⋮</span>
-                ${iconHTML}
-                <span class="category-title-text">${meta.name}</span>
-              </div>
-              <span class="nav-count" id="nav-count-${id}">${meta.count}</span>
-            </li>
-          `;
+          if (store.isReorderMode) {
+            return `
+              <li class="nav-item category-drag-item reorder-active ${isActive}" data-cat-id="${id}" data-filter="${id}" draggable="true" style="cursor: grab;">
+                <div class="nav-item-left">
+                  <span class="category-drag-handle" style="display: inline-block;">⋮⋮</span>
+                  ${iconHTML}
+                  <span class="category-title-text">${meta.name}</span>
+                </div>
+                <span class="nav-count" id="nav-count-${id}">${meta.count}</span>
+              </li>
+            `;
+          } else {
+            return `
+              <li class="nav-item ${isActive}" data-cat-id="${id}" data-filter="${id}" onclick="window.selectCategoryFilter('${id}', event)" draggable="false">
+                <div class="nav-item-left">
+                  ${iconHTML}
+                  <span class="category-title-text">${meta.name}</span>
+                </div>
+                <span class="nav-count" id="nav-count-${id}">${meta.count}</span>
+              </li>
+            `;
+          }
         }).join('');
+
+        catContainer.innerHTML = itemsHTML;
       }
 
       this.updateNavHighlight();
@@ -2998,6 +3068,7 @@
       const totalEl = document.getElementById('vacation-stat-total');
       const usedEl = document.getElementById('vacation-stat-used');
       const remainEl = document.getElementById('vacation-stat-remain');
+      const holidayEl = document.getElementById('vacation-stat-holiday');
       const barEl = document.getElementById('vacation-progress-bar');
       const textEl = document.getElementById('vacation-progress-text');
       const listEl = document.getElementById('vacation-history-list');
@@ -3008,10 +3079,15 @@
       if (totalEl) totalEl.innerHTML = `${stats.total.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
       if (usedEl) usedEl.innerHTML = `${stats.used.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
       if (remainEl) remainEl.innerHTML = `${stats.remain.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
+      if (holidayEl) holidayEl.innerHTML = `${stats.holidayCount}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">건</span>`;
       if (barEl) barEl.style.width = `${stats.pct}%`;
       if (textEl) textEl.textContent = `${stats.pct}% (${stats.used.toFixed(1)}일 / ${stats.total.toFixed(1)}일) 사용 완료`;
 
-      // 1. Populate Year Select Options dynamically from data
+      // 1. Current Selected Filters (이번 달 기본 선택)
+      const currentSelectedYear = store.selectedVacationYear || '2026';
+      const currentSelectedMonth = store.selectedVacationMonth || String(new Date().getMonth() + 1);
+
+      // 2. Populate Year Select Options dynamically from data
       if (yearSelect) {
         const yearsSet = new Set(['2026', '2025']);
         (store.vacations || []).forEach(v => {
@@ -3020,13 +3096,11 @@
             if (y) yearsSet.add(y);
           }
         });
-        const currentSelectedYear = store.selectedVacationYear || '2026';
         const sortedYears = Array.from(yearsSet).sort().reverse();
-        yearSelect.innerHTML = `<option value="all">전체 년도</option>` + sortedYears.map(y => `<option value="${y}" ${y === currentSelectedYear ? 'selected' : ''}>${y}년</option>`).join('');
+        yearSelect.innerHTML = `<option value="all" ${currentSelectedYear === 'all' ? 'selected' : ''}>전체 년도</option>` + sortedYears.map(y => `<option value="${y}" ${y === currentSelectedYear ? 'selected' : ''}>${y}년</option>`).join('');
       }
 
-      // 2. Update Month Pills Active Class
-      const currentSelectedMonth = store.selectedVacationMonth || 'all';
+      // 3. Update Month Pills Active Class
       document.querySelectorAll('#vacation-month-pills .vac-m-pill').forEach(pill => {
         if (pill.dataset.vMonth === currentSelectedMonth) {
           pill.classList.add('active');
@@ -3035,7 +3109,7 @@
         }
       });
 
-      // 3. Filter Vacations by Year & Month
+      // 4. Filter Vacations by Year & Month
       let filtered = store.vacations || [];
       if (currentSelectedYear !== 'all') {
         filtered = filtered.filter(v => v.date && v.date.startsWith(currentSelectedYear));
@@ -3049,15 +3123,20 @@
         });
       }
 
-      // Calculate filtered period used days
+      // Calculate filtered period stats
       let periodUsedDays = 0;
+      let periodHolidayCount = 0;
       filtered.forEach(v => {
-        if (v.type === 'holiday' || v.amount === 0) return;
+        if (v.type === 'holiday' || v.amount === 0) {
+          periodHolidayCount += 1;
+          return;
+        }
         periodUsedDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
       });
 
       if (countEl) {
-        countEl.textContent = `총 ${filtered.length}건 (${periodUsedDays.toFixed(1)}일 사용)`;
+        const holidayNote = periodHolidayCount > 0 ? ` (휴가 ${periodHolidayCount}건)` : '';
+        countEl.textContent = `총 ${filtered.length}건 / 연차 ${periodUsedDays.toFixed(1)}일 사용${holidayNote}`;
       }
 
       if (!listEl) return;
@@ -3676,20 +3755,38 @@
         }
       });
 
-      // Desktop: Enable draggable only when pressing down on the handle icon (⋮⋮)
-      catNavList.addEventListener('mousedown', (e) => {
-        const handle = e.target.closest('.category-drag-handle');
-        const item = e.target.closest('.category-drag-item');
-        if (handle && item) {
-          item.setAttribute('draggable', 'true');
+      // Reorder Mode Toggle Button Click
+      document.addEventListener('click', (e) => {
+        const reorderBtn = e.target.closest('#btn-toggle-reorder-menu');
+        if (reorderBtn) {
+          store.isReorderMode = !store.isReorderMode;
+          UI.renderSidebar();
+          if (store.isReorderMode) {
+            UI.showToast('메뉴와 구분선을 원하는 위치로 드래그하세요 ✨', 'info');
+          } else {
+            store.save();
+            UI.showToast('메뉴 순서 변경이 완료되었어요! 💖', 'success');
+          }
         }
       });
 
-      document.addEventListener('mouseup', () => {
-        document.querySelectorAll('.category-drag-item').forEach(el => el.setAttribute('draggable', 'false'));
+      // Click to select category/menu
+      catNavList.addEventListener('click', (e) => {
+        if (store.isReorderMode) return; // 순서변경 모드 중에는 클릭 이동 방지
+        if (Date.now() < suppressNavClickUntil) return;
+        if (isDraggingCategory) return;
+        const item = e.target.closest('.nav-item');
+        if (item && item.dataset.filter && !item.classList.contains('sidebar-nav-divider')) {
+          window.selectCategoryFilter(item.dataset.filter);
+        }
       });
 
+      // Desktop: Drag and drop enabled only in Reorder Mode
       catNavList.addEventListener('dragstart', (e) => {
+        if (!store.isReorderMode) {
+          e.preventDefault();
+          return;
+        }
         const item = e.target.closest('.category-drag-item');
         if (!item) return;
         isDraggingCategory = true;
@@ -3703,16 +3800,15 @@
         const item = e.target.closest('.category-drag-item');
         if (item) {
           item.classList.remove('dragging');
-          item.setAttribute('draggable', 'false');
         }
         document.querySelectorAll('.category-drag-item').forEach(el => {
           el.classList.remove('drag-over-top', 'drag-over-bottom');
-          el.setAttribute('draggable', 'false');
         });
         setTimeout(() => { isDraggingCategory = false; }, 100);
       });
 
       catNavList.addEventListener('dragover', (e) => {
+        if (!store.isReorderMode || !draggedCatId) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         const targetItem = e.target.closest('.category-drag-item');
@@ -3737,6 +3833,7 @@
       });
 
       catNavList.addEventListener('drop', (e) => {
+        if (!store.isReorderMode) return;
         e.preventDefault();
         suppressNavClickUntil = Date.now() + 250;
         const targetItem = e.target.closest('.category-drag-item');
@@ -3754,24 +3851,16 @@
           store.sidebarMenuOrder.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, movedId);
           store.save();
           UI.renderSidebar();
-          UI.showToast('메뉴 순서가 변경되었어요! 🏷️✨', 'info');
         }
         draggedCatId = null;
         document.querySelectorAll('.category-drag-item').forEach(el => {
           el.classList.remove('drag-over-top', 'drag-over-bottom');
-          el.setAttribute('draggable', 'false');
         });
       });
 
-      // 2. Mobile Touch Drag & Drop (Only when dragging handle icon)
+      // 2. Mobile Touch Drag & Drop (Only in Reorder Mode)
       catNavList.addEventListener('touchstart', (e) => {
-        const handle = e.target.closest('.category-drag-handle');
-        if (!handle) {
-          draggedCatId = null;
-          touchTargetItem = null;
-          touchMoved = false;
-          return;
-        }
+        if (!store.isReorderMode) return;
         const item = e.target.closest('.category-drag-item');
         if (!item) return;
         draggedCatId = item.dataset.catId;
@@ -3781,7 +3870,7 @@
       }, { passive: true });
 
       catNavList.addEventListener('touchmove', (e) => {
-        if (!draggedCatId) return;
+        if (!store.isReorderMode || !draggedCatId) return;
         const touch = e.touches[0];
         if (Math.abs(touch.clientY - touchStartY) > 6) {
           touchMoved = true;

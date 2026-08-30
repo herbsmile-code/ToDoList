@@ -4558,4 +4558,33 @@ body::after {
   font-weight: 800;
 }
 
+/* Sidebar Nav Divider */
+.sidebar-nav-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 0.45rem 0.3rem;
+  opacity: 0.75;
+  list-style: none;
+}
+
+.divider-reorder-item {
+  transition: all 0.2s ease;
+}
+
+.divider-reorder-item:hover {
+  background: rgba(255, 107, 139, 0.08) !important;
+  border-color: var(--primary) !important;
+}
+
+/* Reorder Mode Active Styles */
+.nav-item.reorder-active {
+  user-select: none;
+  touch-action: none;
+}
+
+.nav-item.reorder-active:hover {
+  transform: translateX(2px);
+  background: rgba(255, 107, 139, 0.08);
+}
+
 

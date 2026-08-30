@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=8.4">
-  <link rel="stylesheet" href="css/animations.css?v=8.4">
+  <link rel="stylesheet" href="css/style.css?v=8.5">
+  <link rel="stylesheet" href="css/animations.css?v=8.5">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -82,9 +82,9 @@
 
       <div class="header-actions">
         <!-- Instant Reload Button for Mobile & PC Cache Refresh -->
-        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.4)" onclick="window.location.reload(true);">
+        <button id="btn-force-reload" class="btn" style="padding: 0.42rem 0.7rem; font-size: 0.76rem; background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; cursor: pointer; border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 10px;" title="최신 버전으로 즉시 새로고침 (v8.5)" onclick="window.location.reload(true);">
           <span>🔄</span>
-          <span>v8.4</span>
+          <span>v8.5</span>
         </button>
 
         <!-- Cloud Sync Status Badge (동기화 / 비동기화) -->
@@ -164,15 +164,17 @@
           </ul>
         </div>
 
-        <!-- Category Tag Filters, Notes, Ledger, Wishlist & File Vault -->
-        <!-- Category & Feature Menu Navigation (All Reorderable by Drag & Drop) -->
+        <!-- Category & Feature Menu Navigation (Reorder Mode Support) -->
         <div class="sidebar-card">
-          <div class="sidebar-title">
-            <span>카테고리 & 기능 메뉴 🏷️</span>
-            <span class="sidebar-hint">드래그로 순서 변경</span>
+          <div class="sidebar-title" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>카테고리 & 메뉴 🏷️</span>
+            <button type="button" id="btn-toggle-reorder-menu" class="sidebar-reorder-btn" style="background: rgba(255, 107, 139, 0.1); color: var(--primary); border: 1px solid rgba(255, 107, 139, 0.25); border-radius: 8px; font-size: 0.72rem; font-weight: 800; padding: 2px 7px; cursor: pointer; display: flex; align-items: center; gap: 3px;" title="카테고리 메뉴 및 구분선 순서 변경">
+              <span id="reorder-btn-icon">✏️</span>
+              <span id="reorder-btn-text">순서변경</span>
+            </button>
           </div>
           <ul class="nav-list" id="category-nav-list">
-            <!-- Dynamically populated all categories & feature menus -->
+            <!-- Dynamically populated all categories, feature menus & dividers -->
           </ul>
         </div>
 
@@ -468,7 +470,7 @@
               <span id="vacation-year-badge" style="font-size: 0.76rem; font-weight: 800; color: var(--primary); background: rgba(255,107,139,0.12); padding: 3px 8px; border-radius: 6px;">2026 기준</span>
             </div>
 
-            <div class="vacation-stats-grid">
+            <div class="vacation-stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
               <div class="vacation-stat-box">
                 <div class="vacation-stat-title">
                   <span>총 발생 연차</span>
@@ -491,6 +493,14 @@
                   <span>🌸</span>
                 </div>
                 <div class="vacation-stat-num highlight-remain" id="vacation-stat-remain">15.0<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span></div>
+              </div>
+
+              <div class="vacation-stat-box" style="background: rgba(32, 201, 151, 0.08); border-color: rgba(32, 201, 151, 0.25);">
+                <div class="vacation-stat-title">
+                  <span style="color: #0ca678; font-weight: 800;">휴가 사용 (별도)</span>
+                  <span>🏖️</span>
+                </div>
+                <div class="vacation-stat-num" id="vacation-stat-holiday" style="color: #0ca678;">0<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">건</span></div>
               </div>
             </div>
 
@@ -1634,7 +1644,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=8.4"></script>
-  <script src="js/treasure.js?v=8.4"></script>
+  <script src="js/app.js?v=8.5"></script>
+  <script src="js/treasure.js?v=8.5"></script>
 </body>
 </html>
