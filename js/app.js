@@ -1597,6 +1597,10 @@
 
     // --- Task Methods ---
     addTask(data) {
+      let defaultCat = 'personal';
+      if (this.activeFilter === 'work') defaultCat = 'work';
+      else if (this.activeFilter === 'personal') defaultCat = 'personal';
+
       const newTask = {
         id: 'task-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
         title: (data.title || '').trim(),
@@ -1604,14 +1608,14 @@
         description: (data.description || '').trim(),
         status: data.status || 'todo',
         priority: data.priority || 'medium',
-        category: data.category || (this.categories[0] ? this.categories[0].id : 'routine'),
+        category: data.category || defaultCat,
         dueDate: data.dueDate || TODAY_STR,
         pinned: !!data.pinned,
         subtasks: data.subtasks || [],
         createdAt: Date.now()
       };
       this.tasks.unshift(newTask);
-      this.save();
+      this.save(true);
       return newTask;
     }
 
@@ -5724,16 +5728,21 @@
     const val = input.value.trim();
     if (!val) return;
 
+    const currentCat = (store.activeFilter === 'work') ? 'work' : 'personal';
+
     store.addTask({
       title: val,
       type: 'todo',
+      category: currentCat,
       dueDate: TODAY_STR
     });
 
     input.value = '';
     sounds.playAdd();
-    UI.showToast('새 일정이 등록되었어요! ✨', 'success');
+    const catName = currentCat === 'work' ? '업무 💼' : '개인 🌸';
+    UI.showToast(`'${catName}'에 새로운 할 일이 등록되었어요! ✨`, 'success');
     UI.renderTasks();
+    UI.renderSidebar();
   }
 
   function handleQuickNote() {
@@ -6214,12 +6223,16 @@
             confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
             UI.showToast(`${type === 'vacation' ? '🌴 휴가' : '🌿 반차'} 일정이 개나리색으로 등록되었어요! 🌼`, 'success');
           } else {
-            UI.showToast('새로운 일정이 등록되었어요! 💖', 'success');
+            const catName = data.category === 'work' ? '업무 💼' : '개인 🌸';
+            UI.showToast(`새로운 일정이 '${catName}'에 등록되었어요! 💖`, 'success');
           }
         }
 
         UI.closeTaskModal();
         UI.renderTasks();
+        UI.renderSidebar();
+        if (store.activeFilter === 'calendar-month') UI.renderCalendarMonth();
+        if (store.activeFilter === 'calendar-week') UI.renderCalendarWeek();
       });
     }
 
