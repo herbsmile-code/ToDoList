@@ -436,6 +436,44 @@
         </div>
 
         <!-- ===================================================================
+             SECTION 2.3: 🎯 프로젝트 & 인생 로드맵 (Life Projects & Milestones) View
+             =================================================================== -->
+        <div id="project-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>🎯 인생 프로젝트 & 마일스톤 (Life Roadmap)</h1>
+              <p>왕숙 아파트 입주, 시험관 준비 등 내 인생의 소중한 대형 프로젝트를 단계별로 실천하세요 🔑🌱✨</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" id="btn-open-add-project" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
+                <span>+</span>
+                <span>새 프로젝트 생성 🎯</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Project Select / Tabs Bar -->
+          <div class="project-tabs-bar" id="project-tabs-container">
+            <!-- Dynamically rendered project tabs (왕숙 아파트 입주, 시험관 준비 등) -->
+          </div>
+
+          <!-- Active Project Main Roadmap Dashboard -->
+          <div id="project-detail-dashboard">
+            <!-- Dynamically rendered: Project Banner, Progress Bar, D-Day, and Milestones Roadmap -->
+          </div>
+
+          <!-- Empty State -->
+          <div id="project-empty-state" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">🎯</div>
+            <h3>등록된 프로젝트가 아직 없어요</h3>
+            <p>내 집 마련, 시험관 아기, 커리어 목표 등 가슴 뛰는 큰 계획을 프로젝트로 등록해 보세요 ✨</p>
+            <button type="button" class="btn btn-primary" id="btn-empty-add-project">
+              + 첫 프로젝트 시작하기
+            </button>
+          </div>
+        </div>
+
+        <!-- ===================================================================
              SECTION 2.5: 🎨 취미활동 (Hobby & Life Activity Journal) View
              =================================================================== -->
         <div id="hobby-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
@@ -1831,6 +1869,135 @@
           <div style="display: flex; gap: 0.5rem; margin-left: auto;">
             <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-hobby-folder-modal>취소</button>
             <button type="submit" id="btn-submit-hobby-folder" class="btn btn-primary">저장 💖</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Create/Edit Life Project Modal (새 프로젝트 생성 및 수정) -->
+  <div id="project-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="project-modal-title">🎯 새 인생 프로젝트 생성 💖</h3>
+        <button class="modal-close-btn" data-close-project-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="project-form">
+        <input type="hidden" id="project-edit-id" value="">
+
+        <!-- Emoji Palette Picker (24종) -->
+        <div class="form-group">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+            <label class="form-label" style="margin: 0;">대표 아이콘 (이모지 24종)</label>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span style="font-size: 0.76rem; color: var(--text-muted);">선택됨:</span>
+              <input type="text" id="project-input-icon" class="form-input" value="🏢" maxlength="4" style="width: 50px; height: 32px; text-align: center; font-size: 1.15rem; padding: 2px; font-weight: bold;" readonly>
+            </div>
+          </div>
+          <div class="project-emoji-picker-grid" id="project-emoji-grid">
+            <!-- 24 project emoji buttons -->
+          </div>
+        </div>
+
+        <!-- Project Title -->
+        <div class="form-group">
+          <label class="form-label" for="project-input-title">프로젝트 이름 *</label>
+          <input type="text" id="project-input-title" class="form-input" placeholder="예: 왕숙 아파트 입주 프로젝트, 시험관 아기 준비 등" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <!-- Category / Field -->
+          <div class="form-group">
+            <label class="form-label" for="project-input-cat">분야 / 카테고리</label>
+            <input type="text" id="project-input-cat" class="form-input" placeholder="예: 부동산/내집마련, 가족/임신, 커리어">
+          </div>
+
+          <!-- Target Date -->
+          <div class="form-group">
+            <label class="form-label" for="project-input-target-date">최종 목표일 / 입주일 (선택)</label>
+            <input type="date" id="project-input-target-date" class="form-input">
+          </div>
+        </div>
+
+        <!-- Target Budget -->
+        <div class="form-group">
+          <label class="form-label" for="project-input-budget">목표 금액 / 총 예산 (선택)</label>
+          <input type="text" id="project-input-budget" class="form-input" placeholder="예: 3억 5,000만원, 2,000만원">
+        </div>
+
+        <!-- Description -->
+        <div class="form-group">
+          <label class="form-label" for="project-input-desc">프로젝트 설명 & 다짐</label>
+          <textarea id="project-input-desc" class="form-textarea" placeholder="이 프로젝트를 성공하기 위한 각오나 핵심 메모를 적어보세요..." style="min-height: 80px;"></textarea>
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" id="btn-delete-project" class="btn" style="display: none; background: rgba(255, 77, 77, 0.1); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.25); font-size: 0.8rem;">
+            🗑️ 프로젝트 삭제
+          </button>
+          <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-project-modal>취소</button>
+            <button type="submit" id="btn-submit-project" class="btn btn-primary">프로젝트 저장 🎯</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add/Edit Milestone Step (마일스톤 단계 추가 및 수정) -->
+  <div id="milestone-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="milestone-modal-title">📋 마일스톤 실행 계획 추가</h3>
+        <button class="modal-close-btn" data-close-milestone-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="milestone-form">
+        <input type="hidden" id="milestone-edit-id" value="">
+        <input type="hidden" id="milestone-project-id" value="">
+
+        <!-- Step Title -->
+        <div class="form-group">
+          <label class="form-label" for="milestone-input-title">실행 계획 / 단계 이름 *</label>
+          <input type="text" id="milestone-input-title" class="form-input" placeholder="예: 1차 중도금 대출 신청, 과배란 주사 투여, 사전점검 방문" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <!-- Due Date / Execution Date -->
+          <div class="form-group">
+            <label class="form-label" for="milestone-input-date">예정일 / 납부일 (선택)</label>
+            <input type="date" id="milestone-input-date" class="form-input">
+          </div>
+
+          <!-- Amount / Cost -->
+          <div class="form-group">
+            <label class="form-label" for="milestone-input-amount">금액 / 비용 (선택)</label>
+            <input type="text" id="milestone-input-amount" class="form-input" placeholder="예: 6,000만원, 50만원">
+          </div>
+        </div>
+
+        <!-- Memo -->
+        <div class="form-group">
+          <label class="form-label" for="milestone-input-memo">상세 메모 & 필요 서류</label>
+          <textarea id="milestone-input-memo" class="form-textarea" placeholder="예: 은행 방문 시 필요서류(신분증, 소득증빙서류), 주의사항 등" style="min-height: 80px;"></textarea>
+        </div>
+
+        <!-- Completed Toggle -->
+        <div class="form-group">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="milestone-input-completed" style="width: 18px; height: 18px; accent-color: var(--primary);">
+            <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-main);">이미 실행 완료된 단계입니다 💮</span>
+          </label>
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" id="btn-delete-milestone" class="btn" style="display: none; background: rgba(255, 77, 77, 0.1); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.25); font-size: 0.8rem;">
+            🗑️ 삭제
+          </button>
+          <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-milestone-modal>취소</button>
+            <button type="submit" id="btn-submit-milestone" class="btn btn-primary">단계 저장 ✨</button>
           </div>
         </div>
       </form>

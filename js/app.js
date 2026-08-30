@@ -148,6 +148,49 @@
     '🪴', '📷', '🎮', '🧩', '🎬', '🏕️', '🧶', '✨'
   ];
 
+  const DEFAULT_PROJECT_EMOJIS = [
+    '🏢', '🏠', '🔑', '🌱', '👶', '🍼', '💍', '🚗', 
+    '✈️', '🎓', '💰', '📈', '🎯', '🌟', '💼', '🏡', 
+    '🏥', '🎨', '📚', '🏋️', '💻', '💡', '🌈', '💖'
+  ];
+
+  const DEFAULT_PROJECTS = [
+    {
+      id: 'proj-wangsook',
+      title: '왕숙 신도시 아파트 입주 프로젝트',
+      category: '부동산/주거',
+      icon: '🏢',
+      targetDate: '2027-12-31',
+      budget: '3억 5,000만원',
+      description: '남양주 왕숙 신도시 내 집 마련 & 성공적인 입주 로드맵 🔑✨',
+      createdAt: 1724500000000,
+      milestones: [
+        { id: 'm-1', title: '계약금 10% 납부 완료', date: '2025-06-15', amount: '5,000만원', completed: true, memo: '공급계약서 수령 및 계약금 납부 영수증 보관 완료' },
+        { id: 'm-2', title: '1차 중도금 대출 자필서명 및 실행', date: '2026-02-20', amount: '6,000만원', completed: true, memo: '지정 은행 방문하여 서류 제출 및 중도금 대출 실행' },
+        { id: 'm-3', title: '2차 중도금 납부', date: '2026-08-25', amount: '6,000만원', completed: false, memo: '납부 기한 확인 및 자동이체 계좌 잔액 점검' },
+        { id: 'm-4', title: '입주자 사전점검 방문 및 하자 체크', date: '2027-10-15', amount: '', completed: false, memo: '전문 점검업체 동행 예약 및 줄자/포스트잇 지참' },
+        { id: 'm-5', title: '잔금 정산, 취득세 납부 및 열쇠 수령 (입주!)', date: '2027-12-31', amount: '1억 8,000만원', completed: false, memo: '디딤돌/보금자리론 잔금대출 실행, 입주청소 및 이사 예약' }
+      ]
+    },
+    {
+      id: 'proj-ivf',
+      title: '소중한 아기 천사 맞이 (시험관 준비)',
+      category: '가족/임신',
+      icon: '🌱',
+      targetDate: '2026-12-31',
+      budget: '',
+      description: '건강하고 행복한 아기 천사를 맞이하기 위한 사랑 가득한 여정 👶💖',
+      createdAt: 1724505000000,
+      milestones: [
+        { id: 'ivf-1', title: '난임 전문 병원 첫 상담 및 기본 산전 검사', date: '2026-04-10', amount: '35만원', completed: true, memo: '부부 기초 혈액 검사 및 호르몬 수치 확인' },
+        { id: 'ivf-2', title: '보건소 정부 난임 시술비 지원 신청 및 결정통지서 수령', date: '2026-05-15', amount: '', completed: true, memo: '정부24 온라인 신청 및 지원 결정통지서 병원 제출' },
+        { id: 'ivf-3', title: '과배란 유도 주사 시작 및 엽산/영양제 챙겨먹기', date: '2026-08-20', amount: '45만원', completed: true, memo: '매일 일정한 시간에 자가 주사 투여, 단백질 식단 위주 식사' },
+        { id: 'ivf-4', title: '난자 채취 및 수정란/배아 5일 배양', date: '2026-09-10', amount: '80만원', completed: false, memo: '채취 당일 안정 취하기, 이온음료 충분히 섭취' },
+        { id: 'ivf-5', title: '동결 배아 이식 & 1차 혈액 피검사 (희망 가득!)', date: '2026-10-15', amount: '30만원', completed: false, memo: '착상에 좋은 따뜻한 음식 섭취 및 편안한 마음 유지하기 🌸' }
+      ]
+    }
+  ];
+
   // =========================================================================
   // 0. Utilities
   // =========================================================================
@@ -787,9 +830,21 @@
                   });
                   store.hobbyFolders = hbFolders;
                 }
+                if (Array.isArray(data.projects)) {
+                  store.projects = data.projects;
+                }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
-                  const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+                  const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
                   let order = data.sidebarMenuOrder.slice();
+                  if (!order.includes('project')) {
+                    const d1Idx = order.indexOf('divider-1');
+                    if (d1Idx !== -1) order.splice(d1Idx + 1, 0, 'project');
+                    else {
+                      const wIdx = order.indexOf('work');
+                      if (wIdx !== -1) order.splice(wIdx + 1, 0, 'project');
+                      else order.push('project');
+                    }
+                  }
                   if (!order.includes('hobby')) {
                     const healthIdx = order.indexOf('health');
                     if (healthIdx !== -1) order.splice(healthIdx, 0, 'hobby');
@@ -818,16 +873,34 @@
                     if (!order.includes(id)) order.push(id);
                   });
 
-                  // Ensure divider-1 is positioned RIGHT BEFORE hobby
+                  // 1. Ensure divider-1 is positioned RIGHT AFTER work (업무 메뉴 아래에 구분선)
                   const d1Idx = order.indexOf('divider-1');
-                  const hIdx = order.indexOf('hobby');
-                  if (d1Idx !== -1 && hIdx !== -1 && d1Idx !== hIdx - 1) {
+                  const wIdx = order.indexOf('work');
+                  if (d1Idx !== -1 && wIdx !== -1 && d1Idx !== wIdx + 1) {
                     order.splice(d1Idx, 1);
-                    const newHIdx = order.indexOf('hobby');
-                    order.splice(newHIdx, 0, 'divider-1');
+                    const newWIdx = order.indexOf('work');
+                    order.splice(newWIdx + 1, 0, 'divider-1');
                   }
 
-                  // Ensure divider-vacation is positioned RIGHT AFTER vacation
+                  // 2. Ensure project is positioned RIGHT AFTER divider-1
+                  const prIdx = order.indexOf('project');
+                  const newD1Idx = order.indexOf('divider-1');
+                  if (prIdx !== -1 && newD1Idx !== -1 && prIdx !== newD1Idx + 1) {
+                    order.splice(prIdx, 1);
+                    const curD1 = order.indexOf('divider-1');
+                    order.splice(curD1 + 1, 0, 'project');
+                  }
+
+                  // 3. Ensure hobby is positioned RIGHT AFTER project
+                  const hbIdx = order.indexOf('hobby');
+                  const curPr = order.indexOf('project');
+                  if (hbIdx !== -1 && curPr !== -1 && hbIdx !== curPr + 1) {
+                    order.splice(hbIdx, 1);
+                    const latestPr = order.indexOf('project');
+                    order.splice(latestPr + 1, 0, 'hobby');
+                  }
+
+                  // 4. Ensure divider-vacation is positioned RIGHT AFTER vacation
                   const dvIdx = order.indexOf('divider-vacation');
                   const vIdx = order.indexOf('vacation');
                   if (dvIdx !== -1 && vIdx !== -1 && dvIdx !== vIdx + 1) {
@@ -870,7 +943,7 @@
           } else if (!rawResponse) {
             // 클라우드가 비어있다면 현재 로컬 데이터를 즉시 클라우드로 암호화 업로드
             const vFiles = await this.getAllVaultFiles();
-            if (store.tasks.length > 0 || store.notes.length > 0 || store.photos.length > 0 || store.wishlist.length > 0 || vFiles.length > 0) {
+            if (store.tasks.length > 0 || store.notes.length > 0 || store.photos.length > 0 || store.wishlist.length > 0 || vFiles.length > 0 || (store.projects && store.projects.length > 0)) {
               await this.pushTasksToCloud();
             }
           }
@@ -929,6 +1002,7 @@
         healthFolders: store.healthFolders,
         hobbyNotes: store.hobbyNotes,
         hobbyFolders: store.hobbyFolders,
+        projects: store.projects,
         updatedAt: Date.now()
       };
 
@@ -1217,7 +1291,6 @@
       variable: { total: 1740000, items: [{ name: '마트 장보기 & 식비', amount: 660000 }, { name: '외식 & 배달', amount: 460000 }, { name: '여름 의류 쇼핑', amount: 280000 }, { name: '카페 & 디저트', amount: 180000 }, { name: '교통 & 유류비', amount: 160000 }] }
     },
     7: {
-      // User's EXACT I-column (7월) Real Values:
       income: {
         total: 6075570,
         items: [
@@ -1237,7 +1310,7 @@
         ]
       },
       variable: {
-        total: 6415336, // I35: 변동지출 계 6,415,336원
+        total: 6415336,
         items: [
           { name: '마트 장보기 & 생활용품', amount: 1250000 },
           { name: '외식 & 배달 & 카페', amount: 820000 },
@@ -1252,7 +1325,6 @@
       totalExpense: 7064406,
       totalIncome: 6075570
     },
-    // 8~12월: 미작성 (0원)
     8: { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } },
     9: { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } },
     10: { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } },
@@ -1272,17 +1344,19 @@
       this.notes = [];
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.ledgerFiles = [];
-      this.selectedLedgerMonth = 7; // Default to July (latest written month)
+      this.selectedLedgerMonth = 7;
       this.activeFilter = 'all';
       this.activePriority = 'all';
       this.activeWishCat = 'all';
       this.selectedVacationYear = '2026';
-      this.selectedVacationMonth = String(new Date().getMonth() + 1); // 이번 달 (8월) 자동 선택
-      this.vacationTypeFilter = 'all'; // 'all' | 'used' | 'holiday'
-      this.isReorderMode = false; // 순서변경 모드 토글
+      this.selectedVacationMonth = String(new Date().getMonth() + 1);
+      this.vacationTypeFilter = 'all';
+      this.isReorderMode = false;
       this.selectedHealthNotes = new Set();
       this.selectedHobbyNotes = new Set();
-      this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+      this.projects = [];
+      this.activeProjectId = null;
+      this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       this.searchQuery = '';
       this.sortBy = 'dueDate';
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
@@ -1318,6 +1392,7 @@
       let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS.slice();
       const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
       let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS.slice();
+      const userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
       const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
 
       // Ensure all default health folders (including checkup) exist
@@ -1381,11 +1456,20 @@
         }
       });
 
-      // Sidebar menu items order with 4 dividers, hobby, health, and devlog
-      const defaultOrder = ['personal', 'work', 'divider-1', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+      // Sidebar menu items order with dividers, project, hobby, health, and devlog
+      const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       let finalOrder = userSidebarOrder ? userSidebarOrder.slice() : defaultOrder;
 
       // 1. Ensure essential items exist
+      if (!finalOrder.includes('project')) {
+        const d1Idx = finalOrder.indexOf('divider-1');
+        if (d1Idx !== -1) finalOrder.splice(d1Idx + 1, 0, 'project');
+        else {
+          const wIdx = finalOrder.indexOf('work');
+          if (wIdx !== -1) finalOrder.splice(wIdx + 1, 0, 'project');
+          else finalOrder.push('project');
+        }
+      }
       if (!finalOrder.includes('hobby')) {
         const healthIdx = finalOrder.indexOf('health');
         if (healthIdx !== -1) finalOrder.splice(healthIdx, 0, 'hobby');
@@ -1991,6 +2075,108 @@
       return deletedCount;
     }
 
+    // =========================================================================
+    // Life Projects & Milestones Manager Methods
+    // =========================================================================
+    addProject(project) {
+      if (!this.projects) this.projects = [];
+      const newProj = Object.assign({
+        id: 'proj-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        title: '',
+        category: '부동산/주거',
+        icon: '🏢',
+        targetDate: '',
+        budget: '',
+        description: '',
+        createdAt: Date.now(),
+        milestones: []
+      }, project);
+      this.projects.push(newProj);
+      this.activeProjectId = newProj.id;
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
+      return newProj;
+    }
+
+    updateProject(id, updates) {
+      if (!this.projects) this.projects = [];
+      const idx = this.projects.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        this.projects[idx] = Object.assign({}, this.projects[idx], updates);
+        this.saveLocalOnly();
+        cloudSync.pushTasksToCloud(true);
+        return this.projects[idx];
+      }
+      return null;
+    }
+
+    deleteProject(id) {
+      if (!this.projects) this.projects = [];
+      this.projects = this.projects.filter(p => p.id !== id);
+      if (this.activeProjectId === id) {
+        this.activeProjectId = this.projects.length > 0 ? this.projects[0].id : null;
+      }
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
+    }
+
+    addMilestone(projectId, milestone) {
+      if (!this.projects) this.projects = [];
+      const proj = this.projects.find(p => p.id === projectId);
+      if (!proj) return null;
+      if (!proj.milestones) proj.milestones = [];
+      const newM = Object.assign({
+        id: 'm-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        title: '',
+        date: '',
+        amount: '',
+        memo: '',
+        completed: false,
+        createdAt: Date.now()
+      }, milestone);
+      proj.milestones.push(newM);
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
+      return newM;
+    }
+
+    updateMilestone(projectId, milestoneId, updates) {
+      if (!this.projects) this.projects = [];
+      const proj = this.projects.find(p => p.id === projectId);
+      if (!proj || !proj.milestones) return null;
+      const idx = proj.milestones.findIndex(m => m.id === milestoneId);
+      if (idx !== -1) {
+        proj.milestones[idx] = Object.assign({}, proj.milestones[idx], updates);
+        this.saveLocalOnly();
+        cloudSync.pushTasksToCloud(true);
+        return proj.milestones[idx];
+      }
+      return null;
+    }
+
+    deleteMilestone(projectId, milestoneId) {
+      if (!this.projects) this.projects = [];
+      const proj = this.projects.find(p => p.id === projectId);
+      if (!proj || !proj.milestones) return;
+      proj.milestones = proj.milestones.filter(m => m.id !== milestoneId);
+      this.saveLocalOnly();
+      cloudSync.pushTasksToCloud(true);
+    }
+
+    toggleMilestoneComplete(projectId, milestoneId) {
+      if (!this.projects) this.projects = [];
+      const proj = this.projects.find(p => p.id === projectId);
+      if (!proj || !proj.milestones) return null;
+      const m = proj.milestones.find(x => x.id === milestoneId);
+      if (m) {
+        m.completed = !m.completed;
+        this.saveLocalOnly();
+        cloudSync.pushTasksToCloud(true);
+        return m;
+      }
+      return null;
+    }
+
     updateStreak() {
       const today = TODAY_STR;
       if (this.streak.lastDate === today) return;
@@ -2156,7 +2342,8 @@
         ledger: store.ledgerFiles.length,
         wishlist: store.wishlist.length,
         vacation: store.vacations.length,
-        sites: store.sites.length
+        sites: store.sites.length,
+        project: (store.projects || []).length
       };
 
       Object.keys(counts).forEach(k => {
@@ -2239,6 +2426,7 @@
         const itemMeta = {
           'personal': { name: '개인 🌸', icon: '', color: '#f06595', count: store.tasks.filter(t => t.category === 'personal').length },
           'work': { name: '업무 💼', icon: '', color: '#868e96', count: store.tasks.filter(t => t.category === 'work').length },
+          'project': { name: '프로젝트', icon: '🎯', count: (store.projects || []).length },
           'hobby': { name: '취미활동', icon: '🎨', count: (store.hobbyNotes || []).length },
           'health': { name: '건강관리', icon: '🏥', count: (store.healthNotes || []).length },
           'vacation': { name: '연차관리', icon: '🏖️', count: store.vacations.length },
@@ -2441,6 +2629,7 @@
       const vacationView = document.getElementById('vacation-view-container');
       const sitesView = document.getElementById('sites-view-container');
       const devlogView = document.getElementById('devlog-view-container');
+      const projectView = document.getElementById('project-view-container');
 
       const listContainer = document.getElementById('tasks-list-container');
       const kanbanContainer = document.getElementById('kanban-board-container');
@@ -2450,7 +2639,7 @@
 
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
-      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, hobbyView, healthView, vacationView, sitesView, devlogView];
+      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, hobbyView, healthView, vacationView, sitesView, devlogView, projectView];
 
       if (lockedScreen) lockedScreen.style.display = 'none';
       if (mobileBar && mobileBar.style.display !== 'flex') mobileBar.style.display = 'flex';
@@ -2460,6 +2649,7 @@
       let targetView = tasksView;
       if (filter === 'calendar-month') targetView = calMView;
       else if (filter === 'calendar-week') targetView = calWView;
+      else if (filter === 'project') targetView = projectView;
       else if (filter === 'hobby') targetView = hobbyView;
       else if (filter === 'health') targetView = healthView;
       else if (filter === 'vacation') targetView = vacationView;
@@ -2493,6 +2683,12 @@
       // 2. Calendar Weekly View (Horizontal)
       if (filter === 'calendar-week') {
         this.renderCalendarWeek();
+        return;
+      }
+
+      // 2.3. 🎯 프로젝트 & 인생 로드맵 (Project) View
+      if (filter === 'project') {
+        this.renderProject();
         return;
       }
 
@@ -4002,6 +4198,318 @@
 
     closeTotalVacationModal() {
       const modal = document.getElementById('total-vacation-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    // =======================================================================
+    // 🎯 인생 프로젝트 & 마일스톤 (Life Project & Roadmap) Engine
+    // =======================================================================
+    renderProject() {
+      const tabsContainer = document.getElementById('project-tabs-container');
+      const detailContainer = document.getElementById('project-detail-dashboard');
+      const emptyState = document.getElementById('project-empty-state');
+      if (!tabsContainer || !detailContainer) return;
+
+      const projects = store.projects || [];
+      if (projects.length === 0) {
+        tabsContainer.innerHTML = '';
+        detailContainer.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'flex';
+        return;
+      }
+      if (emptyState) emptyState.style.display = 'none';
+
+      // 1. Ensure activeProjectId is valid
+      if (!store.activeProjectId || !projects.some(p => p.id === store.activeProjectId)) {
+        store.activeProjectId = projects[0].id;
+      }
+
+      const activeProject = projects.find(p => p.id === store.activeProjectId) || projects[0];
+
+      // 2. Render Project Tabs Bar
+      tabsContainer.innerHTML = `
+        <div style="display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.25rem 0; width: 100%; -webkit-overflow-scrolling: touch; scrollbar-width: none;">
+          ${projects.map(proj => {
+            const isActive = (proj.id === activeProject.id);
+            const totalM = (proj.milestones || []).length;
+            const doneM = (proj.milestones || []).filter(m => m.completed).length;
+            const pct = totalM > 0 ? Math.round((doneM / totalM) * 100) : 0;
+            return `
+              <button type="button" class="project-tab-pill ${isActive ? 'active' : ''}" data-action="select-project-tab" data-id="${proj.id}">
+                <span class="tab-icon">${proj.icon || '🎯'}</span>
+                <span class="tab-title">${escapeHTML(proj.title)}</span>
+                <span class="tab-badge">${pct}%</span>
+              </button>
+            `;
+          }).join('')}
+          <button type="button" class="project-tab-add-btn" data-action="open-add-project" title="새 프로젝트 추가">
+            <span>+ 새 프로젝트</span>
+          </button>
+        </div>
+      `;
+
+      // 3. Calculate D-Day & Progress
+      const milestones = activeProject.milestones || [];
+      const totalCount = milestones.length;
+      const completedCount = milestones.filter(m => m.completed).length;
+      const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+      let ddayBadgeHTML = '';
+      if (activeProject.targetDate) {
+        const today = new Date(TODAY_STR);
+        const target = new Date(activeProject.targetDate);
+        const diffDays = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) {
+          ddayBadgeHTML = `<span class="project-dday-badge d-today">D-Day 오늘! 🌟</span>`;
+        } else if (diffDays > 0) {
+          ddayBadgeHTML = `<span class="project-dday-badge d-minus">D-${diffDays}일 남음</span>`;
+        } else {
+          ddayBadgeHTML = `<span class="project-dday-badge d-plus">목표일 +${Math.abs(diffDays)}일 경과</span>`;
+        }
+      }
+
+      const targetDateFormatted = activeProject.targetDate ? activeProject.targetDate.replace(/-/g, '.') : '';
+
+      // 4. Render Project Detail Dashboard
+      detailContainer.innerHTML = `
+        <!-- Project Hero Card -->
+        <div class="project-hero-card">
+          <div class="project-hero-top">
+            <div class="project-hero-main-info">
+              <div class="project-hero-icon-box">${activeProject.icon || '🎯'}</div>
+              <div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem;">
+                  <span class="project-cat-badge">${escapeHTML(activeProject.category || '인생프로젝트')}</span>
+                  ${ddayBadgeHTML}
+                  ${targetDateFormatted ? `<span class="project-meta-chip">📅 최종목표: ${targetDateFormatted}</span>` : ''}
+                  ${activeProject.budget ? `<span class="project-meta-chip budget">💳 예산: ${escapeHTML(activeProject.budget)}</span>` : ''}
+                </div>
+                <h2 class="project-hero-title">${escapeHTML(activeProject.title)}</h2>
+                ${activeProject.description ? `<p class="project-hero-desc">${escapeHTML(activeProject.description)}</p>` : ''}
+              </div>
+            </div>
+
+            <div class="project-hero-actions">
+              <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-main); font-size: 0.82rem; padding: 0.45rem 0.85rem;" data-action="open-edit-project" data-id="${activeProject.id}">
+                ✏️ 프로젝트 수정
+              </button>
+              <button type="button" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1rem;" data-action="open-add-milestone" data-project-id="${activeProject.id}">
+                <span>+</span> <span>실행 계획 추가</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="project-progress-section">
+            <div class="project-progress-label-row">
+              <span style="font-weight: 700; font-size: 0.88rem; color: var(--text-main);">
+                로드맵 달성률 <strong style="color: var(--primary);">${progressPct}%</strong> (${completedCount}/${totalCount}단계 완료)
+              </span>
+              <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+                ${progressPct === 100 ? '🎉 모든 마일스톤 달성 완료!' : '차근차근 실천 중 🌱'}
+              </span>
+            </div>
+            <div class="project-progress-track">
+              <div class="project-progress-fill" style="width: ${progressPct}%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Milestones Roadmap Timeline Section -->
+        <div class="milestones-roadmap-container">
+          <div class="milestones-section-header">
+            <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 0.4rem;">
+              <span>🗺️</span> <span>단계별 실행 계획 & 마일스톤 (${milestones.length}개)</span>
+            </h3>
+            <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">체크박스를 눌러 완료 여부를 체크하세요 💮</span>
+          </div>
+
+          ${milestones.length === 0 ? `
+            <div class="milestone-empty-box">
+              <p>아직 등록된 실행 계획이 없어요. 아래 버튼을 눌러 첫 번째 단계를 추가해 보세요!</p>
+              <button type="button" class="btn btn-primary" style="margin-top: 0.5rem;" data-action="open-add-milestone" data-project-id="${activeProject.id}">
+                + 1단계 실행 계획 추가하기
+              </button>
+            </div>
+          ` : `
+            <div class="milestones-timeline-list">
+              ${milestones.map((m, idx) => {
+                const stepNum = idx + 1;
+                const isDone = !!m.completed;
+                const dateFormatted = m.date ? m.date.replace(/-/g, '.') : '';
+                return `
+                  <div class="milestone-step-card ${isDone ? 'is-completed' : ''}" data-milestone-id="${m.id}" data-project-id="${activeProject.id}">
+                    <div class="milestone-step-left">
+                      <label class="milestone-checkbox-wrap" title="${isDone ? '완료 취소' : '실행 완료 체크'}">
+                        <input type="checkbox" class="milestone-step-check" data-action="toggle-milestone" data-project-id="${activeProject.id}" data-milestone-id="${m.id}" ${isDone ? 'checked' : ''}>
+                        <span class="milestone-custom-box"></span>
+                      </label>
+                      <span class="milestone-step-num-badge">Step ${stepNum}</span>
+                    </div>
+
+                    <div class="milestone-step-content">
+                      <div class="milestone-step-top">
+                        <h4 class="milestone-step-title ${isDone ? 'completed-text' : ''}">${escapeHTML(m.title)}</h4>
+                        <div class="milestone-badges-row">
+                          ${dateFormatted ? `<span class="milestone-date-badge">📅 ${dateFormatted}</span>` : ''}
+                          ${m.amount ? `<span class="milestone-amount-badge">💳 ${escapeHTML(m.amount)}</span>` : ''}
+                          ${isDone ? `<span class="milestone-done-pill">완료됨 💮</span>` : `<span class="milestone-pending-pill">진행 중 🌱</span>`}
+                        </div>
+                      </div>
+
+                      ${m.memo ? `
+                        <div class="milestone-memo-box">
+                          <span>💬</span>
+                          <span>${escapeHTML(m.memo)}</span>
+                        </div>
+                      ` : ''}
+                    </div>
+
+                    <div class="milestone-step-actions">
+                      <button type="button" class="task-action-btn edit-btn" data-action="edit-milestone" data-project-id="${activeProject.id}" data-milestone-id="${m.id}" title="수정">
+                        ✏️
+                      </button>
+                      <button type="button" class="task-action-btn delete-btn" data-action="delete-milestone" data-project-id="${activeProject.id}" data-milestone-id="${m.id}" title="삭제">
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- Add More Milestone Card -->
+            <button type="button" class="milestone-add-card-btn" data-action="open-add-milestone" data-project-id="${activeProject.id}">
+              <span>+ 다음 실행 단계 추가하기</span>
+            </button>
+          `}
+        </div>
+      `;
+    },
+
+    openProjectModal(projectId = null) {
+      const modal = document.getElementById('project-modal');
+      const form = document.getElementById('project-form');
+      const titleEl = document.getElementById('project-modal-title');
+      const hiddenId = document.getElementById('project-edit-id');
+      const iconInput = document.getElementById('project-input-icon');
+      const titleInput = document.getElementById('project-input-title');
+      const catInput = document.getElementById('project-input-cat');
+      const targetDateInput = document.getElementById('project-input-target-date');
+      const budgetInput = document.getElementById('project-input-budget');
+      const descInput = document.getElementById('project-input-desc');
+      const deleteBtn = document.getElementById('btn-delete-project');
+      const emojiGrid = document.getElementById('project-emoji-grid');
+      if (!modal || !form) return;
+
+      form.reset();
+
+      // Render 24 Project Emoji Options
+      if (emojiGrid) {
+        emojiGrid.innerHTML = DEFAULT_PROJECT_EMOJIS.map(emoji => `
+          <button type="button" class="project-emoji-option-btn" data-project-emoji="${emoji}">
+            ${emoji}
+          </button>
+        `).join('');
+      }
+
+      if (projectId) {
+        const proj = (store.projects || []).find(p => p.id === projectId);
+        if (!proj) return;
+        if (titleEl) titleEl.textContent = '🎯 프로젝트 수정하기 ✏️';
+        if (hiddenId) hiddenId.value = proj.id;
+        if (iconInput) iconInput.value = proj.icon || '🏢';
+        if (titleInput) titleInput.value = proj.title || '';
+        if (catInput) catInput.value = proj.category || '';
+        if (targetDateInput) targetDateInput.value = proj.targetDate || '';
+        if (budgetInput) budgetInput.value = proj.budget || '';
+        if (descInput) descInput.value = proj.description || '';
+        if (deleteBtn) {
+          deleteBtn.style.display = 'inline-flex';
+          deleteBtn.dataset.id = proj.id;
+        }
+
+        if (emojiGrid) {
+          emojiGrid.querySelectorAll('.project-emoji-option-btn').forEach(btn => {
+            if (btn.dataset.projectEmoji === (proj.icon || '🏢')) {
+              btn.classList.add('selected');
+            }
+          });
+        }
+      } else {
+        if (titleEl) titleEl.textContent = '🎯 새 인생 프로젝트 생성 💖';
+        if (hiddenId) hiddenId.value = '';
+        if (iconInput) iconInput.value = '🏢';
+        if (deleteBtn) deleteBtn.style.display = 'none';
+
+        if (emojiGrid) {
+          const first = emojiGrid.querySelector('.project-emoji-option-btn');
+          if (first) first.classList.add('selected');
+        }
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (titleInput) setTimeout(() => titleInput.focus(), 80);
+    },
+
+    closeProjectModal() {
+      const modal = document.getElementById('project-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openMilestoneModal(projectId, milestoneId = null) {
+      const modal = document.getElementById('milestone-modal');
+      const form = document.getElementById('milestone-form');
+      const titleEl = document.getElementById('milestone-modal-title');
+      const hiddenMId = document.getElementById('milestone-edit-id');
+      const hiddenPId = document.getElementById('milestone-project-id');
+      const titleInput = document.getElementById('milestone-input-title');
+      const dateInput = document.getElementById('milestone-input-date');
+      const amountInput = document.getElementById('milestone-input-amount');
+      const memoInput = document.getElementById('milestone-input-memo');
+      const completedInput = document.getElementById('milestone-input-completed');
+      const deleteBtn = document.getElementById('btn-delete-milestone');
+      if (!modal || !form) return;
+
+      form.reset();
+      if (hiddenPId) hiddenPId.value = projectId;
+
+      if (milestoneId) {
+        const proj = (store.projects || []).find(p => p.id === projectId);
+        const m = proj ? (proj.milestones || []).find(x => x.id === milestoneId) : null;
+        if (!m) return;
+        if (titleEl) titleEl.textContent = '📋 마일스톤 단계 수정하기 ✏️';
+        if (hiddenMId) hiddenMId.value = m.id;
+        if (titleInput) titleInput.value = m.title || '';
+        if (dateInput) dateInput.value = m.date || '';
+        if (amountInput) amountInput.value = m.amount || '';
+        if (memoInput) memoInput.value = m.memo || '';
+        if (completedInput) completedInput.checked = !!m.completed;
+        if (deleteBtn) {
+          deleteBtn.style.display = 'inline-flex';
+          deleteBtn.dataset.projectId = projectId;
+          deleteBtn.dataset.milestoneId = m.id;
+        }
+      } else {
+        if (titleEl) titleEl.textContent = '📋 새 마일스톤 실행 계획 추가 ✨';
+        if (hiddenMId) hiddenMId.value = '';
+        if (deleteBtn) deleteBtn.style.display = 'none';
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (titleInput) setTimeout(() => titleInput.focus(), 80);
+    },
+
+    closeMilestoneModal() {
+      const modal = document.getElementById('milestone-modal');
       if (modal) {
         modal.style.display = 'none';
         modal.classList.remove('active');
@@ -5937,6 +6445,70 @@
       });
     }
 
+    // Project Form Submit
+    const projectForm = document.getElementById('project-form');
+    if (projectForm) {
+      projectForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const editId = document.getElementById('project-edit-id')?.value;
+        const icon = document.getElementById('project-input-icon')?.value || '🏢';
+        const title = document.getElementById('project-input-title')?.value.trim();
+        const category = document.getElementById('project-input-cat')?.value.trim() || '부동산/주거';
+        const targetDate = document.getElementById('project-input-target-date')?.value || '';
+        const budget = document.getElementById('project-input-budget')?.value.trim() || '';
+        const description = document.getElementById('project-input-desc')?.value.trim() || '';
+
+        if (!title) return;
+
+        if (editId) {
+          store.updateProject(editId, { icon, title, category, targetDate, budget, description });
+          sounds.playComplete();
+          UI.showToast(`'${title}' 프로젝트가 수정되었어요! 🎯✨`, 'info');
+        } else {
+          const newP = store.addProject({ icon, title, category, targetDate, budget, description });
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+          UI.showToast(`'${title}' 새 프로젝트가 시작되었어요! 🚀💖`, 'success');
+        }
+
+        UI.closeProjectModal();
+        UI.renderProject();
+        UI.renderSidebar();
+      });
+    }
+
+    // Milestone Form Submit
+    const milestoneForm = document.getElementById('milestone-form');
+    if (milestoneForm) {
+      milestoneForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const editId = document.getElementById('milestone-edit-id')?.value;
+        const projectId = document.getElementById('milestone-project-id')?.value;
+        const title = document.getElementById('milestone-input-title')?.value.trim();
+        const date = document.getElementById('milestone-input-date')?.value || '';
+        const amount = document.getElementById('milestone-input-amount')?.value.trim() || '';
+        const memo = document.getElementById('milestone-input-memo')?.value.trim() || '';
+        const completed = !!document.getElementById('milestone-input-completed')?.checked;
+
+        if (!title || !projectId) return;
+
+        if (editId) {
+          store.updateMilestone(projectId, editId, { title, date, amount, memo, completed });
+          sounds.playComplete();
+          UI.showToast(`마일스톤 '${title}' 단계가 수정되었어요! ✨`, 'info');
+        } else {
+          store.addMilestone(projectId, { title, date, amount, memo, completed });
+          sounds.playAdd();
+          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
+          UI.showToast(`'${title}' 단계가 로드맵에 추가되었어요! 🗺️✨`, 'success');
+        }
+
+        UI.closeMilestoneModal();
+        UI.renderProject();
+        UI.renderSidebar();
+      });
+    }
+
     // Wishlist Tabs Click
     const wishTabs = document.getElementById('wishlist-filter-tabs');
     if (wishTabs) {
@@ -6027,6 +6599,105 @@
     // Global Card Actions Delegation
     document.addEventListener('click', (e) => {
       const target = e.target;
+
+      // --- Life Project & Milestone Actions ---
+      // 0.01. Select Project Tab
+      const projTab = target.closest('[data-action="select-project-tab"]');
+      if (projTab && projTab.dataset.id) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        store.activeProjectId = projTab.dataset.id;
+        UI.renderProject();
+        return;
+      }
+
+      // 0.02. Open Add / Edit Project Modal
+      if (target.closest('[data-action="open-add-project"]') || target.closest('#btn-open-add-project') || target.closest('#btn-empty-add-project')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openProjectModal();
+        return;
+      }
+      const editProjBtn = target.closest('[data-action="open-edit-project"]');
+      if (editProjBtn && editProjBtn.dataset.id) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openProjectModal(editProjBtn.dataset.id);
+        return;
+      }
+
+      // 0.03. Delete Project
+      const deleteProjBtn = target.closest('#btn-delete-project');
+      if (deleteProjBtn && deleteProjBtn.dataset.id) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const pId = deleteProjBtn.dataset.id;
+        if (confirm('정말 이 프로젝트와 모든 마일스톤 계획을 삭제하시겠습니까?')) {
+          store.deleteProject(pId);
+          sounds.playDelete();
+          UI.closeProjectModal();
+          UI.showToast('프로젝트가 안전하게 삭제되었어요 🗑️', 'danger');
+          UI.renderProject();
+          UI.renderSidebar();
+        }
+        return;
+      }
+
+      // 0.04. Close Project Modal
+      if (target.closest('[data-close-project-modal]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.closeProjectModal();
+        return;
+      }
+
+      // 0.05. Project Emoji Picker Click
+      const projEmojiBtn = target.closest('.project-emoji-option-btn');
+      if (projEmojiBtn && projEmojiBtn.dataset.projectEmoji) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const iconInput = document.getElementById('project-input-icon');
+        if (iconInput) iconInput.value = projEmojiBtn.dataset.projectEmoji;
+        const grid = document.getElementById('project-emoji-grid');
+        if (grid) {
+          grid.querySelectorAll('.project-emoji-option-btn').forEach(b => b.classList.remove('selected'));
+          projEmojiBtn.classList.add('selected');
+        }
+        return;
+      }
+
+      // 0.06. Open Add / Edit Milestone Modal
+      const addMBtn = target.closest('[data-action="open-add-milestone"]');
+      if (addMBtn && addMBtn.dataset.projectId) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openMilestoneModal(addMBtn.dataset.projectId);
+        return;
+      }
+      const editMBtn = target.closest('[data-action="edit-milestone"]');
+      if (editMBtn && editMBtn.dataset.projectId && editMBtn.dataset.milestoneId) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openMilestoneModal(editMBtn.dataset.projectId, editMBtn.dataset.milestoneId);
+        return;
+      }
+
+      // 0.07. Delete Milestone
+      const deleteMBtn = target.closest('[data-action="delete-milestone"]') || target.closest('#btn-delete-milestone');
+      if (deleteMBtn && deleteMBtn.dataset.projectId && deleteMBtn.dataset.milestoneId) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        const pId = deleteMBtn.dataset.projectId;
+        const mId = deleteMBtn.dataset.milestoneId;
+        if (confirm('이 마일스톤 단계를 정말 삭제하시겠습니까?')) {
+          store.deleteMilestone(pId, mId);
+          sounds.playDelete();
+          UI.closeMilestoneModal();
+          UI.showToast('마일스톤 단계가 삭제되었어요 🗑️', 'danger');
+          UI.renderProject();
+          UI.renderSidebar();
+        }
+        return;
+      }
+
+      // 0.08. Close Milestone Modal
+      if (target.closest('[data-close-milestone-modal]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.closeMilestoneModal();
+        return;
+      }
 
       // 0. Dev Log Modal Open from Calendar Chip or Timeline
       if (target.closest('[data-action="open-devlog-modal"]') || target.closest('.cal-devlog-chip')) {
@@ -7428,6 +8099,32 @@
         UI.renderTasks();
       });
     }
+
+    // Milestone Checkbox Toggle Event Delegation
+    document.addEventListener('change', (e) => {
+      const target = e.target;
+      if (target.matches('.milestone-step-check') || target.dataset.action === 'toggle-milestone') {
+        const projectId = target.dataset.projectId;
+        const milestoneId = target.dataset.milestoneId;
+        if (!projectId || !milestoneId) return;
+
+        const m = store.toggleMilestoneComplete(projectId, milestoneId);
+        if (m) {
+          if (m.completed) {
+            sounds.playComplete();
+            if (window.confetti && window.confetti.burst) {
+              const rect = target.getBoundingClientRect();
+              window.confetti.burst(rect.left + rect.width / 2, rect.top + rect.height / 2, 25);
+            }
+            UI.showToast(`'${m.title}' 마일스톤 실행 완료! 💮🎉`, 'success');
+          } else {
+            UI.showToast(`'${m.title}' 마일스톤 진행 중으로 변경되었어요 🌱`, 'info');
+          }
+          UI.renderProject();
+          UI.renderSidebar();
+        }
+      }
+    });
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
