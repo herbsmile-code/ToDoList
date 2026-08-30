@@ -930,6 +930,26 @@
         </div>
 
         <!-- ===================================================================
+             SECTION 6.8: 🚀 개발기록 (Dev Log / Changelog) View
+             =================================================================== -->
+        <div id="devlog-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
+          <div class="dashboard-header">
+            <div class="view-heading">
+              <h1>🚀 개발기록 (Dev Log)</h1>
+              <p>Todolist JY의 일자별·버전별 개발 내역 및 기능 업데이트 기록입니다 ✨</p>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">
+              최신 버전: <strong style="color: var(--primary); font-weight: 800;">v1.1 (2026.08.30)</strong>
+            </div>
+          </div>
+
+          <!-- Devlog Timeline List -->
+          <div class="devlog-timeline-list" id="devlog-timeline-list">
+            <!-- Dynamically rendered devlog timeline cards -->
+          </div>
+        </div>
+
+        <!-- ===================================================================
              SECTION 7: File Vault View (파일 보관함)
              =================================================================== -->
         <div id="files-view-container" style="display: none; flex-direction: column; gap: 1.5rem;">
@@ -1467,6 +1487,37 @@
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-primary" data-close-modal>닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Dev Log Detail Popup (달력 클릭 및 개발기록 상세 보기) -->
+  <div id="devlog-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span id="devlog-modal-version-badge" class="badge" style="background: var(--primary); color: #fff; font-weight: 800; padding: 4px 10px; border-radius: 8px; font-size: 0.82rem;">v1.1</span>
+          <h3 class="modal-title" id="devlog-modal-title" style="font-size: 1.05rem; font-weight: 800;">🚀 개발기록 상세 요약</h3>
+        </div>
+        <button class="modal-close-btn" data-close-devlog-modal title="닫기 (Esc)">✕</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 0.25rem;">
+        <div style="font-size: 0.82rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem;">
+          <span>📅 개발 일자:</span>
+          <strong id="devlog-modal-date" style="color: var(--text-main);">2026년 8월 30일</strong>
+        </div>
+        <div id="devlog-modal-summary" style="background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.2); border-radius: 10px; padding: 0.85rem 1rem; font-size: 0.88rem; font-weight: 700; color: var(--primary); line-height: 1.45;">
+          <!-- Summary text -->
+        </div>
+        <div>
+          <h4 style="font-size: 0.92rem; font-weight: 800; margin-bottom: 0.6rem; color: var(--text-main);">✨ 주요 개발 및 개선 내역</h4>
+          <ul id="devlog-modal-details-list" class="devlog-details-list" style="margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.85rem; color: var(--text-main); line-height: 1.5;">
+            <!-- Details li items -->
+          </ul>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top: 0.5rem;">
+        <button type="button" class="btn btn-primary" data-close-devlog-modal style="width: 100%;">확인 ✨</button>
       </div>
     </div>
   </div>

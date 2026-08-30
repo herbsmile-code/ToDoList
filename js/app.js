@@ -71,6 +71,51 @@
   const TODAY_STR = getRealTodayStr();
 
   // =========================================================================
+  // 0.1. Development Logs & Version History Data (개발기록 데이터)
+  // =========================================================================
+  const DEVLOG_DATA = [
+    {
+      version: 'v1.1',
+      date: '2026-08-30',
+      dateFormatted: '2026년 8월 30일 (오늘)',
+      title: '🌸 연차관리·휴가 전면 개편 & Firebase 즉시 백업 및 UI 안정화 (v1.1)',
+      badge: '최신 배포 🌟',
+      badgeColor: '#ff6b8b',
+      summary: '연차/반차/휴가 통합 관리 시스템 구축, 월별 달력 연동, Firebase 즉시 백업, 화면 점핑 방지 및 UI 인터랙션 대폭 강화',
+      details: [
+        '🏖️ 연차관리 신설: 총 발생연차, 사용한 연차, 남은 연차, 휴가(0일 차감) 4대 통계 카드 탑재',
+        '📅 사용날짜(YYYY-MM-DD) 기준 최신순 자동 정렬 및 월별 실시간 요약 배너 추가',
+        '🎯 통계 카드 원클릭 필터링: [사용한 연차/반차만 보기], [전체 기간 휴가만 보기] 지원',
+        '🗓️ 월별 달력 연동: 상단 통계에 "🌴 연차사용" 실제 일수 실시간 계산 연동',
+        '☁️ Firebase 즉시 백업: 다운로드 창 없이 클라우드로 1초 만에 안전하게 즉시 백업 & 업로드',
+        '🌐 사이트 바로가기 북마크 신설 (국세청, 노션 등 자주 가는 링크 모음)',
+        '✏️ 사이드바 카테고리 순서변경 토글 모드 및 드래그 구분선 3개 지원',
+        '🖱️ 메뉴 전환 시 화면이 맨 위로 튀어 올라가는 점핑 현상 완전 제거',
+        '📋 1일 단위 버전 관리 정책 수립 및 오늘 개발분 v1.1 정립'
+      ]
+    },
+    {
+      version: 'v1.0',
+      date: '2026-08-29',
+      dateFormatted: '2026년 8월 29일 (어제까지)',
+      title: '🚀 Todolist JY 스마트 라이프 다이어리 기초 구축 (v1.0)',
+      badge: '안정화 버전 💎',
+      badgeColor: '#7048e8',
+      summary: '할 일 관리, 주간/월별 캘린더 플래너, 신혼 가계부 엑셀 연동, 폴라로이드 사진첩, 위시리스트 및 AES-256 E2EE 보안 동기화 기초 완성',
+      details: [
+        '📋 개인 & 업무 할 일 관리 (리스트 뷰 & 칸반 보드 뷰, 마감일 및 상단 고정)',
+        '🗓️ 2026년 8월 기준 월별 달력 플래너 및 가로형 주간 다이어리',
+        '💰 2026년 신혼 가계부: 12개월 스택 바 차트, 영호 & 진영 급여, 고정지출/변동지출 및 엑셀 업로드',
+        '📸 폴라로이드 갤러리: 감성 사진 등록, 1:1 라이트박스 뷰어 및 드래그 앤 드롭 순서 변경',
+        '✏️ 끄적끄적 메모장 (감성 테이프 메모, 4가지 파스텔 컬러, 수정 및 삭제)',
+        '🎁 위시리스트 허브: 카테고리별 소원 등록 및 소원 달성 폭죽 스탬프 애니메이션',
+        '📁 파일 보관함: 엑셀/PDF/이미지 등 안전 보관 및 다운로드',
+        '🛡️ AES-256 E2EE 종단간 암호화 실시간 Firebase 클라우드 동기화'
+      ]
+    }
+  ];
+
+  // =========================================================================
   // 0. Utilities
   // =========================================================================
   function normalizeArray(val) {
@@ -1036,9 +1081,14 @@
         }
       });
 
-      // Sidebar menu items order with 3 dividers
-      const defaultOrder = ['personal', 'work', 'divider-1', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'vault'];
+      // Sidebar menu items order with 3 dividers and devlog (개발기록)
+      const defaultOrder = ['personal', 'work', 'divider-1', 'vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       let finalOrder = userSidebarOrder ? userSidebarOrder.slice() : defaultOrder;
+      if (!finalOrder.includes('devlog')) {
+        const vaultIdx = finalOrder.indexOf('vault');
+        if (vaultIdx !== -1) finalOrder.splice(vaultIdx, 0, 'devlog');
+        else finalOrder.push('devlog');
+      }
       // Ensure all essential default items exist
       defaultOrder.forEach(id => {
         if (!finalOrder.includes(id)) finalOrder.push(id);
@@ -1635,6 +1685,7 @@
           'ledger': { name: '가계부', icon: '💰', count: store.ledgerFiles.length },
           'wishlist': { name: '위시리스트', icon: '🎁', count: store.wishlist.length },
           'sites': { name: '사이트', icon: '🌐', count: store.sites.length },
+          'devlog': { name: '개발기록', icon: '🚀', count: DEVLOG_DATA.length },
           'vault': { name: '파일 보관함', icon: '📁', count: vaultCount }
         };
 
@@ -1825,6 +1876,7 @@
       const calWView = document.getElementById('calendar-week-view-container');
       const vacationView = document.getElementById('vacation-view-container');
       const sitesView = document.getElementById('sites-view-container');
+      const devlogView = document.getElementById('devlog-view-container');
 
       const listContainer = document.getElementById('tasks-list-container');
       const kanbanContainer = document.getElementById('kanban-board-container');
@@ -1834,7 +1886,7 @@
 
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
-      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, vacationView, sitesView];
+      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, vacationView, sitesView, devlogView];
 
       if (lockedScreen) lockedScreen.style.display = 'none';
       if (mobileBar && mobileBar.style.display !== 'flex') mobileBar.style.display = 'flex';
@@ -1850,6 +1902,7 @@
       else if (filter === 'ledger') targetView = ledgerView;
       else if (filter === 'wishlist') targetView = wishView;
       else if (filter === 'sites') targetView = sitesView;
+      else if (filter === 'devlog') targetView = devlogView;
       else if (filter === 'vault') targetView = filesView;
       else targetView = tasksView;
 
@@ -1910,6 +1963,12 @@
       // 6.5. 🌐 사이트 모음 (Sites) View
       if (filter === 'sites') {
         this.renderSites();
+        return;
+      }
+
+      // 6.8. 🚀 개발기록 (Dev Log) View
+      if (filter === 'devlog') {
+        this.renderDevLog();
         return;
       }
 
@@ -2059,6 +2118,17 @@
         let dayTotalScore = 0;
         let taskChipsHTML = '';
 
+        // 월별 달력 개발기록 (v1.0, v1.1 등) 칩 표시
+        const devlogItem = DEVLOG_DATA.find(d => d.date === dateStr);
+        if (devlogItem) {
+          taskChipsHTML += `
+            <div class="cal-devlog-chip ${devlogItem.version === 'v1.1' ? 'v1-1' : ''}" data-action="open-devlog-modal" data-devlog-ver="${devlogItem.version}" title="🚀 클릭하여 ${devlogItem.version} 개발기록 보기">
+              <span>🚀</span>
+              <span>개발기록 ${devlogItem.version}</span>
+            </div>
+          `;
+        }
+
         daysVacations.forEach(v => {
           dayTotalScore += (v.amount || (v.type === 'full' ? 1.0 : 0.5));
           const isFull = (v.type === 'full');
@@ -2077,7 +2147,8 @@
           dayTotalScore += 1.0;
         });
 
-        daysTasks.slice(0, Math.max(0, 3 - daysVacations.length)).forEach(task => {
+        const maxVisibleTasks = Math.max(0, 3 - daysVacations.length - (devlogItem ? 1 : 0));
+        daysTasks.slice(0, maxVisibleTasks).forEach(task => {
           const isDone = task.status === 'completed';
           const isImportant = (task.priority === 'urgent' || task.priority === 'high');
           const starIcon = isImportant ? '<span class="cal-star-badge" title="중요">⭐</span>' : '';
@@ -2092,7 +2163,7 @@
           `;
         });
 
-        const totalItemsCount = daysTasks.length + daysVacations.length;
+        const totalItemsCount = daysTasks.length + daysVacations.length + (devlogItem ? 1 : 0);
         if (totalItemsCount > 3) {
           taskChipsHTML += `<div class="cal-task-more">+${totalItemsCount - 3}개 더보기</div>`;
         }
@@ -3417,6 +3488,84 @@
         modal.style.display = 'none';
         modal.classList.remove('active');
       }
+    },
+
+    // =========================================================================
+    // 🚀 개발기록 (Dev Log Engine)
+    // =========================================================================
+    renderDevLog() {
+      const container = document.getElementById('devlog-timeline-list');
+      if (!container) return;
+
+      container.innerHTML = DEVLOG_DATA.map((log, index) => {
+        const isLatest = (index === 0);
+        return `
+          <div class="devlog-card ${isLatest ? 'highlight-latest' : ''}" data-devlog-ver="${log.version}">
+            <div class="devlog-card-header">
+              <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+                <span class="devlog-version-badge" style="background: ${log.badgeColor || 'var(--primary)'};">
+                  ${log.version}
+                </span>
+                <span style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted);">
+                  📅 ${log.dateFormatted}
+                </span>
+                <span class="badge" style="background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; font-size: 0.72rem; padding: 2px 7px;">
+                  ${log.badge}
+                </span>
+              </div>
+              <button type="button" class="btn btn-sm" style="font-size: 0.74rem; background: rgba(0,0,0,0.04); color: var(--primary); font-weight: 700; padding: 3px 8px; border-radius: 6px;" onclick="UI.openDevLogModal('${log.version}')">
+                🔍 팝업 요약
+              </button>
+            </div>
+
+            <h3 class="devlog-card-title">${log.title}</h3>
+            <div class="devlog-summary-box">💬 ${log.summary}</div>
+
+            <ul class="devlog-items-list">
+              ${log.details.map(item => `<li>${item}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }).join('');
+
+      this.renderSidebar();
+    },
+
+    openDevLogModal(version = 'v1.1') {
+      const log = DEVLOG_DATA.find(d => d.version === version) || DEVLOG_DATA[0];
+      if (!log) return;
+
+      const modal = document.getElementById('devlog-detail-modal');
+      const badgeEl = document.getElementById('devlog-modal-version-badge');
+      const titleEl = document.getElementById('devlog-modal-title');
+      const dateEl = document.getElementById('devlog-modal-date');
+      const summaryEl = document.getElementById('devlog-modal-summary');
+      const listEl = document.getElementById('devlog-modal-details-list');
+
+      if (!modal) return;
+
+      if (badgeEl) {
+        badgeEl.textContent = log.version;
+        badgeEl.style.background = log.badgeColor || 'var(--primary)';
+      }
+      if (titleEl) titleEl.textContent = log.title;
+      if (dateEl) dateEl.textContent = log.dateFormatted;
+      if (summaryEl) summaryEl.textContent = `💡 ${log.summary}`;
+      if (listEl) {
+        listEl.innerHTML = log.details.map(d => `<li>${d}</li>`).join('');
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeDevLogModal() {
+      const modal = document.getElementById('devlog-detail-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
     }
   };
 
@@ -4403,6 +4552,22 @@
     // Global Card Actions Delegation
     document.addEventListener('click', (e) => {
       const target = e.target;
+
+      // 0. Dev Log Modal Open from Calendar Chip or Timeline
+      if (target.closest('[data-action="open-devlog-modal"]') || target.closest('.cal-devlog-chip')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        const chip = target.closest('[data-action="open-devlog-modal"]') || target.closest('.cal-devlog-chip');
+        const ver = chip.dataset.devlogVer || 'v1.1';
+        UI.openDevLogModal(ver);
+        return;
+      }
+
+      // Close Devlog Modal
+      if (target.closest('[data-close-devlog-modal]')) {
+        UI.closeDevLogModal();
+        return;
+      }
 
       // 1. Task Completed Toggle
       if (target.matches('[data-action="toggle-complete"]') || target.classList.contains('task-checkbox')) {

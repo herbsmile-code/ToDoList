@@ -466,14 +466,14 @@ class TreasureVaultManager {
           </div>
         </div>
 
-        <div class="storage-breakdown-chips">
-          <span class="breakdown-chip">📂 파일보관함: <strong>${usage.breakdown.vault ? usage.breakdown.vault.formatted : '0 B'}</strong></span>
-          <span class="breakdown-chip">📸 사진첩: <strong>${usage.breakdown.photos ? usage.breakdown.photos.formatted : '0 B'}</strong></span>
-          <span class="breakdown-chip">✏️ 끄적끄적 메모: <strong>${usage.breakdown.notes ? usage.breakdown.notes.formatted : '0 B'}</strong></span>
-          <span class="breakdown-chip">📋 할 일/일정: <strong>${usage.breakdown.tasks ? usage.breakdown.tasks.formatted : '0 B'}</strong></span>
-          <span class="breakdown-chip">💰 가계부: <strong>${usage.breakdown.ledger ? usage.breakdown.ledger.formatted : '0 B'}</strong></span>
-          <span class="breakdown-chip">💎 보물 지식: <strong>${usage.breakdown.treasures ? usage.breakdown.treasures.formatted : '0 B'}</strong></span>
-          <span class="breakdown-chip">🎁 위시리스트: <strong>${usage.breakdown.wishlist ? usage.breakdown.wishlist.formatted : '0 B'}</strong></span>
+        <div class="storage-breakdown-grid">
+          <div class="storage-chip"><span>📂 파일보관함</span> <strong>${usage.breakdown.vault ? usage.breakdown.vault.formatted : '0 B'}</strong></div>
+          <div class="storage-chip"><span>📸 사진첩</span> <strong>${usage.breakdown.photos ? usage.breakdown.photos.formatted : '0 B'}</strong></div>
+          <div class="storage-chip"><span>✏️ 끄적끄적</span> <strong>${usage.breakdown.notes ? usage.breakdown.notes.formatted : '0 B'}</strong></div>
+          <div class="storage-chip"><span>📋 할 일</span> <strong>${usage.breakdown.tasks ? usage.breakdown.tasks.formatted : '0 B'}</strong></div>
+          <div class="storage-chip"><span>💰 가계부</span> <strong>${usage.breakdown.ledger ? usage.breakdown.ledger.formatted : '0 B'}</strong></div>
+          <div class="storage-chip"><span>💎 보물지식</span> <strong>${usage.breakdown.treasures ? usage.breakdown.treasures.formatted : '0 B'}</strong></div>
+          <div class="storage-chip"><span>🎁 위시</span> <strong>${usage.breakdown.wishlist ? usage.breakdown.wishlist.formatted : '0 B'}</strong></div>
         </div>
       </div>
     `;
