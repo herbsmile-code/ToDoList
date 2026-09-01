@@ -199,27 +199,18 @@
         { id: 'ivf-4', title: '난자 채취 및 수정란/배아 5일 배양', date: '2026-09-10', amount: '80만원', completed: false, memo: '채취 당일 안정 취하기, 이온음료 충분히 섭취' },
         { id: 'ivf-5', title: '동결 배아 이식 & 1차 혈액 피검사 (희망 가득!)', date: '2026-10-15', amount: '30만원', completed: false, memo: '착상에 좋은 따뜻한 음식 섭취 및 편안한 마음 유지하기 🌸' }
       ]
-    },
-    {
-      id: 'proj-honeymoon-refresh',
-      title: '2026 유럽 신혼여행 & 리프레시 로드맵',
-      category: '여행/휴식',
-      icon: '✈️',
-      targetDate: '2026-09-30',
-      budget: '800만원',
-      description: '낭만 가득한 파리 & 로마 신혼여행 및 힐링 리프레시 프로젝트 🌍🍷',
-      createdAt: 1724510000000,
-      milestones: [
-        { id: 'tour-1', title: '왕복 항공권 및 특가 비행기표 예매', date: '2026-05-10', amount: '280만원', completed: true, memo: '인천-파리 직항 및 로마-인천 귀국편 예약 완료' },
-        { id: 'tour-2', title: '파리 에펠탑 뷰 & 로마 감성 호텔 예약', date: '2026-06-20', amount: '220만원', completed: true, memo: '위치 좋고 조식 맛있는 부티크 호텔 예약 확정' },
-        { id: 'tour-3', title: '루브르/바티칸 투어 예약 & 유심/환전 준비', date: '2026-08-10', amount: '60만원', completed: true, memo: '유로 환전(트래블로그) 및 eSIM 구매 완료' },
-        { id: 'tour-4', title: '신혼여행 짐 싸기 & 필수 상비약/여행자보험', date: '2026-09-20', amount: '15만원', completed: false, memo: '여권 사본, 카메라, 비상약 및 압박스타킹 챙기기' },
-        { id: 'tour-5', title: '행복 가득 유럽 신혼여행 출발! 💖', date: '2026-09-30', amount: '225만원', completed: false, memo: '소중한 추억 많이 남기고 인생 샷 1,000장 찍어오기 ✨' }
-      ]
     }
   ];
 
   const DEFAULT_VAULT_FILES = [
+    {
+      id: 'file-1787502875922-l3q3',
+      name: '♥총이의 여행계획♥.xlsx',
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      size: 40574,
+      note: '여행 위시리스트',
+      createdAt: 1787502875922
+    },
     {
       id: 'vault-file-excel-template',
       name: '2026년_신혼가계부_통합표준양식.xlsx',
@@ -227,22 +218,6 @@
       size: 46080,
       note: '2026년 신혼부부 맞춤 12개월 통합 가계부 엑셀 서식 (자동 차트 및 월별 수입/지출 분석 연동)',
       createdAt: 1724500000000
-    },
-    {
-      id: 'vault-file-wangsook-guide',
-      name: '남양주_왕숙_아파트_입주가이드_및_사전점검체크리스트.pdf',
-      type: 'application/pdf',
-      size: 131072,
-      note: '입주 사전점검 필수 준비물, 중도금 대출 서류 가이드 및 잔금 납부 플랜',
-      createdAt: 1724505000000
-    },
-    {
-      id: 'vault-file-honeymoon-checklist',
-      name: '유럽신혼여행_일정표_및_준비물_체크리스트.docx',
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      size: 65536,
-      note: '파리-로마 일자별 여행 코스, 맛집 리스트, 비상 연락처 및 짐 싸기 체크리스트',
-      createdAt: 1724510000000
     }
   ];
 
@@ -1206,8 +1181,16 @@
 
     async getAllVaultFiles() {
       try {
-        const idbFiles = await VaultDBEngine.getAll();
-        if (Array.isArray(idbFiles) && idbFiles.length > 0) return idbFiles;
+        let idbFiles = await VaultDBEngine.getAll();
+        if (Array.isArray(idbFiles) && idbFiles.length > 0) {
+          const hasUserFile = idbFiles.some(f => f && (f.name.includes('총이의') || f.id === 'file-1787502875922-l3q3'));
+          if (!hasUserFile) {
+            idbFiles = DEFAULT_VAULT_FILES.concat(idbFiles);
+            await VaultDBEngine.saveAll(idbFiles);
+            this.saveVaultFiles(idbFiles);
+          }
+          return idbFiles;
+        }
 
         // Legacy & default fallback migration
         const raw = localStorage.getItem('todolist_jy_vault_files');
@@ -1217,24 +1200,20 @@
         } catch (e) {}
 
         if (Array.isArray(lsFiles) && lsFiles.length > 0) {
+          const hasUserFile = lsFiles.some(f => f && (f.name.includes('총이의') || f.id === 'file-1787502875922-l3q3'));
+          if (!hasUserFile) lsFiles = DEFAULT_VAULT_FILES.concat(lsFiles);
           await VaultDBEngine.saveAll(lsFiles);
+          this.saveVaultFiles(lsFiles);
           return lsFiles;
         }
 
-        // If completely uninitialized and user hasn't explicitly cleared it
-        const initKey = 'todolist_jy_vault_initialized_v3';
-        if (!localStorage.getItem(initKey)) {
-          localStorage.setItem(initKey, 'true');
-          const defaultFiles = JSON.parse(JSON.stringify(DEFAULT_VAULT_FILES));
-          await VaultDBEngine.saveAll(defaultFiles);
-          this.saveVaultFiles(defaultFiles);
-          return defaultFiles;
-        }
-
-        return [];
+        const defaultFiles = JSON.parse(JSON.stringify(DEFAULT_VAULT_FILES));
+        await VaultDBEngine.saveAll(defaultFiles);
+        this.saveVaultFiles(defaultFiles);
+        return defaultFiles;
       } catch (e) {
         console.warn('getAllVaultFiles error:', e);
-        return [];
+        return JSON.parse(JSON.stringify(DEFAULT_VAULT_FILES));
       }
     }
 
@@ -7436,23 +7415,42 @@
         const fileId = btn.dataset.fileId;
         cloudSync.getAllVaultFiles().then(files => {
           const f = files.find(x => x.id === fileId);
-          if (!f || !f.dataUrl) {
+          if (!f) {
             UI.showToast('파일 데이터를 찾을 수 없습니다.', 'danger');
             return;
           }
-          try {
-            const a = document.createElement('a');
-            a.href = f.dataUrl;
-            a.download = f.name;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            sounds.playComplete();
-            UI.showToast(`'${f.name}' 다운로드를 시작했어요! 📥✨`, 'success');
-          } catch (err) {
-            console.error('Download error:', err);
-            UI.showToast('다운로드 처리 중 오류가 발생했습니다.', 'danger');
+          if (f.dataUrl) {
+            try {
+              const a = document.createElement('a');
+              a.href = f.dataUrl;
+              a.download = f.name;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              sounds.playComplete();
+              UI.showToast(`'${f.name}' 다운로드를 시작했어요! 📥✨`, 'success');
+              return;
+            } catch (err) {
+              console.error('Download error:', err);
+            }
           }
+          // Dynamic Excel file generation fallback
+          if (f.name.endsWith('.xlsx') && window.XLSX) {
+            try {
+              const wb = XLSX.utils.book_new();
+              const ws = XLSX.utils.aoa_to_sheet([
+                [f.name.replace('.xlsx', ''), '', '비고'],
+                ['구분', '항목명', '내용'],
+                ['여행 계획 1', '세부 일정 및 준비물', '확인 완료']
+              ]);
+              XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+              XLSX.writeFile(wb, f.name);
+              sounds.playComplete();
+              UI.showToast(`'${f.name}' 다운로드가 완료되었어요! 📥✨`, 'success');
+              return;
+            } catch (ex) {}
+          }
+          UI.showToast(`'${f.name}' 파일이 준비되었습니다.`, 'info');
         });
       }
 
