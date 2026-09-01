@@ -1080,9 +1080,9 @@
       const key = this.getStorageKey();
       const vaultFiles = await this.getAllVaultFiles();
       
-      // Sanitize vault files for cloud RTDB (strip huge dataUrls > 500KB to prevent HTTP 413 Payload Too Large)
+      // Include full dataUrl for files up to 4.5MB (covers all typical Excel, PDF, Doc, and Image files)
       const sanitizedVaultFiles = (vaultFiles || []).map(f => {
-        if (f.dataUrl && f.dataUrl.length > 500 * 1024) {
+        if (f.dataUrl && f.dataUrl.length > 4.5 * 1024 * 1024) {
           const clone = Object.assign({}, f);
           delete clone.dataUrl;
           return clone;
