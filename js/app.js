@@ -75,12 +75,26 @@
   // =========================================================================
   const DEVLOG_DATA = [
     {
-      version: 'v1.1',
-      date: '2026-08-30',
-      dateFormatted: '2026년 8월 30일 (오늘)',
-      title: '🌸 2026 라이프 다이어리 대규모 고도화 & 인생 프로젝트·건강·취미·연차·파일보관함 및 실시간 클라우드 무결성 완성 (v1.1)',
+      version: 'v1.1.4',
+      date: '2026-09-01',
+      dateFormatted: '2026년 9월 1일 (최신)',
+      title: '🛡️ 인생 프로젝트 3종 복원 & 파일 보관함 3종 템플릿 복구 및 영구 백업 무결성 패치 (v1.1.4)',
       badge: '최신 배포 🌟',
       badgeColor: '#ff6b8b',
+      summary: '🎯 인생 프로젝트 3종(왕숙 입주/시험관/유럽 신혼여행) 복원, 📁 파일보관함 3종 기본 템플릿 복구 & IndexedDB 자동 Fallback 엔진, 🔒 새로고침 시 데이터 증발 없는 스마트 머지(Smart Merge) 완비',
+      details: [
+        '🎯 인생 프로젝트 3종 로드맵 복원: 왕숙 신도시 입주, 시험관 아기 천사 맞이, 2026 유럽 신혼여행 & 리프레시 로드맵 3종 완벽 복원 및 마일스톤 연동',
+        '📁 파일 보관함 3종 필수 템플릿 복구: 2026 신혼가계부 표준 엑셀, 왕숙 아파트 입주 가이드 PDF, 유럽 신혼여행 일정표 DOCX 기본 템플릿 탑재 및 IndexedDB 무제한 저장',
+        '🛡️ 새로고침 & 클라우드 동기화 무결성: 로컬 저장소 및 클라우드 동기화 시 프로젝트 및 보관함 파일이 0개로 리셋되지 않도록 방어 로직 및 스마트 머지 적용'
+      ]
+    },
+    {
+      version: 'v1.1',
+      date: '2026-08-30',
+      dateFormatted: '2026년 8월 30일',
+      title: '🌸 2026 라이프 다이어리 대규모 고도화 & 인생 프로젝트·건강·취미·연차·파일보관함 및 실시간 클라우드 무결성 완성 (v1.1)',
+      badge: '안정화 버전 💎',
+      badgeColor: '#7048e8',
       summary: '🏢 인생 대형 프로젝트(왕숙 입주/시험관) 로드맵, 🩺 건강관리 & 🎨 취미활동 폴더 분할 및 일괄 이동, 🏖️ 0일 차감 휴가 분리, 📁 2GB IndexedDB 무제한 파일보관함, ✏️ 메모·파일 삭제 동기화 무결성 및 사이드바 유연한 구분선 완비',
       details: [
         '🏢 인생 대형 프로젝트 (Roadmap & Milestones) 신설: 왕숙 신도시 아파트 입주, 소중한 아기 천사 맞이(시험관 준비) 등 인생의 큰 프로젝트 목표 설정, 단계별 중도금 납부/사전점검/입주일 및 시술 단계별 마일스톤 관리, D-Day & 실시간 프로그레스 바, 폭죽 완료 체크 및 24종 감성 이모지 피커 완비',
@@ -185,6 +199,50 @@
         { id: 'ivf-4', title: '난자 채취 및 수정란/배아 5일 배양', date: '2026-09-10', amount: '80만원', completed: false, memo: '채취 당일 안정 취하기, 이온음료 충분히 섭취' },
         { id: 'ivf-5', title: '동결 배아 이식 & 1차 혈액 피검사 (희망 가득!)', date: '2026-10-15', amount: '30만원', completed: false, memo: '착상에 좋은 따뜻한 음식 섭취 및 편안한 마음 유지하기 🌸' }
       ]
+    },
+    {
+      id: 'proj-honeymoon-refresh',
+      title: '2026 유럽 신혼여행 & 리프레시 로드맵',
+      category: '여행/휴식',
+      icon: '✈️',
+      targetDate: '2026-09-30',
+      budget: '800만원',
+      description: '낭만 가득한 파리 & 로마 신혼여행 및 힐링 리프레시 프로젝트 🌍🍷',
+      createdAt: 1724510000000,
+      milestones: [
+        { id: 'tour-1', title: '왕복 항공권 및 특가 비행기표 예매', date: '2026-05-10', amount: '280만원', completed: true, memo: '인천-파리 직항 및 로마-인천 귀국편 예약 완료' },
+        { id: 'tour-2', title: '파리 에펠탑 뷰 & 로마 감성 호텔 예약', date: '2026-06-20', amount: '220만원', completed: true, memo: '위치 좋고 조식 맛있는 부티크 호텔 예약 확정' },
+        { id: 'tour-3', title: '루브르/바티칸 투어 예약 & 유심/환전 준비', date: '2026-08-10', amount: '60만원', completed: true, memo: '유로 환전(트래블로그) 및 eSIM 구매 완료' },
+        { id: 'tour-4', title: '신혼여행 짐 싸기 & 필수 상비약/여행자보험', date: '2026-09-20', amount: '15만원', completed: false, memo: '여권 사본, 카메라, 비상약 및 압박스타킹 챙기기' },
+        { id: 'tour-5', title: '행복 가득 유럽 신혼여행 출발! 💖', date: '2026-09-30', amount: '225만원', completed: false, memo: '소중한 추억 많이 남기고 인생 샷 1,000장 찍어오기 ✨' }
+      ]
+    }
+  ];
+
+  const DEFAULT_VAULT_FILES = [
+    {
+      id: 'vault-file-excel-template',
+      name: '2026년_신혼가계부_통합표준양식.xlsx',
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      size: 46080,
+      note: '2026년 신혼부부 맞춤 12개월 통합 가계부 엑셀 서식 (자동 차트 및 월별 수입/지출 분석 연동)',
+      createdAt: 1724500000000
+    },
+    {
+      id: 'vault-file-wangsook-guide',
+      name: '남양주_왕숙_아파트_입주가이드_및_사전점검체크리스트.pdf',
+      type: 'application/pdf',
+      size: 131072,
+      note: '입주 사전점검 필수 준비물, 중도금 대출 서류 가이드 및 잔금 납부 플랜',
+      createdAt: 1724505000000
+    },
+    {
+      id: 'vault-file-honeymoon-checklist',
+      name: '유럽신혼여행_일정표_및_준비물_체크리스트.docx',
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      size: 65536,
+      note: '파리-로마 일자별 여행 코스, 맛집 리스트, 비상 연락처 및 짐 싸기 체크리스트',
+      createdAt: 1724510000000
     }
   ];
 
@@ -891,8 +949,19 @@
                   });
                   store.hobbyFolders = hbFolders;
                 }
-                if (Array.isArray(data.projects)) {
-                  store.projects = data.projects;
+                if (data.projects !== undefined && Array.isArray(data.projects)) {
+                  if (data.projects.length > 0) {
+                    const cloudProjects = data.projects;
+                    const pMap = new Map();
+                    cloudProjects.forEach(p => { if (p && p.id) pMap.set(p.id, p); });
+                    (store.projects || []).forEach(lp => {
+                      if (lp && lp.id && !pMap.has(lp.id)) pMap.set(lp.id, lp);
+                    });
+                    store.projects = Array.from(pMap.values());
+                  }
+                }
+                if (!store.projects || store.projects.length === 0) {
+                  store.projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
                 }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
                   const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
@@ -1138,20 +1207,30 @@
     async getAllVaultFiles() {
       try {
         const idbFiles = await VaultDBEngine.getAll();
-        // Return indexedDB files directly (if empty, it means 0 files)
         if (Array.isArray(idbFiles) && idbFiles.length > 0) return idbFiles;
 
-        // Legacy 1-time migration only if never migrated
-        const migratedKey = 'todolist_jy_vault_migrated_v2';
-        if (!localStorage.getItem(migratedKey)) {
-          localStorage.setItem(migratedKey, 'true');
-          const raw = localStorage.getItem('todolist_jy_vault_files');
-          const lsFiles = raw ? JSON.parse(raw) : [];
-          if (lsFiles.length > 0) {
-            await VaultDBEngine.saveAll(lsFiles);
-            return lsFiles;
-          }
+        // Legacy & default fallback migration
+        const raw = localStorage.getItem('todolist_jy_vault_files');
+        let lsFiles = [];
+        try {
+          if (raw) lsFiles = JSON.parse(raw);
+        } catch (e) {}
+
+        if (Array.isArray(lsFiles) && lsFiles.length > 0) {
+          await VaultDBEngine.saveAll(lsFiles);
+          return lsFiles;
         }
+
+        // If completely uninitialized and user hasn't explicitly cleared it
+        const initKey = 'todolist_jy_vault_initialized_v3';
+        if (!localStorage.getItem(initKey)) {
+          localStorage.setItem(initKey, 'true');
+          const defaultFiles = JSON.parse(JSON.stringify(DEFAULT_VAULT_FILES));
+          await VaultDBEngine.saveAll(defaultFiles);
+          this.saveVaultFiles(defaultFiles);
+          return defaultFiles;
+        }
+
         return [];
       } catch (e) {
         console.warn('getAllVaultFiles error:', e);
@@ -1615,6 +1694,7 @@
       this.hobbyNotes = userHobbyNotes;
       this.hobbyFolders = userHobbyFolders;
       this.activeHobbyFolder = 'all';
+      this.projects = (Array.isArray(userProjects) && userProjects.length > 0) ? userProjects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
 
       try {
         const streakRaw = localStorage.getItem(STREAK_KEY);
