@@ -75,17 +75,22 @@
   // =========================================================================
   const DEVLOG_DATA = [
     {
-      version: 'v1.1.4',
-      date: '2026-09-01',
-      dateFormatted: '2026년 9월 1일 (최신)',
-      title: '🛡️ 인생 프로젝트 3종 복원 & 파일 보관함 3종 템플릿 복구 및 영구 백업 무결성 패치 (v1.1.4)',
+      version: 'v1.1.8',
+      date: '2026-09-02',
+      dateFormatted: '2026년 9월 2일 (오늘)',
+      title: '🛡️ 파일보관함 폴더관리·파일이동 완비 & 톰스톤(Tombstone) 기반 삭제 부활 방지 및 연차내역 편집 고도화 (v1.1.8)',
       badge: '최신 배포 🌟',
       badgeColor: '#ff6b8b',
-      summary: '🎯 인생 프로젝트 3종(왕숙 입주/시험관/유럽 신혼여행) 복원, 📁 파일보관함 3종 기본 템플릿 복구 & IndexedDB 자동 Fallback 엔진, 🔒 새로고침 시 데이터 증발 없는 스마트 머지(Smart Merge) 완비',
+      summary: '📁 파일보관함 폴더별 분류 & 일괄 이동, 🏖️ 연차내역 인라인 편집 모달, 📂 드래그앤드롭 업로드 안정화, 🛡️ 시계 오차 극복 톰스톤 및 단조 리비전 동기화로 삭제 항목 부활 원천 차단 완비',
       details: [
-        '🎯 인생 프로젝트 3종 로드맵 복원: 왕숙 신도시 입주, 시험관 아기 천사 맞이, 2026 유럽 신혼여행 & 리프레시 로드맵 3종 완벽 복원 및 마일스톤 연동',
-        '📁 파일 보관함 3종 필수 템플릿 복구: 2026 신혼가계부 표준 엑셀, 왕숙 아파트 입주 가이드 PDF, 유럽 신혼여행 일정표 DOCX 기본 템플릿 탑재 및 IndexedDB 무제한 저장',
-        '🛡️ 새로고침 & 클라우드 동기화 무결성: 로컬 저장소 및 클라우드 동기화 시 프로젝트 및 보관함 파일이 0개로 리셋되지 않도록 방어 로직 및 스마트 머지 적용'
+        '📁 파일 보관함 폴더별(개인 🌸, 회사 💼, 기타 📁 등) 분류 & 자유로운 폴더 생성/편집/삭제: 24종 이모지 피커 지원, 폴더 삭제 시 내부 파일은 \'기타\' 폴더로 안전 자동 이관(Zero Data Loss)',
+        '📦 파일 단일/다중 일괄(Batch) 폴더 이동 기능: 보관함 상단 일괄 선택 체크박스 & 선택한 파일들을 원하는 폴더로 한번에 이동하거나 일괄 삭제하는 플로팅 툴바 탑재',
+        '🏖️ 연차 관리 등록 내역 수정/편집 지원: 이미 등록된 연차/반차/0일 휴가 내역의 날짜, 휴가 구분(전일/오전반차/오후반차/0일휴가), 사유를 언제든 자유롭게 수정할 수 있는 모달 지원',
+        '📂 파일 보관함 전 영역 드래그 앤 드롭 업로드 개선: 보관함 드래그 시 시각적 드롭존 피드백 제공 및 다중 파일 즉시 IndexedDB/클라우드 안전 저장',
+        '🛡️ 톰스톤(Tombstone `deletedItemIds`) 영구 삭제 추적 시스템 구축: 일정, 메모, 사진, 위시리스트, 연차, 건강/취미노트, 파일 등 삭제 시 ID를 영구 추적하여 다른 기기의 과거 캐시로 인한 삭제 항목 부활(Zombie Item) 원천 방지',
+        '⏱️ 다중 기기 시스템 시계 오차(Clock Drift) 극복 단조 리비전(`syncRevision`): 집/회사 PC 간 시계 차이가 발생해도 모든 로컬 작업에 클라우드보다 엄격하게 높은 논리적 타임스탬프와 버전 리비전 부여로 역전송(Reverse Push) 덮어쓰기 완전 해결',
+        '☁️ 클라우드 최신 상태 우선 동기화 (Rule 1 & Rule 2 무결성 준수): 2단계 동기화 로그인 직후 최신 클라우드 상태를 최우선 수신하며, 사용자 기존 데이터를 100% 영구 보존',
+        '📜 프로젝트 핵심 가이드라인 (`GEMINI.md`) 영구 정립'
       ]
     },
     {
@@ -111,7 +116,7 @@
     {
       version: 'v1.0',
       date: '2026-08-29',
-      dateFormatted: '2026년 8월 29일 (어제까지)',
+      dateFormatted: '2026년 8월 29일',
       title: '🚀 Todolist JY 스마트 라이프 다이어리 기초 구축 (v1.0)',
       badge: '안정화 버전 💎',
       badgeColor: '#7048e8',
@@ -159,6 +164,19 @@
     '🪴', '📷', '🎮', '🧩', '🎬', '🏕️', '🧶', '✨'
   ];
 
+  const DEFAULT_VAULT_FOLDERS = [
+    { id: 'all', name: '전체보기', icon: '📁' },
+    { id: 'personal', name: '개인', icon: '🌸' },
+    { id: 'work', name: '회사', icon: '💼' },
+    { id: 'general', name: '기타', icon: '📦' }
+  ];
+
+  const VAULT_EMOJI_LIST = [
+    '📁', '📂', '🌸', '💼', '📦', '📑', '📊', '📄',
+    '🏠', '🏢', '💍', '💰', '💳', '🩺', '🎨', '✈️',
+    '🔑', '🏷️', '📌', '⭐', '💖', '🔒', '🛡️', '✨'
+  ];
+
   const DEFAULT_PROJECT_EMOJIS = [
     '🏢', '🏠', '🔑', '🌱', '👶', '🍼', '💍', '🚗', 
     '✈️', '🎓', '💰', '📈', '🎯', '🌟', '💼', '🏡', 
@@ -199,25 +217,6 @@
         { id: 'ivf-4', title: '난자 채취 및 수정란/배아 5일 배양', date: '2026-09-10', amount: '80만원', completed: false, memo: '채취 당일 안정 취하기, 이온음료 충분히 섭취' },
         { id: 'ivf-5', title: '동결 배아 이식 & 1차 혈액 피검사 (희망 가득!)', date: '2026-10-15', amount: '30만원', completed: false, memo: '착상에 좋은 따뜻한 음식 섭취 및 편안한 마음 유지하기 🌸' }
       ]
-    }
-  ];
-
-  const DEFAULT_VAULT_FILES = [
-    {
-      id: 'file-1787502875922-l3q3',
-      name: '♥총이의 여행계획♥.xlsx',
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      size: 40574,
-      note: '여행 위시리스트',
-      createdAt: 1787502875922
-    },
-    {
-      id: 'vault-file-excel-template',
-      name: '2026년_신혼가계부_통합표준양식.xlsx',
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      size: 46080,
-      note: '2026년 신혼부부 맞춤 12개월 통합 가계부 엑셀 서식 (자동 차트 및 월별 수입/지출 분석 연동)',
-      createdAt: 1724500000000
     }
   ];
 
@@ -623,16 +622,19 @@
       this.syncTimer = null;
       this.pushDebounceTimer = null;
 
-      // Always restore true local timestamp from localStorage to prevent overwriting new local items on refresh!
+      // Always restore true local timestamp and revision from localStorage to prevent clock drift issues!
       let localTs = 0;
+      let localRev = 0;
       try {
         const raw = localStorage.getItem('todolist_jy_data_v39');
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && parsed.updatedAt) localTs = Number(parsed.updatedAt) || 0;
+          if (parsed && parsed.syncRevision) localRev = Number(parsed.syncRevision) || 0;
         }
       } catch (e) {}
       this.lastSyncedUpdatedAt = localTs;
+      this.lastSyncedRevision = localRev;
       this.isPushing = false;
     }
 
@@ -730,10 +732,9 @@
       localStorage.setItem('todolist_jy_pin', cleanPin);
 
       this.updateUIStatus();
-      // 🛡️ 1. 새 기기 로그인 시 빈 데이터로 클라우드를 덮어쓰지 않도록 클라우드 데이터를 '먼저' 안전하게 가져와 로컬과 Smart Merge!
+      // 1. First fetch latest data from cloud (force=true) so remote data is authoritatively downloaded to this PC
       await this.fetchLatestFromCloud(true);
-      // 🛡️ 2. 머지된 통합 안전 데이터를 클라우드에 백업 업로드
-      await this.pushTasksToCloud();
+      // 2. Start realtime polling
       this.startRealtimePolling();
       return { success: true, message: '🎉 로그인 및 실시간 동기화 연결 완료!' };
     }
@@ -764,9 +765,9 @@
 
       if (isLogged) {
         if (statusIcon) statusIcon.textContent = '🔒';
-        if (statusText) statusText.textContent = '동기화';
-        if (banner) banner.style.display = 'block';
-        if (displayKey) displayKey.textContent = '🛡️ 종단간 암호화 실시간 연결됨 ✨';
+        if (statusText) statusText.textContent = '종단간 암호화 동기화 중';
+        if (banner) banner.style.display = 'flex';
+        if (displayKey) displayKey.textContent = 'on3257 (E2EE AES-256)';
         if (lockedScreen) lockedScreen.style.display = 'none';
       } else {
         if (statusIcon) statusIcon.textContent = '☁️';
@@ -788,39 +789,6 @@
       try { UI.renderVacation(); } catch (e) {}
       try { UI.renderSites(); } catch (e) {}
       try { UI.renderSidebar(); } catch (e) {}
-    }
-
-    // 🛡️ Zero-Data-Loss Bidirectional Smart ID Merge Helper with Tombstone Support
-    smartMergeList(localList, cloudList, extraDeleted = null) {
-      const mergedMap = new Map();
-      const delSet = (store && store.deletedIds) ? store.deletedIds : new Set();
-      
-      // 1. First add all cloud items (ignoring deleted tombstones)
-      (cloudList || []).forEach(item => {
-        if (item && item.id && !delSet.has(item.id) && (!extraDeleted || !extraDeleted.has(item.id))) {
-          mergedMap.set(item.id, Object.assign({}, item));
-        }
-      });
-      
-      // 2. Union with all local items (ignoring deleted tombstones)
-      (localList || []).forEach(localItem => {
-        if (localItem && localItem.id && !delSet.has(localItem.id) && (!extraDeleted || !extraDeleted.has(localItem.id))) {
-          if (!mergedMap.has(localItem.id)) {
-            // Local-only item: keep safely!
-            mergedMap.set(localItem.id, Object.assign({}, localItem));
-          } else {
-            // Exists in both: choose newer by updatedAt / createdAt
-            const cloudItem = mergedMap.get(localItem.id);
-            const localUp = Number(localItem.updatedAt || localItem.createdAt || 0);
-            const cloudUp = Number(cloudItem.updatedAt || cloudItem.createdAt || 0);
-            if (localUp >= cloudUp) {
-              mergedMap.set(localItem.id, Object.assign({}, cloudItem, localItem));
-            }
-          }
-        }
-      });
-      
-      return Array.from(mergedMap.values());
     }
 
     async fetchLatestFromCloud(force = false) {
@@ -845,34 +813,41 @@
 
             if (data && typeof data === 'object') {
               const remoteUpdated = Number(data.updatedAt) || 0;
-              const localUpdated = Number(this.lastSyncedUpdatedAt) || 0;
+              const remoteRevision = Number(data.revision) || 0;
+              const localUpdated = Number(this.lastSyncedUpdatedAt) || Number(store.lastUpdatedAt) || 0;
+              const localRevision = Number(this.lastSyncedRevision) || Number(store.syncRevision) || 0;
 
-              // 🛡️ Always perform Non-Destructive Bidirectional Smart Merge on fetch!
-              if (remoteUpdated > localUpdated || force || true) {
+              // Import and merge all tombstones from cloud into local store so deleted items NEVER resurrect
+              if (Array.isArray(data.deletedItemIds)) {
+                if (!store.deletedItemIds) store.deletedItemIds = new Set();
+                data.deletedItemIds.forEach(id => {
+                  if (id) store.deletedItemIds.add(String(id).trim());
+                });
+              }
+
+              const isRemoteNewer = (remoteRevision > localRevision) || (remoteUpdated > localUpdated);
+              const shouldAcceptCloud = force || 
+                                        isRemoteNewer || 
+                                        (store.photos.length === 0 && Array.isArray(data.photos) && data.photos.length > 0) ||
+                                        (store.tasks.length === 0 && Array.isArray(data.tasks) && data.tasks.length > 0);
+
+              if (shouldAcceptCloud) {
                 this.lastSyncedUpdatedAt = Math.max(remoteUpdated, localUpdated);
+                this.lastSyncedRevision = Math.max(remoteRevision, localRevision);
+                store.lastUpdatedAt = this.lastSyncedUpdatedAt;
+                store.syncRevision = this.lastSyncedRevision;
 
-                // 0. Sync Tombstones (deletedIds) from cloud
-                if (data.deletedIds && Array.isArray(data.deletedIds)) {
-                  data.deletedIds.forEach(id => {
-                    if (id) store.deletedIds.add(String(id).trim());
-                  });
-                  try {
-                    localStorage.setItem('todolist_jy_deleted_ids_v1', JSON.stringify(Array.from(store.deletedIds)));
-                  } catch (e) {}
-                }
+                const deletedIds = store.deletedItemIds || new Set();
 
-                // 1. Tasks
                 if (data.tasks !== undefined) {
-                  const cloudTasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
-                  store.tasks = this.smartMergeList(store.tasks, cloudTasks);
+                  const cloudTasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id) && !deletedIds.has(t.id));
+                  store.tasks = cloudTasks;
                   store.tasks.forEach(t => {
                     if (!t.category || (t.category !== 'personal' && t.category !== 'work')) {
                       t.category = 'personal';
                     }
                   });
                 }
-
-                // 2. Categories
                 if (data.categories !== undefined && normalizeArray(data.categories).length) {
                   let cats = normalizeArray(data.categories).filter(c => c && c.id && (c.id === 'personal' || c.id === 'work' || c.id === 'schedule'));
                   cats = cats.map(c => {
@@ -891,58 +866,22 @@
                   });
                   store.categories = cats;
                 }
-
-                // 3. Wishlist
                 if (data.wishlist !== undefined) {
-                  const cloudWishes = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
-                  store.wishlist = this.smartMergeList(store.wishlist, cloudWishes);
+                  store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id) && !deletedIds.has(w.id));
                 }
-
-                // 4. Photos
                 if (data.photos !== undefined) {
-                  const cloudPhotos = normalizeArray(data.photos).filter(p => p && p.id);
-                  store.photos = this.smartMergeList(store.photos, cloudPhotos);
+                  store.photos = normalizeArray(data.photos).filter(p => p && p.id && !deletedIds.has(p.id));
                 }
-
-                // 5. Notes
                 if (data.notes !== undefined) {
-                  const cloudNotes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
-                  store.notes = this.smartMergeList(store.notes, cloudNotes);
+                  store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id) && !deletedIds.has(n.id));
                 }
-
-                // 6. Honeymoon Data
                 if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
-
-                // 7. Ledger Files
-                if (data.ledgerFiles !== undefined) {
-                  const cloudLedger = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
-                  store.ledgerFiles = this.smartMergeList(store.ledgerFiles, cloudLedger);
-                }
-
-                // 8. 🏖️ Vacations (Absolute Zero-Data-Loss Merge)
-                if (data.vacations !== undefined) {
-                  const cloudVacations = normalizeArray(data.vacations);
-                  store.vacations = this.smartMergeList(store.vacations, cloudVacations);
-                  // Ensure INITIAL_VACATIONS are always preserved
-                  INITIAL_VACATIONS.forEach(iv => {
-                    if (!store.vacations.some(v => v.id === iv.id)) store.vacations.push(iv);
-                  });
-                  store.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-                }
-
-                // 9. Total Vacation Days
+                if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id) && !deletedIds.has(f.id));
+                if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations).filter(v => v && v.id && !deletedIds.has(v.id));
                 if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
-
-                // 10. Sites
-                if (data.sites !== undefined) {
-                  const cloudSites = normalizeArray(data.sites);
-                  store.sites = this.smartMergeList(store.sites, cloudSites);
-                }
-
-                // 11. Health Notes & Folders
+                if (data.sites !== undefined) store.sites = normalizeArray(data.sites).filter(s => s && s.id && !deletedIds.has(s.id));
                 if (data.healthNotes !== undefined) {
-                  const cloudHNotes = normalizeArray(data.healthNotes);
-                  store.healthNotes = this.smartMergeList(store.healthNotes, cloudHNotes);
+                  store.healthNotes = normalizeArray(data.healthNotes).filter(n => n && n.id && !deletedIds.has(n.id));
                 }
                 if (data.healthFolders !== undefined && Array.isArray(data.healthFolders)) {
                   let hFolders = data.healthFolders.slice();
@@ -955,11 +894,8 @@
                   });
                   store.healthFolders = hFolders;
                 }
-
-                // 12. Hobby Notes & Folders
                 if (data.hobbyNotes !== undefined) {
-                  const cloudHbNotes = normalizeArray(data.hobbyNotes);
-                  store.hobbyNotes = this.smartMergeList(store.hobbyNotes, cloudHbNotes);
+                  store.hobbyNotes = normalizeArray(data.hobbyNotes).filter(n => n && n.id && !deletedIds.has(n.id));
                 }
                 if (data.hobbyFolders !== undefined && Array.isArray(data.hobbyFolders)) {
                   let hbFolders = data.hobbyFolders.slice();
@@ -972,18 +908,20 @@
                   });
                   store.hobbyFolders = hbFolders;
                 }
-
-                // 13. Projects
-                if (data.projects !== undefined && Array.isArray(data.projects)) {
-                  if (data.projects.length > 0) {
-                    store.projects = this.smartMergeList(store.projects, data.projects);
-                  }
+                if (data.vaultFolders !== undefined && Array.isArray(data.vaultFolders)) {
+                  let vFolders = data.vaultFolders.slice();
+                  DEFAULT_VAULT_FOLDERS.forEach(defF => {
+                    if (!vFolders.some(f => f && f.id === defF.id)) {
+                      const genIdx = vFolders.findIndex(f => f && f.id === 'general');
+                      if (genIdx !== -1) vFolders.splice(genIdx, 0, Object.assign({}, defF));
+                      else vFolders.push(Object.assign({}, defF));
+                    }
+                  });
+                  store.vaultFolders = vFolders;
                 }
-                if (!store.projects || store.projects.length === 0) {
-                  store.projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+                if (Array.isArray(data.projects)) {
+                  store.projects = data.projects;
                 }
-
-                // 14. Sidebar Order
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
                   const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
                   let order = data.sidebarMenuOrder.slice();
@@ -1024,11 +962,33 @@
                     if (!order.includes(id)) order.push(id);
                   });
 
-                  // Ensure dividers in exact positions
+                  // 1. Ensure divider-1 is positioned RIGHT AFTER work (업무 메뉴 아래에 구분선)
                   const d1Idx = order.indexOf('divider-1');
-                  const hIdx = order.indexOf('hobby');
-                  if (d1Idx !== -1 && hIdx !== -1 && d1Idx !== hIdx - 1) {
+                  const wIdx = order.indexOf('work');
+                  if (d1Idx !== -1 && wIdx !== -1 && d1Idx !== wIdx + 1) {
                     order.splice(d1Idx, 1);
+                    const newWIdx = order.indexOf('work');
+                    order.splice(newWIdx + 1, 0, 'divider-1');
+                  }
+
+                  // 2. Ensure project is positioned RIGHT AFTER divider-1
+                  const prIdx = order.indexOf('project');
+                  const newD1Idx = order.indexOf('divider-1');
+                  if (prIdx !== -1 && newD1Idx !== -1 && prIdx !== newD1Idx + 1) {
+                    order.splice(prIdx, 1);
+                    const curD1 = order.indexOf('divider-1');
+                    order.splice(curD1 + 1, 0, 'project');
+                  }
+
+                  // 3. Ensure hobby is positioned RIGHT AFTER project
+                  const hbIdx = order.indexOf('hobby');
+                  const curPr = order.indexOf('project');
+                  if (hbIdx !== -1 && curPr !== -1 && hbIdx !== curPr + 1) {
+                    order.splice(hbIdx, 1);
+                    const latestPr = order.indexOf('project');
+                    order.splice(latestPr + 1, 0, 'hobby');
+                  }
+
                   // 4. Ensure divider-vacation is positioned RIGHT AFTER vacation
                   const dvIdx = order.indexOf('divider-vacation');
                   const vIdx = order.indexOf('vacation');
@@ -1043,7 +1003,7 @@
                 if (Array.isArray(data.vaultFiles)) {
                   const localVault = await VaultDBEngine.getAll();
                   // Clean Smart Merge: Preserve local dataUrl if cloud copy is lightweight metadata
-                  const mergedFiles = data.vaultFiles.map(cloudF => {
+                  const mergedFiles = data.vaultFiles.filter(f => f && f.id && !deletedIds.has(f.id)).map(cloudF => {
                     const localMatch = (localVault || []).find(l => l && l.id === cloudF.id);
                     if (localMatch && localMatch.dataUrl && !cloudF.dataUrl) {
                       return Object.assign({}, cloudF, { dataUrl: localMatch.dataUrl });
@@ -1055,15 +1015,15 @@
                   try { UI.renderFilesVault(); } catch (e) {}
                 }
                 
-                store.saveLocalOnly();
+                store.saveLocalOnly(this.lastSyncedUpdatedAt, this.lastSyncedRevision);
                 this.renderAllViews();
 
                 // If cloud data was in legacy plain format, auto-upgrade to encrypted format
                 if (!rawResponse.isEncrypted) {
                   await this.pushTasksToCloud();
                 }
-              } else if (localUpdated > remoteUpdated && force) {
-                // Local is newer and force sync was requested -> upload local truth to cloud
+              } else if (localRevision > remoteRevision || localUpdated > remoteUpdated) {
+                // Local is genuinely newer through user mutation
                 await this.pushTasksToCloud(true);
               }
             }
@@ -1082,7 +1042,6 @@
 
     async pushTasksToCloud(immediate = false) {
       if (!this.spaceId || !this.pin) return;
-      this.lastSyncedUpdatedAt = Date.now();
       
       if (this.pushDebounceTimer) {
         clearTimeout(this.pushDebounceTimer);
@@ -1102,78 +1061,54 @@
       if (!this.spaceId || !this.pin) return;
       this.isPushing = true;
       const key = this.getStorageKey();
+      const vaultFiles = await this.getAllVaultFiles();
+      
+      // Sanitize vault files for cloud RTDB (strip huge dataUrls > 500KB to prevent HTTP 413 Payload Too Large)
+      const sanitizedVaultFiles = (vaultFiles || []).map(f => {
+        if (f.dataUrl && f.dataUrl.length > 500 * 1024) {
+          const clone = Object.assign({}, f);
+          delete clone.dataUrl;
+          return clone;
+        }
+        return f;
+      });
+
+      // Strict Monotonic Timestamp & Revision guarantees that multi-device clocks never conflict
+      const nowTs = Math.max(Date.now(), (this.lastSyncedUpdatedAt || 0) + 1000, (store.lastUpdatedAt || 0));
+      const nextRevision = Math.max((this.lastSyncedRevision || 0) + 1, (store.syncRevision || 0) + 1);
+      this.lastSyncedUpdatedAt = nowTs;
+      this.lastSyncedRevision = nextRevision;
+      store.lastUpdatedAt = nowTs;
+      store.syncRevision = nextRevision;
+
+      // Filter out any tombstone deleted items before pushing
+      const deletedIds = store.deletedItemIds || new Set();
+
+      const rawPayload = {
+        tasks: (store.tasks || []).filter(t => t && t.id && !deletedIds.has(t.id)),
+        categories: store.categories,
+        sidebarMenuOrder: store.sidebarMenuOrder,
+        wishlist: (store.wishlist || []).filter(w => w && w.id && !deletedIds.has(w.id)),
+        photos: (store.photos || []).filter(p => p && p.id && !deletedIds.has(p.id)),
+        notes: (store.notes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
+        vaultFiles: sanitizedVaultFiles,
+        vaultFolders: store.vaultFolders,
+        deletedItemIds: Array.from(deletedIds).slice(-500),
+        honeymoonData: store.honeymoonData,
+        ledgerFiles: (store.ledgerFiles || []).filter(f => f && f.id && !deletedIds.has(f.id)),
+        vacations: (store.vacations || []).filter(v => v && v.id && !deletedIds.has(v.id)),
+        totalVacationDays: store.totalVacationDays,
+        sites: (store.sites || []).filter(s => s && s.id && !deletedIds.has(s.id)),
+        healthNotes: (store.healthNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
+        healthFolders: store.healthFolders,
+        hobbyNotes: (store.hobbyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
+        hobbyFolders: store.hobbyFolders,
+        projects: store.projects,
+        revision: nextRevision,
+        updatedAt: nowTs
+      };
 
       try {
-        // 🛡️ ZERO-OVERWRITE SAFEGUARD: Pre-fetch and merge before pushing to prevent blank PC overwrite!
-        try {
-          const preUrl = `${this.activeUrl}/spaces/${key}.json`;
-          const preRes = await fetch(preUrl);
-          if (preRes.ok) {
-            const rawCloud = await preRes.json();
-            if (rawCloud && typeof rawCloud === 'object') {
-              const cloudData = await E2EESecurityEngine.decrypt(rawCloud, this.pin);
-              if (cloudData && typeof cloudData === 'object') {
-                if (cloudData.tasks) store.tasks = this.smartMergeList(store.tasks, cloudData.tasks);
-                if (cloudData.vacations) store.vacations = this.smartMergeList(store.vacations, cloudData.vacations);
-                if (cloudData.notes) store.notes = this.smartMergeList(store.notes, cloudData.notes);
-                if (cloudData.wishlist) store.wishlist = this.smartMergeList(store.wishlist, cloudData.wishlist);
-                if (cloudData.photos) store.photos = this.smartMergeList(store.photos, cloudData.photos);
-                if (cloudData.healthNotes) store.healthNotes = this.smartMergeList(store.healthNotes, cloudData.healthNotes);
-                if (cloudData.hobbyNotes) store.hobbyNotes = this.smartMergeList(store.hobbyNotes, cloudData.hobbyNotes);
-                if (cloudData.sites) store.sites = this.smartMergeList(store.sites, cloudData.sites);
-                if (cloudData.projects && cloudData.projects.length > 0) store.projects = this.smartMergeList(store.projects, cloudData.projects);
-                if (cloudData.ledgerFiles) store.ledgerFiles = this.smartMergeList(store.ledgerFiles, cloudData.ledgerFiles);
-                store.saveLocalOnly();
-              }
-            }
-          }
-        } catch (preErr) {
-          console.warn('Pre-push safeguard check warning:', preErr);
-        }
-
-        // Ensure 15 INITIAL_VACATIONS are always intact
-        INITIAL_VACATIONS.forEach(iv => {
-          if (!store.vacations.some(v => v.id === iv.id)) store.vacations.push(iv);
-        });
-        store.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-
-        const vaultFiles = await this.getAllVaultFiles();
-        
-        // Include full dataUrl for files up to 4.5MB (covers all typical Excel, PDF, Doc, and Image files)
-        const sanitizedVaultFiles = (vaultFiles || []).map(f => {
-          if (f.dataUrl && f.dataUrl.length > 4.5 * 1024 * 1024) {
-            const clone = Object.assign({}, f);
-            delete clone.dataUrl;
-            return clone;
-          }
-          return f;
-        });
-
-        const nowTs = Date.now();
-        this.lastSyncedUpdatedAt = nowTs;
-
-        const rawPayload = {
-          tasks: store.tasks,
-          categories: store.categories,
-          sidebarMenuOrder: store.sidebarMenuOrder,
-          wishlist: store.wishlist,
-          photos: store.photos,
-          notes: store.notes,
-          vaultFiles: sanitizedVaultFiles,
-          honeymoonData: store.honeymoonData,
-          ledgerFiles: store.ledgerFiles,
-          vacations: store.vacations,
-          totalVacationDays: store.totalVacationDays || 15.0,
-          sites: store.sites,
-          healthNotes: store.healthNotes,
-          healthFolders: store.healthFolders,
-          hobbyNotes: store.hobbyNotes,
-          hobbyFolders: store.hobbyFolders,
-          projects: store.projects,
-          deletedIds: Array.from(store.deletedIds || []),
-          updatedAt: nowTs
-        };
-
         // Zero-Knowledge E2EE AES-GCM 256-bit Encryption (cached key for 0.01ms speed)
         const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, this.pin);
 
@@ -1184,15 +1119,8 @@
           body: JSON.stringify(encryptedBody)
         });
 
-        // 🛡️ Automatic Cloud Historical Rollback Backup Snapshot
-        try {
-          const bkUrl = `${this.activeUrl}/manual_backups/${key}/latest.json`;
-          await fetch(bkUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(encryptedBody)
-          });
-        } catch (bkErr) {}
+        // Also persist updated monotonic timestamps locally
+        store.saveLocalOnly(nowTs, nextRevision);
       } catch (e) {
         console.warn('RTDB sync push error:', e);
       } finally {
@@ -1219,7 +1147,7 @@
       });
     }
 
-    async saveFileToVault(fileObj, note = '') {
+    async saveFileToVault(fileObj, note = '', folder = 'personal') {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -1230,6 +1158,7 @@
               size: fileObj.size,
               type: fileObj.type,
               note: note || '',
+              folder: folder || 'personal',
               createdAt: Date.now(),
               dataUrl: e.target.result
             };
@@ -1250,39 +1179,25 @@
 
     async getAllVaultFiles() {
       try {
-        let idbFiles = await VaultDBEngine.getAll();
-        if (Array.isArray(idbFiles) && idbFiles.length > 0) {
-          const hasUserFile = idbFiles.some(f => f && (f.name.includes('총이의') || f.id === 'file-1787502875922-l3q3'));
-          if (!hasUserFile) {
-            idbFiles = DEFAULT_VAULT_FILES.concat(idbFiles);
-            await VaultDBEngine.saveAll(idbFiles);
-            this.saveVaultFiles(idbFiles);
+        const idbFiles = await VaultDBEngine.getAll();
+        // Return indexedDB files directly (if empty, it means 0 files)
+        if (Array.isArray(idbFiles) && idbFiles.length > 0) return idbFiles;
+
+        // Legacy 1-time migration only if never migrated
+        const migratedKey = 'todolist_jy_vault_migrated_v2';
+        if (!localStorage.getItem(migratedKey)) {
+          localStorage.setItem(migratedKey, 'true');
+          const raw = localStorage.getItem('todolist_jy_vault_files');
+          const lsFiles = raw ? JSON.parse(raw) : [];
+          if (lsFiles.length > 0) {
+            await VaultDBEngine.saveAll(lsFiles);
+            return lsFiles;
           }
-          return idbFiles;
         }
-
-        // Legacy & default fallback migration
-        const raw = localStorage.getItem('todolist_jy_vault_files');
-        let lsFiles = [];
-        try {
-          if (raw) lsFiles = JSON.parse(raw);
-        } catch (e) {}
-
-        if (Array.isArray(lsFiles) && lsFiles.length > 0) {
-          const hasUserFile = lsFiles.some(f => f && (f.name.includes('총이의') || f.id === 'file-1787502875922-l3q3'));
-          if (!hasUserFile) lsFiles = DEFAULT_VAULT_FILES.concat(lsFiles);
-          await VaultDBEngine.saveAll(lsFiles);
-          this.saveVaultFiles(lsFiles);
-          return lsFiles;
-        }
-
-        const defaultFiles = JSON.parse(JSON.stringify(DEFAULT_VAULT_FILES));
-        await VaultDBEngine.saveAll(defaultFiles);
-        this.saveVaultFiles(defaultFiles);
-        return defaultFiles;
+        return [];
       } catch (e) {
         console.warn('getAllVaultFiles error:', e);
-        return JSON.parse(JSON.stringify(DEFAULT_VAULT_FILES));
+        return [];
       }
     }
 
@@ -1309,6 +1224,7 @@
           size: f.size,
           type: f.type,
           note: f.note,
+          folder: f.folder || 'personal',
           createdAt: f.createdAt
         }));
         localStorage.setItem('todolist_jy_vault_meta', JSON.stringify(metaOnly));
@@ -1342,6 +1258,59 @@
         await this.pushTasksToCloud(true);
       } catch (e) {
         console.error('deleteVaultFile error:', e);
+      }
+    }
+
+    async moveVaultFiles(fileIds, targetFolder) {
+      if (!Array.isArray(fileIds) || !fileIds.length || !targetFolder) return 0;
+      try {
+        const files = await this.getAllVaultFiles();
+        let count = 0;
+        files.forEach(f => {
+          if (fileIds.includes(f.id)) {
+            f.folder = targetFolder;
+            f.updatedAt = Date.now();
+            count++;
+          }
+        });
+        await this.saveVaultFiles(files);
+        this.lastSyncedUpdatedAt = Date.now();
+        await this.pushTasksToCloud(true);
+        return count;
+      } catch (e) {
+        console.error('moveVaultFiles error:', e);
+        return 0;
+      }
+    }
+
+    async deleteVaultFilesBatch(fileIds) {
+      if (!Array.isArray(fileIds) || !fileIds.length) return 0;
+      try {
+        for (const fId of fileIds) {
+          await VaultDBEngine.delete(fId);
+        }
+        // Clean localStorage backups
+        try {
+          const raw = localStorage.getItem('todolist_jy_vault_files');
+          if (raw) {
+            const list = JSON.parse(raw).filter(f => f && !fileIds.includes(f.id));
+            localStorage.setItem('todolist_jy_vault_files', JSON.stringify(list));
+          }
+          const rawMeta = localStorage.getItem('todolist_jy_vault_meta');
+          if (rawMeta) {
+            const mList = JSON.parse(rawMeta).filter(f => f && !fileIds.includes(f.id));
+            localStorage.setItem('todolist_jy_vault_meta', JSON.stringify(mList));
+          }
+        } catch (e) {}
+
+        const remaining = await this.getAllVaultFiles();
+        await this.saveVaultFiles(remaining);
+        this.lastSyncedUpdatedAt = Date.now();
+        await this.pushTasksToCloud(true);
+        return fileIds.length;
+      } catch (e) {
+        console.error('deleteVaultFilesBatch error:', e);
+        return 0;
       }
     }
   }
@@ -1460,25 +1429,6 @@
   const INITIAL_DEMO_NOTES = [];
   const INITIAL_LEDGER_FILES = [];
 
-  // 🏖️ 2025.12 ~ 2026.08 사용자 실제 등록 연차/반차/휴가 15종 완벽 복원 데이터
-  const INITIAL_VACATIONS = [
-    { id: 'vacation-20251211-am', date: '2025-12-11', type: 'half-am', amount: 0.5, reason: '오전 반차', createdAt: 1733875200000 },
-    { id: 'vacation-20260323-pm', date: '2026-03-23', type: 'half-pm', amount: 0.5, reason: '오후 반차', createdAt: 1774224000000 },
-    { id: 'vacation-20260324-full', date: '2026-03-24', type: 'full', amount: 1.0, reason: '연차', createdAt: 1774310400000 },
-    { id: 'vacation-20260325-hol', date: '2026-03-25', type: 'holiday', amount: 0.0, reason: '휴가 (0일 차감)', createdAt: 1774396800000 },
-    { id: 'vacation-20260327-full', date: '2026-03-27', type: 'full', amount: 1.0, reason: '연차', createdAt: 1774569600000 },
-    { id: 'vacation-20260430-pm', date: '2026-04-30', type: 'half-pm', amount: 0.5, reason: '오후 반차', createdAt: 1777507200000 },
-    { id: 'vacation-20260522-full', date: '2026-05-22', type: 'full', amount: 1.0, reason: '연차', createdAt: 1779408000000 },
-    { id: 'vacation-20260529-full', date: '2026-05-29', type: 'full', amount: 1.0, reason: '연차', createdAt: 1780012800000 },
-    { id: 'vacation-20260605-am', date: '2026-06-05', type: 'half-am', amount: 0.5, reason: '오전 반차', createdAt: 1780617600000 },
-    { id: 'vacation-20260629-pm', date: '2026-06-29', type: 'half-pm', amount: 0.5, reason: '오후 반차', createdAt: 1782691200000 },
-    { id: 'vacation-20260803-pm', date: '2026-08-03', type: 'half-pm', amount: 0.5, reason: '오후 반차', createdAt: 1785715200000 },
-    { id: 'vacation-20260806-am', date: '2026-08-06', type: 'half-am', amount: 0.5, reason: '오전 반차', createdAt: 1785974400000 },
-    { id: 'vacation-20260811-am', date: '2026-08-11', type: 'half-am', amount: 0.5, reason: '오전 반차', createdAt: 1786406400000 },
-    { id: 'vacation-20260813-hol', date: '2026-08-13', type: 'holiday', amount: 0.0, reason: '휴가 (0일 차감)', createdAt: 1786579200000 },
-    { id: 'vacation-20260824-pm', date: '2026-08-24', type: 'half-pm', amount: 0.5, reason: '오후 반차 (강남차 2시예약)', createdAt: 1787532000000 }
-  ];
-
   const MOCK_DEMO_IDS = new Set([
     'task-1', 'task-2', 'task-3', 'task-4',
     'wish-1', 'wish-2', 'wish-3',
@@ -1576,8 +1526,8 @@
       this.activeFilter = localStorage.getItem('todolist_jy_active_filter') || 'all';
       this.activePriority = 'all';
       this.activeWishCat = 'all';
-      this.selectedVacationYear = 'all'; // 기본값을 'all'로 설정하여 2025년 및 2026년 등록 연차가 모두 보이도록 개선
-      this.selectedVacationMonth = 'all'; // 기본값을 'all'로 설정하여 등록된 모든 연차가 한눈에 보이도록 개선
+      this.selectedVacationYear = '2026';
+      this.selectedVacationMonth = String(new Date().getMonth() + 1);
       this.vacationTypeFilter = 'all';
       this.isReorderMode = false;
       this.selectedHealthNotes = new Set();
@@ -1589,40 +1539,17 @@
       this.sortBy = 'dueDate';
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
       this.streak = { count: 3, lastDate: TODAY_STR };
-      this.deletedIds = new Set(); // 🛡️ Tombstone registry: permanently prevent deleted items from resurrecting
       
       // 2026-08-25 Anchor Dates for Calendars
       this.currentCalendarDate = new Date(2026, 7, 25);
       this.selectedCalendarDateStr = TODAY_STR;
       this.currentWeeklyDate = new Date(2026, 7, 25);
+      this.lastUpdatedAt = 0;
 
       this.loadLocalOnly();
     }
 
-    recordDeletedId(id) {
-      if (!id) return;
-      const cleanId = String(id).trim();
-      this.deletedIds.add(cleanId);
-      try {
-        localStorage.setItem('todolist_jy_deleted_ids_v1', JSON.stringify(Array.from(this.deletedIds)));
-      } catch (e) {}
-      if (window.cloudSync) {
-        window.cloudSync.pushTasksToCloud(true);
-      }
-    }
-
     loadLocalOnly() {
-      // 1. Load Tombstones first to prune any resurrected items
-      try {
-        const rawDel = localStorage.getItem('todolist_jy_deleted_ids_v1');
-        if (rawDel) {
-          const parsedDel = JSON.parse(rawDel);
-          if (Array.isArray(parsedDel)) {
-            parsedDel.forEach(id => { if (id) this.deletedIds.add(String(id).trim()); });
-          }
-        }
-      } catch (e) {}
-
       let savedData = null;
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -1631,84 +1558,25 @@
         console.error('Store load error:', e);
       }
 
-      let userTasks = (savedData && Array.isArray(savedData.tasks)) ? savedData.tasks : [];
-      let userWishlist = (savedData && Array.isArray(savedData.wishlist)) ? savedData.wishlist : [];
-      let userPhotos = (savedData && Array.isArray(savedData.photos)) ? savedData.photos : [];
-      let userNotes = (savedData && Array.isArray(savedData.notes)) ? savedData.notes : [];
-      let userLedgerFiles = (savedData && Array.isArray(savedData.ledgerFiles)) ? savedData.ledgerFiles : [];
-      let userCategories = (savedData && Array.isArray(savedData.categories)) ? savedData.categories : null;
-      let userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
-      let userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
-      let userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
-      let userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
+      this.deletedItemIds = new Set(Array.isArray(savedData?.deletedItemIds) ? savedData.deletedItemIds : []);
+      this.syncRevision = Number(savedData?.syncRevision) || 0;
+
+      const userTasks = (savedData && Array.isArray(savedData.tasks)) ? savedData.tasks : [];
+      const userWishlist = (savedData && Array.isArray(savedData.wishlist)) ? savedData.wishlist : [];
+      const userPhotos = (savedData && Array.isArray(savedData.photos)) ? savedData.photos : [];
+      const userNotes = (savedData && Array.isArray(savedData.notes)) ? savedData.notes : [];
+      const userLedgerFiles = (savedData && Array.isArray(savedData.ledgerFiles)) ? savedData.ledgerFiles : [];
+      const userCategories = (savedData && Array.isArray(savedData.categories)) ? savedData.categories : null;
+      const userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
+      const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
+      const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
+      const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
       let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS.slice();
-      let userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
+      const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
       let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS.slice();
-      let userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
-      let userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
-
-      // 🛡️ Legacy LocalStorage Auto-Recovery Engine (이전 버전 키에서 연차 및 데이터 자동 복구)
-      try {
-        const legacyKeys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && (k.startsWith('todolist_jy_data') || k.startsWith('zentask_data') || k === 'todolist_jy_data') && k !== STORAGE_KEY) {
-            legacyKeys.push(k);
-          }
-        }
-        if (legacyKeys.length > 0) {
-          const vacMap = new Map();
-          userVacations.forEach(v => { if (v && v.id && !this.deletedIds.has(v.id)) vacMap.set(v.id, v); });
-          const taskMap = new Map();
-          userTasks.forEach(t => { if (t && t.id && !this.deletedIds.has(t.id)) taskMap.set(t.id, t); });
-
-          legacyKeys.forEach(lKey => {
-            try {
-              const lRaw = localStorage.getItem(lKey);
-              if (!lRaw) return;
-              const lData = JSON.parse(lRaw);
-              if (Array.isArray(lData.vacations)) {
-                lData.vacations.forEach(v => {
-                  if (v && v.id && !this.deletedIds.has(v.id) && !vacMap.has(v.id)) vacMap.set(v.id, v);
-                });
-              }
-              if (Array.isArray(lData.tasks)) {
-                lData.tasks.forEach(t => {
-                  if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !this.deletedIds.has(t.id) && !taskMap.has(t.id)) taskMap.set(t.id, t);
-                });
-              }
-              if (typeof lData.totalVacationDays === 'number' && userTotalVacationDays === 15.0) {
-                userTotalVacationDays = lData.totalVacationDays;
-              }
-            } catch (err) {}
-          });
-
-          userVacations = Array.from(vacMap.values());
-          userTasks = Array.from(taskMap.values());
-        }
-      } catch (legacyErr) {
-        console.warn('Legacy recovery error:', legacyErr);
-      }
-
-      // 🛡️ Prune any items in deletedIds from all user arrays
-      userTasks = userTasks.filter(t => t && t.id && !this.deletedIds.has(t.id));
-      userNotes = userNotes.filter(n => n && n.id && !this.deletedIds.has(n.id));
-      userWishlist = userWishlist.filter(w => w && w.id && !this.deletedIds.has(w.id));
-      userPhotos = userPhotos.filter(p => p && p.id && !this.deletedIds.has(p.id));
-      userLedgerFiles = userLedgerFiles.filter(l => l && l.id && !this.deletedIds.has(l.id));
-      userVacations = userVacations.filter(v => v && v.id && !this.deletedIds.has(v.id));
-      userSites = userSites.filter(s => s && s.id && !this.deletedIds.has(s.id));
-      userHealthNotes = userHealthNotes.filter(h => h && h.id && !this.deletedIds.has(h.id));
-      userHobbyNotes = userHobbyNotes.filter(hb => hb && hb.id && !this.deletedIds.has(hb.id));
-
-      // 🏖️ 2025.12 ~ 2026.08 사용자 등록 15종 연차 무결성 보장 & 자동 복원
-      const defaultVacMap = new Map();
-      INITIAL_VACATIONS.forEach(iv => defaultVacMap.set(iv.id, iv));
-      userVacations.forEach(v => {
-        if (v && v.id) defaultVacMap.set(v.id, v);
-      });
-      userVacations = Array.from(defaultVacMap.values());
-      userVacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      let userVaultFolders = (savedData && Array.isArray(savedData.vaultFolders)) ? savedData.vaultFolders : DEFAULT_VAULT_FOLDERS.slice();
+      const userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+      const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
 
       // Ensure all default health folders (including checkup) exist
       DEFAULT_HEALTH_FOLDERS.forEach(defF => {
@@ -1728,11 +1596,20 @@
         }
       });
 
-      const combinedTasks = userTasks.filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
-      const combinedWishlist = userWishlist.filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
-      const combinedPhotos = userPhotos.filter(p => p && p.id);
-      const combinedNotes = userNotes.filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
-      const combinedLedgerFiles = userLedgerFiles.filter(l => l && l.id && !MOCK_DEMO_IDS.has(l.id));
+      // Ensure all default vault folders exist
+      DEFAULT_VAULT_FOLDERS.forEach(defF => {
+        if (!userVaultFolders.some(f => f && f.id === defF.id)) {
+          const genIdx = userVaultFolders.findIndex(f => f && f.id === 'general');
+          if (genIdx !== -1) userVaultFolders.splice(genIdx, 0, Object.assign({}, defF));
+          else userVaultFolders.push(Object.assign({}, defF));
+        }
+      });
+
+      const combinedTasks = userTasks.filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id) && !this.deletedItemIds.has(t.id));
+      const combinedWishlist = userWishlist.filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id) && !this.deletedItemIds.has(w.id));
+      const combinedPhotos = userPhotos.filter(p => p && p.id && !this.deletedItemIds.has(p.id));
+      const combinedNotes = userNotes.filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id) && !this.deletedItemIds.has(n.id));
+      const combinedLedgerFiles = userLedgerFiles.filter(l => l && l.id && !MOCK_DEMO_IDS.has(l.id) && !this.deletedItemIds.has(l.id));
 
       // Standardize categories: 'personal' (개인 🌸) and 'work' (업무 💼) ONLY
       let finalCategories = Array.isArray(userCategories) ? userCategories : DEFAULT_CATEGORIES;
@@ -1839,28 +1716,36 @@
       this.categories = finalCategories;
       this.sidebarMenuOrder = finalOrder;
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
-      this.vacations = userVacations;
+      this.vacations = (userVacations || []).filter(v => v && v.id && !this.deletedItemIds.has(v.id));
       this.totalVacationDays = userTotalVacationDays;
-      this.sites = userSites;
-      this.healthNotes = userHealthNotes;
+      this.sites = (userSites || []).filter(s => s && s.id && !this.deletedItemIds.has(s.id));
+      this.healthNotes = (userHealthNotes || []).filter(h => h && h.id && !this.deletedItemIds.has(h.id));
       this.healthFolders = userHealthFolders;
       this.activeHealthFolder = 'all';
-      this.hobbyNotes = userHobbyNotes;
+      this.hobbyNotes = (userHobbyNotes || []).filter(hb => hb && hb.id && !this.deletedItemIds.has(hb.id));
       this.hobbyFolders = userHobbyFolders;
       this.activeHobbyFolder = 'all';
-      this.projects = (Array.isArray(userProjects) && userProjects.length > 0) ? userProjects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+      this.vaultFolders = userVaultFolders;
+      this.activeVaultFolder = 'all';
+      this.selectedVaultFiles = new Set();
+
+      this.lastUpdatedAt = (savedData && savedData.updatedAt) ? Number(savedData.updatedAt) : 0;
 
       try {
         const streakRaw = localStorage.getItem(STREAK_KEY);
         if (streakRaw) this.streak = JSON.parse(streakRaw);
       } catch (e) {}
 
-      // Save migrated clean data immediately
-      this.saveLocalOnly();
+      // Save migrated clean data without bumping timestamp to Date.now()!
+      this.saveLocalOnly(this.lastUpdatedAt, this.syncRevision);
     }
 
-    saveLocalOnly() {
+    saveLocalOnly(customTimestamp = null, customRevision = null) {
       try {
+        const ts = customTimestamp !== null ? customTimestamp : (this.lastUpdatedAt || Date.now());
+        const rev = customRevision !== null ? customRevision : (this.syncRevision || 0);
+        this.lastUpdatedAt = ts;
+        this.syncRevision = rev;
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
           tasks: this.tasks,
           categories: this.categories,
@@ -1868,6 +1753,7 @@
           wishlist: this.wishlist,
           photos: this.photos,
           notes: this.notes,
+          deletedItemIds: Array.from(this.deletedItemIds || []).slice(-500),
           honeymoonData: this.honeymoonData,
           ledgerFiles: this.ledgerFiles,
           vacations: this.vacations,
@@ -1877,15 +1763,21 @@
           healthFolders: this.healthFolders,
           hobbyNotes: this.hobbyNotes,
           hobbyFolders: this.hobbyFolders,
+          vaultFolders: this.vaultFolders,
           projects: this.projects,
-          updatedAt: Date.now()
+          syncRevision: rev,
+          updatedAt: ts
         }));
         localStorage.setItem(STREAK_KEY, JSON.stringify(this.streak));
       } catch (e) {}
     }
 
     save(immediate = false) {
-      this.saveLocalOnly();
+      const nowTs = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+      const nextRev = (this.syncRevision || 0) + 1;
+      this.lastUpdatedAt = nowTs;
+      this.syncRevision = nextRev;
+      this.saveLocalOnly(nowTs, nextRev);
       cloudSync.pushTasksToCloud(immediate);
     }
 
@@ -1951,10 +1843,12 @@
     }
 
     deleteTask(id) {
-      this.recordDeletedId(id);
-      const idx = this.tasks.findIndex(t => t.id === id);
-      if (idx === -1) return false;
-      this.tasks.splice(idx, 1);
+      if (!id) return false;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
+      const idx = this.tasks.findIndex(t => t && String(t.id).trim() === targetId);
+      if (idx !== -1) this.tasks.splice(idx, 1);
       this.save(true);
       return true;
     }
@@ -1985,10 +1879,12 @@
     }
 
     deletePhoto(id) {
-      this.recordDeletedId(id);
-      const idx = this.photos.findIndex(p => p.id === id);
-      if (idx === -1) return false;
-      this.photos.splice(idx, 1);
+      if (!id) return false;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
+      const idx = this.photos.findIndex(p => p && String(p.id).trim() === targetId);
+      if (idx !== -1) this.photos.splice(idx, 1);
       this.save(true);
       return true;
     }
@@ -2015,11 +1911,12 @@
     }
 
     deleteNote(id) {
-      this.recordDeletedId(id);
-      const targetId = String(id || '').trim();
+      if (!id) return false;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
       const idx = this.notes.findIndex(n => n && String(n.id).trim() === targetId);
-      if (idx === -1) return false;
-      this.notes.splice(idx, 1);
+      if (idx !== -1) this.notes.splice(idx, 1);
       this.save(true);
       return true;
     }
@@ -2042,10 +1939,12 @@
     }
 
     deleteLedgerFile(fileId) {
-      this.recordDeletedId(fileId);
-      const idx = this.ledgerFiles.findIndex(f => f.id === fileId);
-      if (idx === -1) return false;
-      this.ledgerFiles.splice(idx, 1);
+      if (!fileId) return false;
+      const targetId = String(fileId).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
+      const idx = this.ledgerFiles.findIndex(f => f && String(f.id).trim() === targetId);
+      if (idx !== -1) this.ledgerFiles.splice(idx, 1);
       this.save(true);
       return true;
     }
@@ -2089,10 +1988,12 @@
     }
 
     deleteWish(id) {
-      this.recordDeletedId(id);
-      const idx = this.wishlist.findIndex(w => w.id === id);
-      if (idx === -1) return false;
-      this.wishlist.splice(idx, 1);
+      if (!id) return false;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
+      const idx = this.wishlist.findIndex(w => w && String(w.id).trim() === targetId);
+      if (idx !== -1) this.wishlist.splice(idx, 1);
       this.save(true);
       return true;
     }
@@ -2118,11 +2019,31 @@
       return newVacation;
     }
 
+    updateVacation(id, data) {
+      const vac = this.vacations.find(v => v.id === id);
+      if (!vac) return null;
+      const type = data.type || vac.type || 'full';
+      let amount = 1.0;
+      if (type === 'half-am' || type === 'half-pm') amount = 0.5;
+      else if (type === 'holiday') amount = 0.0;
+
+      vac.type = type;
+      vac.amount = amount;
+      if (data.date) vac.date = data.date;
+      if (data.reason !== undefined) vac.reason = (data.reason || '').trim();
+      vac.updatedAt = Date.now();
+      this.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      this.save();
+      return vac;
+    }
+
     deleteVacation(id) {
-      this.recordDeletedId(id);
-      const idx = this.vacations.findIndex(v => v.id === id);
-      if (idx === -1) return false;
-      this.vacations.splice(idx, 1);
+      if (!id) return false;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
+      const idx = this.vacations.findIndex(v => v && String(v.id).trim() === targetId);
+      if (idx !== -1) this.vacations.splice(idx, 1);
       this.save(true);
       return true;
     }
@@ -2183,10 +2104,12 @@
     }
 
     deleteSite(id) {
-      this.recordDeletedId(id);
-      const idx = this.sites.findIndex(s => s.id === id);
-      if (idx === -1) return false;
-      this.sites.splice(idx, 1);
+      if (!id) return false;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
+      const idx = this.sites.findIndex(s => s && String(s.id).trim() === targetId);
+      if (idx !== -1) this.sites.splice(idx, 1);
       this.save(true);
       return true;
     }
@@ -2225,13 +2148,12 @@
 
     deleteHealthNote(id) {
       if (!id) return false;
-      this.recordDeletedId(id);
       const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
       const idx = this.healthNotes.findIndex(n => n && String(n.id).trim() === targetId);
-      if (idx === -1) return false;
-      this.healthNotes.splice(idx, 1);
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      if (idx !== -1) this.healthNotes.splice(idx, 1);
+      this.save(true);
       return true;
     }
 
@@ -2245,8 +2167,7 @@
         icon: icon || '🩺'
       };
       this.healthFolders.push(newFolder);
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return newFolder;
     }
 
@@ -2255,8 +2176,7 @@
       if (!folder) return null;
       if (updates.name) folder.name = updates.name.trim();
       if (updates.icon) folder.icon = updates.icon;
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return folder;
     }
 
@@ -2269,8 +2189,7 @@
         if (note.folder === id) note.folder = 'general';
       });
       if (this.activeHealthFolder === id) this.activeHealthFolder = 'all';
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return true;
     }
 
@@ -2288,8 +2207,7 @@
       };
       this.hobbyNotes.unshift(newNote);
       this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return newNote;
     }
 
@@ -2298,20 +2216,18 @@
       if (!note) return null;
       Object.assign(note, updates, { updatedAt: Date.now() });
       this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return note;
     }
 
     deleteHobbyNote(id) {
       if (!id) return false;
-      this.recordDeletedId(id);
       const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
       const idx = this.hobbyNotes.findIndex(n => n && String(n.id).trim() === targetId);
-      if (idx === -1) return false;
-      this.hobbyNotes.splice(idx, 1);
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      if (idx !== -1) this.hobbyNotes.splice(idx, 1);
+      this.save(true);
       return true;
     }
 
@@ -2325,8 +2241,7 @@
         icon: icon || '🎨'
       };
       this.hobbyFolders.push(newFolder);
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return newFolder;
     }
 
@@ -2335,8 +2250,7 @@
       if (!folder) return null;
       if (updates.name) folder.name = updates.name.trim();
       if (updates.icon) folder.icon = updates.icon;
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return folder;
     }
 
@@ -2349,8 +2263,7 @@
         if (note.folder === id) note.folder = 'general';
       });
       if (this.activeHobbyFolder === id) this.activeHobbyFolder = 'all';
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return true;
     }
 
@@ -2365,19 +2278,18 @@
           count++;
         }
       });
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return count;
     }
 
     deleteHealthNotesBatch(noteIds) {
       if (!Array.isArray(noteIds) || !noteIds.length) return 0;
-      noteIds.forEach(id => this.recordDeletedId(id));
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      noteIds.forEach(id => this.deletedItemIds.add(String(id).trim()));
       const initialLen = this.healthNotes.length;
       this.healthNotes = this.healthNotes.filter(n => !noteIds.includes(n.id));
       const deletedCount = initialLen - this.healthNotes.length;
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return deletedCount;
     }
 
@@ -2391,20 +2303,64 @@
           count++;
         }
       });
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return count;
     }
 
     deleteHobbyNotesBatch(noteIds) {
       if (!Array.isArray(noteIds) || !noteIds.length) return 0;
-      noteIds.forEach(id => this.recordDeletedId(id));
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      noteIds.forEach(id => this.deletedItemIds.add(String(id).trim()));
       const initialLen = this.hobbyNotes.length;
       this.hobbyNotes = this.hobbyNotes.filter(n => !noteIds.includes(n.id));
       const deletedCount = initialLen - this.hobbyNotes.length;
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return deletedCount;
+    }
+
+    // --- Vault Folders Methods ---
+    addVaultFolder(name, icon = '📁') {
+      const cleanName = (name || '').trim();
+      if (!cleanName) return null;
+      const folderId = 'vfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      const newFolder = {
+        id: folderId,
+        name: cleanName,
+        icon: icon || '📁'
+      };
+      this.vaultFolders.push(newFolder);
+      this.save(true);
+      return newFolder;
+    }
+
+    updateVaultFolder(id, updates) {
+      const folder = this.vaultFolders.find(f => f.id === id);
+      if (!folder) return null;
+      if (updates.name) folder.name = updates.name.trim();
+      if (updates.icon) folder.icon = updates.icon;
+      this.save(true);
+      return folder;
+    }
+
+    async deleteVaultFolder(id) {
+      const idx = this.vaultFolders.findIndex(f => f.id === id);
+      if (idx === -1) return false;
+      this.vaultFolders.splice(idx, 1);
+      // Migrate any files in this deleted folder to 'general' so zero files are lost
+      const allFiles = await cloudSync.getAllVaultFiles();
+      let migratedCount = 0;
+      allFiles.forEach(file => {
+        if (file.folder === id) {
+          file.folder = 'general';
+          migratedCount++;
+        }
+      });
+      if (migratedCount > 0) {
+        await cloudSync.saveVaultFiles(allFiles);
+      }
+      if (this.activeVaultFolder === id) this.activeVaultFolder = 'all';
+      this.save(true);
+      return true;
     }
 
     // =========================================================================
@@ -2444,7 +2400,6 @@
 
     deleteProject(id) {
       if (!this.projects) this.projects = [];
-      this.recordDeletedId(id);
       this.projects = this.projects.filter(p => p.id !== id);
       if (this.activeProjectId === id) {
         this.activeProjectId = this.projects.length > 0 ? this.projects[0].id : null;
@@ -4111,31 +4066,132 @@
     },
 
     async renderFilesVault() {
+      const tabsBar = document.getElementById('vault-folder-tabs');
       const grid = document.getElementById('files-grid-container');
       const emptyState = document.getElementById('vault-empty-state');
+      const toolbarContainer = document.getElementById('vault-batch-toolbar-container');
       if (!grid) return;
 
+      const folders = store.vaultFolders || DEFAULT_VAULT_FOLDERS;
+      const activeFolder = store.activeVaultFolder || 'all';
+      const nonAllFolders = folders.filter(f => f.id !== 'all');
+
       try {
-        const files = await cloudSync.getAllVaultFiles();
-        if (files.length === 0) {
+        const allFiles = await cloudSync.getAllVaultFiles();
+
+        // 1. Render Folder Tabs Bar
+        if (tabsBar) {
+          tabsBar.innerHTML = folders.map(f => {
+            const isActive = (f.id === activeFolder);
+            const count = f.id === 'all'
+              ? allFiles.length
+              : allFiles.filter(file => (file.folder || 'personal') === f.id).length;
+            
+            const isProtected = (f.id === 'all');
+            const editBtn = (!isProtected)
+              ? `<span class="vault-folder-edit-btn" data-action="open-edit-vault-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
+              : '';
+
+            return `
+              <button type="button" class="vault-folder-tab ${isActive ? 'active' : ''}" data-vault-folder-id="${f.id}">
+                <span>${f.icon || '📁'}</span>
+                <span>${escapeHTML(f.name)}</span>
+                <span class="badge" style="font-size: 0.72rem; padding: 1px 6px; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)'}; color: ${isActive ? '#fff' : 'var(--text-muted)'}; border-radius: 10px;">${count}</span>
+                ${editBtn}
+              </button>
+            `;
+          }).join('') + `
+            <button type="button" class="vault-folder-add-tab-btn" id="btn-open-add-vault-folder" title="새 파일 폴더 추가">
+              <span>+ 새 폴더</span>
+            </button>
+          `;
+        }
+
+        // 2. Filter files by active folder
+        const filteredFiles = (activeFolder === 'all')
+          ? allFiles
+          : allFiles.filter(file => (file.folder || 'personal') === activeFolder);
+
+        // 3. Batch Toolbar
+        const selectedIds = Array.from(store.selectedVaultFiles || []).filter(id => filteredFiles.some(f => f.id === id));
+        const isAllSelected = filteredFiles.length > 0 && selectedIds.length === filteredFiles.length;
+
+        if (toolbarContainer) {
+          if (filteredFiles.length > 0) {
+            const folderOptionsHTML = nonAllFolders.map(f => `<option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>`).join('');
+            toolbarContainer.innerHTML = `
+              <div class="vault-batch-toolbar ${selectedIds.length > 0 ? 'is-active' : ''}">
+                <div class="batch-left">
+                  <label class="batch-check-label" title="전체 선택/해제">
+                    <input type="checkbox" id="vault-check-all" class="batch-checkbox-all" ${isAllSelected ? 'checked' : ''}>
+                    <span>${selectedIds.length > 0 ? `선택됨 <strong>${selectedIds.length}</strong>개` : '전체 선택'}</span>
+                  </label>
+                </div>
+                <div class="batch-right" style="${selectedIds.length > 0 ? 'display: flex;' : 'display: none;'}">
+                  <span class="batch-action-hint">선택 파일 이동:</span>
+                  <select id="vault-batch-target-folder" class="batch-select-dropdown">
+                    <option value="">📁 이동할 폴더 선택...</option>
+                    ${folderOptionsHTML}
+                  </select>
+                  <button type="button" class="btn btn-sm btn-primary" data-action="batch-move-vault-files" title="선택한 파일들을 지정한 폴더로 이동합니다">
+                    <span>이동 ✨</span>
+                  </button>
+                  <button type="button" class="btn btn-sm" style="background: rgba(255, 77, 77, 0.12); color: #ff4d4d; border: 1px solid rgba(255,77,77,0.25);" data-action="batch-delete-vault-files" title="선택한 파일들을 삭제합니다">
+                    <span>일괄 삭제 🗑️</span>
+                  </button>
+                </div>
+              </div>
+            `;
+          } else {
+            toolbarContainer.innerHTML = '';
+          }
+        }
+
+        // 4. Render Files Grid
+        if (filteredFiles.length === 0) {
           grid.innerHTML = '';
-          if (emptyState) emptyState.style.display = 'flex';
+          if (emptyState) {
+            emptyState.style.display = 'flex';
+            const curFolderObj = folders.find(f => f.id === activeFolder) || folders[0];
+            const emptyTitle = emptyState.querySelector('h3');
+            const emptyDesc = emptyState.querySelector('p');
+            if (emptyTitle) {
+              emptyTitle.textContent = activeFolder === 'all'
+                ? '보관된 파일이 아직 없어요'
+                : `'${curFolderObj.name}' 폴더에 파일이 없어요`;
+            }
+            if (emptyDesc) {
+              emptyDesc.textContent = activeFolder === 'all'
+                ? '자주 확인하는 엑셀 파일이나 메모장 텍스트 파일을 등록해 두면 언제든 다시 다운로드할 수 있어요 ✨'
+                : `상단의 드롭존이나 파일 업로드 버튼을 눌러 '${curFolderObj.name}' 폴더에 첫 파일을 보관해 보세요 ✨`;
+            }
+          }
         } else {
           if (emptyState) emptyState.style.display = 'none';
-          grid.innerHTML = files.map(file => {
+          grid.innerHTML = filteredFiles.map(file => {
             const iconInfo = this.getFileIcon(file.name);
             const dateStr = new Date(file.createdAt).toLocaleDateString('ko-KR', {
               month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
+            const fileFolderId = file.folder || 'personal';
+            const fileFolderObj = folders.find(f => f.id === fileFolderId) || { name: '개인', icon: '🌸' };
+            const isChecked = store.selectedVaultFiles && store.selectedVaultFiles.has(file.id);
 
             return `
-              <div class="file-card" data-file-id="${file.id}">
+              <div class="file-card ${isChecked ? 'is-selected' : ''}" data-file-id="${file.id}">
                 <div class="file-card-top">
+                  <label class="file-card-check-wrap" title="파일 선택" onclick="event.stopPropagation();">
+                    <input type="checkbox" class="file-card-check" data-file-id="${file.id}" ${isChecked ? 'checked' : ''}>
+                  </label>
                   <div class="file-type-badge">${iconInfo.icon}</div>
                   <div class="file-meta">
                     <div class="file-name" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</div>
                     <div class="file-submeta">
-                      <span>${this.formatBytes(file.size)}</span> • <span>${dateStr}</span>
+                      <span class="file-folder-badge">${fileFolderObj.icon || '📁'} ${escapeHTML(fileFolderObj.name)}</span>
+                      <span>•</span>
+                      <span>${this.formatBytes(file.size)}</span>
+                      <span>•</span>
+                      <span>${dateStr}</span>
                     </div>
                   </div>
                 </div>
@@ -4143,8 +4199,11 @@
                 ${file.note ? `<div class="file-note-box">💬 ${escapeHTML(file.note)}</div>` : ''}
 
                 <div class="file-card-actions">
-                  <button type="button" class="btn-file-download" data-action="download-file" data-file-id="${file.id}">
+                  <button type="button" class="btn-file-download" data-action="download-file" data-file-id="${file.id}" title="파일 다운로드">
                     📥 다운로드
+                  </button>
+                  <button type="button" class="btn-file-move" data-action="open-move-file-modal" data-file-id="${file.id}" title="다른 폴더로 이동">
+                    📁 이동
                   </button>
                   <button type="button" class="task-action-btn delete-btn" data-action="delete-file" data-file-id="${file.id}" title="파일 삭제">
                     🗑️
@@ -4154,6 +4213,16 @@
             `;
           }).join('');
         }
+
+        // 5. Update Folder selector options in upload modal
+        const uploadModalFolderSelect = document.getElementById('modal-vault-file-folder');
+        if (uploadModalFolderSelect) {
+          uploadModalFolderSelect.innerHTML = nonAllFolders.map(f => {
+            const isSel = (f.id === (activeFolder !== 'all' ? activeFolder : 'personal'));
+            return `<option value="${f.id}" ${isSel ? 'selected' : ''}>${f.icon || '📁'} ${escapeHTML(f.name)}</option>`;
+          }).join('');
+        }
+
       } catch (e) {
         console.error('Error loading vault files:', e);
       }
@@ -4182,14 +4251,126 @@
     openFileUploadModal() {
       const modal = document.getElementById('upload-file-modal');
       const form = document.getElementById('file-upload-form');
+      const folderSelect = document.getElementById('modal-vault-file-folder');
       if (!modal || !form) return;
       form.reset();
+
+      if (folderSelect) {
+        const folders = (store.vaultFolders || DEFAULT_VAULT_FOLDERS).filter(f => f.id !== 'all');
+        const activeFolder = store.activeVaultFolder || 'all';
+        folderSelect.innerHTML = folders.map(f => {
+          const isSel = (f.id === (activeFolder !== 'all' ? activeFolder : 'personal'));
+          return `<option value="${f.id}" ${isSel ? 'selected' : ''}>${f.icon || '📁'} ${escapeHTML(f.name)}</option>`;
+        }).join('');
+      }
+
       modal.classList.add('active');
     },
 
     closeFileUploadModal() {
       const modal = document.getElementById('upload-file-modal');
       if (modal) modal.classList.remove('active');
+    },
+
+    openVaultFolderModal(folderId = null) {
+      const modal = document.getElementById('vault-folder-modal');
+      const form = document.getElementById('vault-folder-form');
+      const titleEl = document.getElementById('vault-folder-modal-title');
+      const editIdEl = document.getElementById('vault-folder-edit-id');
+      const iconInput = document.getElementById('vault-input-folder-icon');
+      const nameInput = document.getElementById('vault-input-folder-name');
+      const grid = document.getElementById('vault-folder-emoji-grid');
+      const deleteBtn = document.getElementById('btn-delete-vault-folder');
+      const submitBtn = document.getElementById('btn-submit-vault-folder');
+
+      if (!modal || !form) return;
+      form.reset();
+
+      let currentIcon = '📁';
+      let currentName = '';
+
+      if (folderId) {
+        const folder = (store.vaultFolders || DEFAULT_VAULT_FOLDERS).find(f => f.id === folderId);
+        if (!folder) return;
+        currentIcon = folder.icon || '📁';
+        currentName = folder.name || '';
+        if (titleEl) titleEl.textContent = '📁 파일 폴더 수정 & 삭제 💖';
+        if (editIdEl) editIdEl.value = folder.id;
+        if (nameInput) nameInput.value = currentName;
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) {
+          const isProtected = (folder.id === 'all');
+          deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
+          deleteBtn.dataset.id = folder.id;
+        }
+        if (submitBtn) submitBtn.textContent = '수정 완료 ✨';
+      } else {
+        if (titleEl) titleEl.textContent = '📁 새 파일 폴더 추가';
+        if (editIdEl) editIdEl.value = '';
+        if (nameInput) nameInput.value = '';
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (submitBtn) submitBtn.textContent = '폴더 생성 📁';
+      }
+
+      // Render 24 Emoji Picker Buttons
+      if (grid) {
+        grid.innerHTML = VAULT_EMOJI_LIST.map(emoji => {
+          const isSel = (emoji === currentIcon);
+          return `
+            <button type="button" class="vault-emoji-option-btn ${isSel ? 'selected' : ''}" data-emoji="${emoji}" title="${emoji}">
+              ${emoji}
+            </button>
+          `;
+        }).join('');
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (nameInput) setTimeout(() => nameInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeVaultFolderModal() {
+      const modal = document.getElementById('vault-folder-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openMoveFileModal(fileId) {
+      const modal = document.getElementById('move-file-modal');
+      const form = document.getElementById('move-file-form');
+      const fileIdEl = document.getElementById('move-file-id');
+      const fileNameEl = document.getElementById('move-file-name-display');
+      const folderSelect = document.getElementById('move-file-target-folder');
+      if (!modal || !form || !folderSelect) return;
+
+      const folders = (store.vaultFolders || DEFAULT_VAULT_FOLDERS).filter(f => f.id !== 'all');
+      cloudSync.getAllVaultFiles().then(files => {
+        const file = (files || []).find(f => f.id === fileId);
+        if (!file) return;
+
+        if (fileIdEl) fileIdEl.value = file.id;
+        if (fileNameEl) fileNameEl.textContent = file.name;
+
+        folderSelect.innerHTML = folders.map(f => {
+          const isSel = (f.id === (file.folder || 'personal'));
+          return `<option value="${f.id}" ${isSel ? 'selected' : ''}>${f.icon || '📁'} ${escapeHTML(f.name)}</option>`;
+        }).join('');
+
+        modal.style.display = 'flex';
+        modal.classList.add('active');
+      });
+    },
+
+    closeMoveFileModal() {
+      const modal = document.getElementById('move-file-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
     },
 
     // =======================================================================
@@ -4563,28 +4744,12 @@
         yearSelect.innerHTML = `<option value="all" ${currentSelectedYear === 'all' ? 'selected' : ''}>전체 년도</option>` + sortedYears.map(y => `<option value="${y}" ${y === currentSelectedYear ? 'selected' : ''}>${y}년</option>`).join('');
       }
 
-      // 3. Update Month Pills Active Class & Dynamic Count Badges
-      const monthCounts = {};
-      (store.vacations || []).forEach(v => {
-        if (v.date) {
-          const m = parseInt(v.date.split('-')[1], 10);
-          if (m >= 1 && m <= 12) {
-            monthCounts[m] = (monthCounts[m] || 0) + 1;
-          }
-        }
-      });
+      // 3. Update Month Pills Active Class
       document.querySelectorAll('#vacation-month-pills .vac-m-pill').forEach(pill => {
-        const vm = pill.dataset.vMonth;
-        if (vm === currentSelectedMonth) {
+        if (pill.dataset.vMonth === currentSelectedMonth) {
           pill.classList.add('active');
         } else {
           pill.classList.remove('active');
-        }
-        if (vm === 'all') {
-          pill.innerHTML = `전체 <span style="font-size:0.75rem; opacity:0.85;">(${(store.vacations || []).length})</span>`;
-        } else {
-          const c = monthCounts[parseInt(vm, 10)] || 0;
-          pill.innerHTML = c > 0 ? `${vm}월 <span style="font-weight:800; font-size:0.75rem; color: var(--primary);">(${c})</span>` : `${vm}월`;
         }
       });
 
@@ -4634,7 +4799,7 @@
       const sumBadgeEl = document.getElementById('vac-summary-badge');
 
       const periodLabel = currentSelectedMonth === 'all' 
-        ? `${currentSelectedYear === 'all' ? '전체 기간' : currentSelectedYear + '년 전체'}` 
+        ? `${currentSelectedYear === 'all' ? '전체' : currentSelectedYear + '년'}` 
         : `${currentSelectedMonth}월`;
 
       if (currentTypeFilter === 'holiday') {
@@ -4660,31 +4825,9 @@
 
       if (!listEl) return;
 
-      // Also check if user registered vacations via task modal (type: vacation or half-off in tasks)
-      const taskVacations = (store.tasks || []).filter(t => t && (t.type === 'vacation' || t.type === 'half-off'));
-
       if (filtered.length === 0) {
         listEl.innerHTML = '';
-        if (emptyEl) {
-          emptyEl.style.display = 'flex';
-          const totalVacCount = (store.vacations || []).length;
-          if (totalVacCount > 0 && currentSelectedMonth !== 'all') {
-            emptyEl.innerHTML = `
-              <div class="empty-state-icon">🏖️</div>
-              <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.35rem;">선택하신 기간(${periodLabel})에는 등록된 연차 내역이 없어요</h3>
-              <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 0.85rem;">다른 월을 포함하여 전체 기간에 총 <b style="color: var(--primary);">${totalVacCount}건</b>의 연차/휴가가 안전하게 등록되어 있습니다 🌸</p>
-              <button type="button" class="btn btn-primary" style="font-size: 0.84rem; padding: 0.5rem 1.15rem;" onclick="store.selectedVacationMonth='all'; UI.renderVacation();">
-                🌴 전체 기간 연차 목록 보기 (${totalVacCount}건)
-              </button>
-            `;
-          } else {
-            emptyEl.innerHTML = `
-              <div class="empty-state-icon">🏖️</div>
-              <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.35rem;">해당 기간에 등록된 연차/휴가 내역이 없어요</h3>
-              <p style="font-size: 0.88rem; color: var(--text-muted);">연차, 반차 또는 휴가를 사용하셨다면 상단의 '+ 연차/반차 등록' 버튼을 눌러 기록해 보세요 🌸</p>
-            `;
-          }
-        }
+        if (emptyEl) emptyEl.style.display = 'flex';
       } else {
         if (emptyEl) emptyEl.style.display = 'none';
         listEl.innerHTML = filtered.map(v => {
@@ -4718,41 +4861,53 @@
                   </div>
                 </div>
               </div>
-              <button type="button" class="task-action-btn delete-btn" data-action="delete-vacation" data-vacation-id="${v.id}" title="연차 기록 삭제">
-                🗑️
-              </button>
+              <div style="display: flex; align-items: center; gap: 0.35rem;">
+                <button type="button" class="task-action-btn edit-btn" data-action="edit-vacation" data-vacation-id="${v.id}" title="연차 기록 수정">
+                  ✏️
+                </button>
+                <button type="button" class="task-action-btn delete-btn" data-action="delete-vacation" data-vacation-id="${v.id}" title="연차 기록 삭제">
+                  🗑️
+                </button>
+              </div>
             </div>
           `;
         }).join('');
       }
 
-      // If there are task-based vacation/half-off items, display helpful banner
-      if (taskVacations.length > 0) {
-        const taskVacBanner = document.createElement('div');
-        taskVacBanner.style.cssText = 'background: rgba(250, 176, 5, 0.08); border: 1px dashed rgba(250, 176, 5, 0.4); border-radius: 10px; padding: 0.65rem 0.9rem; margin-top: 0.85rem; font-size: 0.82rem; color: var(--text-main);';
-        taskVacBanner.innerHTML = `
-          <div style="font-weight: 800; margin-bottom: 0.35rem; color: #d97706; display: flex; align-items: center; gap: 0.35rem;">
-            <span>💡 캘린더/일정에서 등록된 휴가/반차 (${taskVacations.length}건)</span>
-          </div>
-          <div style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.4;">
-            '+ 새 일정' 팝업에서 등록하신 휴가 일정은 <b>'🗓️ 월별 달력'</b> 및 <b>'🌸 개인/💼 업무'</b> 탭에서 개나리색 칩으로 확인하실 수 있습니다.
-          </div>
-        `;
-        listEl.appendChild(taskVacBanner);
-      }
-
       this.renderSidebar();
     },
 
-    openVacationModal() {
+    openVacationModal(vacationId = null) {
       const modal = document.getElementById('vacation-modal');
       const form = document.getElementById('vacation-form');
+      const titleEl = document.getElementById('vacation-modal-title');
+      const hiddenId = document.getElementById('vacation-edit-id');
+      const typeSelect = document.getElementById('vacation-input-type');
       const dateInput = document.getElementById('vacation-input-date');
+      const reasonInput = document.getElementById('vacation-input-reason');
+      const submitBtn = document.getElementById('btn-submit-vacation');
       if (!modal || !form) return;
       form.reset();
-      if (dateInput) dateInput.value = getRealTodayStr();
+
+      if (vacationId) {
+        const vac = (store.vacations || []).find(v => v.id === vacationId);
+        if (!vac) return;
+        if (titleEl) titleEl.textContent = '🏖️ 연차 / 반차 내역 수정 💖';
+        if (hiddenId) hiddenId.value = vac.id;
+        if (typeSelect) typeSelect.value = vac.type || 'full';
+        if (dateInput) dateInput.value = vac.date || getRealTodayStr();
+        if (reasonInput) reasonInput.value = vac.reason || '';
+        if (submitBtn) submitBtn.textContent = '연차 내역 수정하기 💾';
+      } else {
+        if (titleEl) titleEl.textContent = '🏖️ 연차 / 반차 등록 💖';
+        if (hiddenId) hiddenId.value = '';
+        if (dateInput) dateInput.value = getRealTodayStr();
+        if (submitBtn) submitBtn.textContent = '연차 등록하기 💖';
+      }
+
       modal.style.display = 'flex';
       modal.classList.add('active');
+      if (dateInput) setTimeout(() => dateInput.focus(), 60);
     },
 
     closeVacationModal() {
@@ -6955,49 +7110,87 @@
       });
     }
 
-    // File Vault Form Submit
+    // Helper function to process and save files to Vault
+    const processVaultFilesUpload = async (filesList, defaultNote = '', targetFolder = null) => {
+      if (!filesList || filesList.length === 0) return;
+      const folder = targetFolder || (store.activeVaultFolder && store.activeVaultFolder !== 'all' ? store.activeVaultFolder : 'personal');
+      try {
+        const newFiles = [];
+        for (const file of filesList) {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          newFiles.push({
+            id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7) + Math.random().toString(36).substring(2, 5),
+            name: file.name,
+            size: file.size,
+            type: file.type || 'application/octet-stream',
+            dataUrl: dataUrl,
+            note: defaultNote || '',
+            folder: folder,
+            createdAt: Date.now()
+          });
+        }
+
+        await cloudSync.addVaultFiles(newFiles);
+        sounds.playAdd();
+        if (window.confetti && window.confetti.burst) {
+          window.confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
+        }
+        UI.showToast(newFiles.length === 1 
+          ? `'${newFiles[0].name}' 파일이 보관함에 안전하게 저장되었어요! 💾✨` 
+          : `총 ${newFiles.length}개 파일이 보관함에 안전하게 저장되었어요! 📁✨`, 'success');
+        await UI.renderFilesVault();
+        UI.renderSidebar();
+      } catch (err) {
+        console.error('File upload error:', err);
+        UI.showToast('파일 보관 중 오류가 발생했어요.', 'danger');
+      }
+    };
+
+    // Global dragover & drop prevention to stop browser from navigating to dropped files
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    }, false);
+
+    window.addEventListener('drop', (e) => {
+      if (!e.target.closest('#vault-dropzone') && 
+          !e.target.closest('#files-view-container') && 
+          !e.target.closest('#photo-dropzone') && 
+          !e.target.closest('#ledger-dropzone') &&
+          !e.target.closest('#upload-file-modal')) {
+        e.preventDefault();
+      }
+    }, false);
+
+    // File Vault Modal Form Submit
     const fileUploadForm = document.getElementById('file-upload-form');
     if (fileUploadForm) {
       fileUploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = document.getElementById('modal-vault-file-input');
         const note = (document.getElementById('modal-vault-file-note')?.value || '').trim();
+        const folder = document.getElementById('modal-vault-file-folder')?.value || (store.activeVaultFolder !== 'all' ? store.activeVaultFolder : 'personal');
 
         if (!input || !input.files || input.files.length === 0) return;
-        const file = input.files[0];
-
-        try {
-          const reader = new FileReader();
-          reader.onload = async () => {
-            const newFile = {
-              id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
-              name: file.name,
-              size: file.size,
-              type: file.type,
-              dataUrl: reader.result,
-              note: note,
-              createdAt: Date.now()
-            };
-
-            await cloudSync.addVaultFiles([newFile]);
-            sounds.playAdd();
-            confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
-            UI.closeFileUploadModal();
-            UI.showToast(`'${file.name}' 파일이 보관함에 안전하게 저장되었어요! 💾✨`, 'success');
-            UI.renderFilesVault();
-            UI.renderSidebar();
-          };
-          reader.readAsDataURL(file);
-        } catch (err) {
-          console.error(err);
-          UI.showToast('파일 업로드 중 오류가 발생했어요.', 'danger');
-        }
+        const filesList = Array.from(input.files);
+        UI.closeFileUploadModal();
+        await processVaultFilesUpload(filesList, note, folder);
+        input.value = '';
+        const noteEl = document.getElementById('modal-vault-file-note');
+        if (noteEl) noteEl.value = '';
       });
     }
 
     // File Vault Dropzone & Hidden Input Handling
     const vaultDropzone = document.getElementById('vault-dropzone');
     const vaultHiddenInput = document.getElementById('vault-file-hidden-input');
+    const filesViewContainer = document.getElementById('files-view-container');
+
     if (vaultDropzone && vaultHiddenInput) {
       vaultDropzone.addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
@@ -7008,93 +7201,70 @@
       vaultHiddenInput.addEventListener('change', async () => {
         if (!vaultHiddenInput.files || vaultHiddenInput.files.length === 0) return;
         const filesList = Array.from(vaultHiddenInput.files);
-        
-        try {
-          const newFiles = [];
-          for (const file of filesList) {
-            const dataUrl = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result);
-              reader.onerror = reject;
-              reader.readAsDataURL(file);
-            });
-
-            newFiles.push({
-              id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
-              name: file.name,
-              size: file.size,
-              type: file.type,
-              dataUrl: dataUrl,
-              note: '',
-              createdAt: Date.now()
-            });
-          }
-
-          await cloudSync.addVaultFiles(newFiles);
-          sounds.playAdd();
-          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
-          UI.showToast(`총 ${newFiles.length}개 파일이 보관함에 안전하게 저장되었어요! 📁✨`, 'success');
-          UI.renderFilesVault();
-          UI.renderSidebar();
-        } catch (err) {
-          console.error(err);
-          UI.showToast('파일 보관 중 오류가 발생했어요.', 'danger');
-        }
+        await processVaultFilesUpload(filesList);
         vaultHiddenInput.value = '';
       });
 
-      // Drag & Drop
-      ['dragenter', 'dragover'].forEach(eventName => {
-        vaultDropzone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          vaultDropzone.classList.add('dragover');
-        });
+      // Drag & Drop on Vault Dropzone
+      let vaultDragCounter = 0;
+
+      vaultDropzone.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        vaultDragCounter++;
+        vaultDropzone.classList.add('dragover', 'drag-over');
       });
 
-      ['dragleave', 'drop'].forEach(eventName => {
-        vaultDropzone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          vaultDropzone.classList.remove('dragover');
-        });
+      vaultDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'copy';
+        }
+        vaultDropzone.classList.add('dragover', 'drag-over');
+      });
+
+      vaultDropzone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        vaultDragCounter--;
+        if (vaultDragCounter <= 0) {
+          vaultDragCounter = 0;
+          vaultDropzone.classList.remove('dragover', 'drag-over');
+        }
       });
 
       vaultDropzone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        vaultDragCounter = 0;
+        vaultDropzone.classList.remove('dragover', 'drag-over');
+
         const dt = e.dataTransfer;
-        const files = dt ? Array.from(dt.files) : [];
-        if (!files.length) return;
+        const files = dt && dt.files ? Array.from(dt.files) : [];
+        if (files.length > 0) {
+          await processVaultFilesUpload(files);
+        }
+      });
+    }
 
-        try {
-          const newFiles = [];
-          for (const file of files) {
-            const dataUrl = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result);
-              reader.onerror = reject;
-              reader.readAsDataURL(file);
-            });
+    // Also support dragging & dropping files anywhere onto Files View Container
+    if (filesViewContainer) {
+      filesViewContainer.addEventListener('dragover', (e) => {
+        if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }
+      });
 
-            newFiles.push({
-              id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
-              name: file.name,
-              size: file.size,
-              type: file.type,
-              dataUrl: dataUrl,
-              note: '',
-              createdAt: Date.now()
-            });
-          }
-
-          await cloudSync.addVaultFiles(newFiles);
-          sounds.playAdd();
-          confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50);
-          UI.showToast(`총 ${newFiles.length}개 파일이 드롭되어 보관함에 저장되었어요! 📂✨`, 'success');
-          UI.renderFilesVault();
-          UI.renderSidebar();
-        } catch (err) {
-          console.error(err);
-          UI.showToast('파일 보관 중 오류가 발생했어요.', 'danger');
+      filesViewContainer.addEventListener('drop', async (e) => {
+        if (e.target.closest('#vault-dropzone')) return;
+        const dt = e.dataTransfer;
+        const files = dt && dt.files ? Array.from(dt.files) : [];
+        if (files.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          await processVaultFilesUpload(files);
         }
       });
     }
@@ -7721,6 +7891,126 @@
         return;
       }
 
+      // Vault Manager Buttons & Modals
+      if (target.closest('#btn-open-add-vault-folder')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.openVaultFolderModal();
+        return;
+      }
+      if (target.closest('[data-close-vault-folder-modal]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.closeVaultFolderModal();
+        return;
+      }
+      if (target.closest('[data-close-move-file-modal]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        UI.closeMoveFileModal();
+        return;
+      }
+
+      // Vault Folder Edit Pencil Click
+      const editVaultFolderBtn = target.closest('[data-action="open-edit-vault-folder"]');
+      if (editVaultFolderBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        UI.openVaultFolderModal(editVaultFolderBtn.dataset.id);
+        return;
+      }
+
+      // Vault Emoji Picker Click
+      const vaultEmojiBtn = target.closest('.vault-emoji-option-btn');
+      if (vaultEmojiBtn && vaultEmojiBtn.dataset.emoji) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const iconInput = document.getElementById('vault-input-folder-icon');
+        if (iconInput) iconInput.value = vaultEmojiBtn.dataset.emoji;
+        const grid = document.getElementById('vault-folder-emoji-grid');
+        if (grid) {
+          grid.querySelectorAll('.vault-emoji-option-btn').forEach(b => b.classList.remove('selected'));
+          vaultEmojiBtn.classList.add('selected');
+        }
+        return;
+      }
+
+      // Delete Vault Folder Button Click
+      if (target.closest('#btn-delete-vault-folder')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        const folderId = target.closest('#btn-delete-vault-folder').dataset.id;
+        if (folderId && folderId !== 'all' && confirm('정말 이 파일 폴더를 삭제하시겠습니까?\n(폴더 안의 파일들은 [기타] 폴더로 안전하게 이동됩니다)')) {
+          store.deleteVaultFolder(folderId).then(() => {
+            sounds.playDelete();
+            UI.closeVaultFolderModal();
+            UI.showToast('파일 폴더가 삭제되었고 파일들은 [기타] 폴더로 안전하게 보관되었어요.', 'info');
+            UI.renderFilesVault();
+            UI.renderSidebar();
+          });
+        }
+        return;
+      }
+
+      // Vault Folder Tab Click
+      const vaultTab = target.closest('.vault-folder-tab');
+      if (vaultTab && vaultTab.dataset.vaultFolderId) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        store.activeVaultFolder = vaultTab.dataset.vaultFolderId;
+        UI.renderFilesVault();
+        return;
+      }
+
+      // Open Move Single File Modal
+      const openMoveFileBtn = target.closest('[data-action="open-move-file-modal"]');
+      if (openMoveFileBtn) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        const fId = openMoveFileBtn.dataset.fileId;
+        if (fId) UI.openMoveFileModal(fId);
+        return;
+      }
+
+      // Batch Move Vault Files
+      if (target.closest('[data-action="batch-move-vault-files"]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const selectEl = document.getElementById('vault-batch-target-folder');
+        const targetFolder = selectEl ? selectEl.value : '';
+        if (!targetFolder) {
+          alert('이동할 대상 폴더를 선택해 주세요!');
+          if (selectEl) selectEl.focus();
+          return;
+        }
+        const fileIds = Array.from(store.selectedVaultFiles || []);
+        if (!fileIds.length) {
+          alert('이동할 파일을 먼저 체크박스로 선택해 주세요!');
+          return;
+        }
+        cloudSync.moveVaultFiles(fileIds, targetFolder).then(count => {
+          store.selectedVaultFiles.clear();
+          sounds.playComplete();
+          if (window.confetti && window.confetti.burst) {
+            confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
+          }
+          UI.showToast(`총 ${count}개의 파일이 성공적으로 이동되었어요! 📁✨`, 'success');
+          UI.renderFilesVault();
+        });
+        return;
+      }
+
+      // Batch Delete Vault Files
+      if (target.closest('[data-action="batch-delete-vault-files"]')) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        const fileIds = Array.from(store.selectedVaultFiles || []);
+        if (!fileIds.length) return;
+        if (confirm(`선택한 ${fileIds.length}개의 파일을 정말 모두 삭제하시겠습니까?`)) {
+          cloudSync.deleteVaultFilesBatch(fileIds).then(count => {
+            store.selectedVaultFiles.clear();
+            sounds.playDelete();
+            UI.showToast(`총 ${count}개의 파일이 보관함에서 삭제되었어요. 🗑️`, 'info');
+            UI.renderFilesVault();
+            UI.renderSidebar();
+          });
+        }
+        return;
+      }
+
       // 1. Task Completed Toggle
       if (target.matches('[data-action="toggle-complete"]') || target.classList.contains('task-checkbox')) {
         const chip = target.closest('.weekly-item-chip');
@@ -7910,42 +8200,23 @@
         const fileId = btn.dataset.fileId;
         cloudSync.getAllVaultFiles().then(files => {
           const f = files.find(x => x.id === fileId);
-          if (!f) {
+          if (!f || !f.dataUrl) {
             UI.showToast('파일 데이터를 찾을 수 없습니다.', 'danger');
             return;
           }
-          if (f.dataUrl) {
-            try {
-              const a = document.createElement('a');
-              a.href = f.dataUrl;
-              a.download = f.name;
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-              sounds.playComplete();
-              UI.showToast(`'${f.name}' 다운로드를 시작했어요! 📥✨`, 'success');
-              return;
-            } catch (err) {
-              console.error('Download error:', err);
-            }
+          try {
+            const a = document.createElement('a');
+            a.href = f.dataUrl;
+            a.download = f.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            sounds.playComplete();
+            UI.showToast(`'${f.name}' 다운로드를 시작했어요! 📥✨`, 'success');
+          } catch (err) {
+            console.error('Download error:', err);
+            UI.showToast('다운로드 처리 중 오류가 발생했습니다.', 'danger');
           }
-          // Dynamic Excel file generation fallback
-          if (f.name.endsWith('.xlsx') && window.XLSX) {
-            try {
-              const wb = XLSX.utils.book_new();
-              const ws = XLSX.utils.aoa_to_sheet([
-                [f.name.replace('.xlsx', ''), '', '비고'],
-                ['구분', '항목명', '내용'],
-                ['여행 계획 1', '세부 일정 및 준비물', '확인 완료']
-              ]);
-              XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-              XLSX.writeFile(wb, f.name);
-              sounds.playComplete();
-              UI.showToast(`'${f.name}' 다운로드가 완료되었어요! 📥✨`, 'success');
-              return;
-            } catch (ex) {}
-          }
-          UI.showToast(`'${f.name}' 파일이 준비되었습니다.`, 'info');
         });
       }
 
@@ -7969,6 +8240,12 @@
       }
 
       // 13. Vacation Manager Action Triggers
+      if (target.closest('[data-action="edit-vacation"]')) {
+        const btn = target.closest('[data-action="edit-vacation"]');
+        const vId = btn.dataset.vacationId;
+        if (vId) UI.openVacationModal(vId);
+      }
+
       if (target.closest('[data-action="delete-vacation"]')) {
         const btn = target.closest('[data-action="delete-vacation"]');
         const vId = btn.dataset.vacationId;
@@ -8131,6 +8408,35 @@
         UI.renderHobby();
         return;
       }
+
+      // Vault File Single Checkbox
+      if (target.classList.contains('file-card-check')) {
+        const id = target.dataset.fileId;
+        if (!store.selectedVaultFiles) store.selectedVaultFiles = new Set();
+        if (target.checked) {
+          store.selectedVaultFiles.add(id);
+        } else {
+          store.selectedVaultFiles.delete(id);
+        }
+        UI.renderFilesVault();
+        return;
+      }
+
+      // Vault File Check All
+      if (target.id === 'vault-check-all') {
+        if (!store.selectedVaultFiles) store.selectedVaultFiles = new Set();
+        const activeFolder = store.activeVaultFolder || 'all';
+        cloudSync.getAllVaultFiles().then(allFiles => {
+          const filtered = (activeFolder === 'all') ? allFiles : allFiles.filter(f => (f.folder || 'personal') === activeFolder);
+          if (target.checked) {
+            filtered.forEach(f => store.selectedVaultFiles.add(f.id));
+          } else {
+            store.selectedVaultFiles.clear();
+          }
+          UI.renderFilesVault();
+        });
+        return;
+      }
     });
 
     // Vacation Year Filter Change
@@ -8156,16 +8462,25 @@
     if (vacationForm) {
       vacationForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        const editId = document.getElementById('vacation-edit-id')?.value;
         const type = document.getElementById('vacation-input-type')?.value || 'full';
         const date = document.getElementById('vacation-input-date')?.value || getRealTodayStr();
         const reason = document.getElementById('vacation-input-reason')?.value || '';
-        store.addVacation({ type, date, reason });
-        sounds.playComplete();
-        UI.closeVacationModal();
-        if (type === 'holiday') {
-          UI.showToast('휴가 일정이 등록되었어요 (연차 미차감) 🏖️✨', 'success');
+
+        if (editId) {
+          store.updateVacation(editId, { type, date, reason });
+          sounds.playComplete();
+          UI.closeVacationModal();
+          UI.showToast('연차/휴가 내역이 성공적으로 수정되었어요 ✏️✨', 'success');
         } else {
-          UI.showToast('연차/반차가 성공적으로 등록되었어요 🌴💖', 'success');
+          store.addVacation({ type, date, reason });
+          sounds.playComplete();
+          UI.closeVacationModal();
+          if (type === 'holiday') {
+            UI.showToast('휴가 일정이 등록되었어요 (연차 미차감) 🏖️✨', 'success');
+          } else {
+            UI.showToast('연차/반차가 성공적으로 등록되었어요 🌴💖', 'success');
+          }
         }
         UI.renderVacation();
       });
@@ -8306,6 +8621,48 @@
         }
         UI.closeHobbyFolderModal();
         UI.renderHobby();
+      });
+    }
+
+    // Vault Folder & Move File Form Submissions
+    const vaultFolderForm = document.getElementById('vault-folder-form');
+    if (vaultFolderForm) {
+      vaultFolderForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('vault-folder-edit-id')?.value;
+        const icon = document.getElementById('vault-input-folder-icon')?.value || '📁';
+        const name = document.getElementById('vault-input-folder-name')?.value || '';
+        if (!name.trim()) return;
+
+        if (id) {
+          store.updateVaultFolder(id, { name: name.trim(), icon });
+          sounds.playComplete();
+          UI.showToast(`'${name.trim()}' 파일 폴더가 수정되었어요 ✨`, 'info');
+        } else {
+          store.addVaultFolder(name.trim(), icon);
+          sounds.playAdd();
+          UI.showToast(`'${name.trim()}' 파일 폴더가 추가되었어요 📁✨`, 'success');
+        }
+        UI.closeVaultFolderModal();
+        UI.renderFilesVault();
+      });
+    }
+
+    const moveFileForm = document.getElementById('move-file-form');
+    if (moveFileForm) {
+      moveFileForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fileId = document.getElementById('move-file-id')?.value;
+        const targetFolder = document.getElementById('move-file-target-folder')?.value;
+        if (!fileId || !targetFolder) return;
+
+        const count = await cloudSync.moveVaultFiles([fileId], targetFolder);
+        sounds.playComplete();
+        UI.closeMoveFileModal();
+        const folderObj = (store.vaultFolders || DEFAULT_VAULT_FOLDERS).find(f => f.id === targetFolder);
+        const folderName = folderObj ? folderObj.name : '지정한';
+        UI.showToast(`파일이 '${folderName}' 폴더로 안전하게 이동되었어요! ✨`, 'success');
+        UI.renderFilesVault();
       });
     }
 
@@ -8742,11 +9099,8 @@
           try { sounds.playAdd(); } catch (err) {}
           try { confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50); } catch (err) {}
 
-          UI.showToast('동기화 로그인 성공! 잠금이 해제되었어요 💖', 'success');
-          UI.renderTasks();
-
-          // Push local state to cloud safely
-          await cloudSync.pushTasksToCloud();
+          UI.showToast('동기화 로그인 성공! 최신 클라우드 데이터와 연결되었어요 💖', 'success');
+          cloudSync.renderAllViews();
         } catch (err) {
           console.error('syncForm submit error:', err);
           UI.showToast('동기화 처리 오류: ' + (err.message || err), 'danger');
@@ -8851,49 +9205,6 @@
         if (st) st.classList.remove('active');
       }
     });
-
-    // File Upload Form
-    const fileForm = document.getElementById('file-upload-form');
-    if (fileForm) {
-      fileForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const input = document.getElementById('modal-vault-file-input');
-        const note = document.getElementById('modal-vault-file-note').value.trim();
-        if (!input.files || input.files.length === 0) return;
-
-        const file = input.files[0];
-        try {
-          await cloudSync.saveFileToVault(file, note);
-          sounds.playAdd();
-          UI.showToast(`'${file.name}' 파일이 안전하게 보관되었어요! 💾`, 'success');
-          UI.closeFileUploadModal();
-          UI.renderFilesVault();
-          UI.renderSidebar();
-        } catch (err) {
-          UI.showToast('파일 업로드 중 오류가 발생했어요', 'danger');
-        }
-      });
-    }
-
-    // Vault Dropzone & Hidden Input
-    const dropzone = document.getElementById('vault-dropzone');
-    const hiddenFileInput = document.getElementById('vault-file-hidden-input');
-    if (dropzone && hiddenFileInput) {
-      dropzone.addEventListener('click', () => hiddenFileInput.click());
-      hiddenFileInput.addEventListener('change', async () => {
-        if (!hiddenFileInput.files || hiddenFileInput.files.length === 0) return;
-        const file = hiddenFileInput.files[0];
-        try {
-          await cloudSync.saveFileToVault(file, '');
-          sounds.playAdd();
-          UI.showToast(`'${file.name}' 파일이 보관되었어요! 💾`, 'success');
-          UI.renderFilesVault();
-          UI.renderSidebar();
-        } catch (err) {
-          UI.showToast('파일 보관 실패', 'danger');
-        }
-      });
-    }
 
     // Settings: Immediate Cloud Backup & Upload to Firebase
     const exportBtn = document.getElementById('btn-export-data');
