@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=1.1">
-  <link rel="stylesheet" href="css/animations.css?v=1.1">
+  <link rel="stylesheet" href="css/style.css?v=20260902_quickmenu">
+  <link rel="stylesheet" href="css/animations.css?v=20260902_quickmenu">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -1097,25 +1097,35 @@
       </main>
     </div>
 
-    <!-- iOS Mobile Floating Bottom Navigation Bar (할일, 위시, 메모, 기록) -->
-    <nav class="mobile-bottom-nav">
-      <button type="button" class="mobile-nav-btn active" data-mobile-nav="all">
-        <span class="nav-icon">📅</span>
-        <span>할일</span>
+    <!-- iOS Mobile Floating Bottom Navigation Bar (5-Emoji Quick Menu: 할일, 라이프, 메모, 가계부, 보관함) -->
+    <nav class="mobile-bottom-nav" id="mobile-bottom-nav" aria-label="모바일 빠른 메뉴">
+      <button type="button" class="mobile-nav-btn active" data-group="todo" title="할일 & 플래너">
+        <span class="nav-icon">📋</span>
+        <span class="nav-indicator-dot"></span>
       </button>
-      <button type="button" class="mobile-nav-btn" data-mobile-nav="wishlist">
-        <span class="nav-icon">🎁</span>
-        <span>위시</span>
+      <button type="button" class="mobile-nav-btn" data-group="life" title="라이프 & 플랜">
+        <span class="nav-icon">🎯</span>
+        <span class="nav-indicator-dot"></span>
       </button>
-      <button type="button" class="mobile-nav-btn" data-mobile-nav="notes">
+      <button type="button" class="mobile-nav-btn" data-group="record" title="기록 & 메모">
         <span class="nav-icon">📝</span>
-        <span>메모</span>
+        <span class="nav-indicator-dot"></span>
       </button>
-      <button type="button" class="mobile-nav-btn" data-mobile-nav="photos">
-        <span class="nav-icon">📸</span>
-        <span>기록</span>
+      <button type="button" class="mobile-nav-btn" data-group="finance" title="가계부 & 위시">
+        <span class="nav-icon">💰</span>
+        <span class="nav-indicator-dot"></span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-group="vault" title="보관함 & 더보기">
+        <span class="nav-icon">📁</span>
+        <span class="nav-indicator-dot"></span>
       </button>
     </nav>
+
+    <!-- Naver Style Quick Menu Sub Popover & Backdrop -->
+    <div id="quick-menu-backdrop" class="quick-menu-backdrop" style="display: none;"></div>
+    <div id="quick-sub-popover" class="quick-sub-popover" style="display: none;" role="dialog" aria-modal="true">
+      <!-- Dynamically rendered by UI.renderQuickSubMenu -->
+    </div>
   </div>
 
   <!-- =========================================================================
@@ -2314,7 +2324,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=1.1.5"></script>
-  <script src="js/treasure.js?v=1.1.5"></script>
+  <script src="js/app.js?v=20260902_quickmenu"></script>
+  <script src="js/treasure.js?v=20260902_quickmenu"></script>
 </body>
 </html>

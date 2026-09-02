@@ -730,10 +730,10 @@
       localStorage.setItem('todolist_jy_pin', cleanPin);
 
       this.updateUIStatus();
-      // 1. 현재 로컬에 작성된 메모/할 일이 있다면 클라우드로 즉시 자동 업로드
-      await this.pushTasksToCloud();
-      // 2. 클라우드 최신 데이터와 동기화 및 전 화면 리렌더링
+      // 🛡️ 1. 새 기기 로그인 시 빈 데이터로 클라우드를 덮어쓰지 않도록 클라우드 데이터를 '먼저' 안전하게 가져와 로컬과 Smart Merge!
       await this.fetchLatestFromCloud(true);
+      // 🛡️ 2. 머지된 통합 안전 데이터를 클라우드에 백업 업로드
+      await this.pushTasksToCloud();
       this.startRealtimePolling();
       return { success: true, message: '🎉 로그인 및 실시간 동기화 연결 완료!' };
     }
@@ -790,6 +790,39 @@
       try { UI.renderSidebar(); } catch (e) {}
     }
 
+    // 🛡️ Zero-Data-Loss Bidirectional Smart ID Merge Helper with Tombstone Support
+    smartMergeList(localList, cloudList, extraDeleted = null) {
+      const mergedMap = new Map();
+      const delSet = (store && store.deletedIds) ? store.deletedIds : new Set();
+      
+      // 1. First add all cloud items (ignoring deleted tombstones)
+      (cloudList || []).forEach(item => {
+        if (item && item.id && !delSet.has(item.id) && (!extraDeleted || !extraDeleted.has(item.id))) {
+          mergedMap.set(item.id, Object.assign({}, item));
+        }
+      });
+      
+      // 2. Union with all local items (ignoring deleted tombstones)
+      (localList || []).forEach(localItem => {
+        if (localItem && localItem.id && !delSet.has(localItem.id) && (!extraDeleted || !extraDeleted.has(localItem.id))) {
+          if (!mergedMap.has(localItem.id)) {
+            // Local-only item: keep safely!
+            mergedMap.set(localItem.id, Object.assign({}, localItem));
+          } else {
+            // Exists in both: choose newer by updatedAt / createdAt
+            const cloudItem = mergedMap.get(localItem.id);
+            const localUp = Number(localItem.updatedAt || localItem.createdAt || 0);
+            const cloudUp = Number(cloudItem.updatedAt || cloudItem.createdAt || 0);
+            if (localUp >= cloudUp) {
+              mergedMap.set(localItem.id, Object.assign({}, cloudItem, localItem));
+            }
+          }
+        }
+      });
+      
+      return Array.from(mergedMap.values());
+    }
+
     async fetchLatestFromCloud(force = false) {
       if (!this.spaceId || !this.pin) return;
       if (this.isPushing) return; // Prevent race conditions while local mutation is uploading
@@ -814,26 +847,32 @@
               const remoteUpdated = Number(data.updatedAt) || 0;
               const localUpdated = Number(this.lastSyncedUpdatedAt) || 0;
 
-              // Only accept cloud data if cloud is strictly NEWER than local state
-              if (remoteUpdated > localUpdated) {
-                this.lastSyncedUpdatedAt = remoteUpdated;
+              // 🛡️ Always perform Non-Destructive Bidirectional Smart Merge on fetch!
+              if (remoteUpdated > localUpdated || force || true) {
+                this.lastSyncedUpdatedAt = Math.max(remoteUpdated, localUpdated);
+
+                // 0. Sync Tombstones (deletedIds) from cloud
+                if (data.deletedIds && Array.isArray(data.deletedIds)) {
+                  data.deletedIds.forEach(id => {
+                    if (id) store.deletedIds.add(String(id).trim());
+                  });
+                  try {
+                    localStorage.setItem('todolist_jy_deleted_ids_v1', JSON.stringify(Array.from(store.deletedIds)));
+                  } catch (e) {}
+                }
+
+                // 1. Tasks
                 if (data.tasks !== undefined) {
                   const cloudTasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id));
-                  const taskMap = new Map();
-                  cloudTasks.forEach(t => taskMap.set(t.id, t));
-                  // Preserve recently created local tasks
-                  store.tasks.forEach(localT => {
-                    if (localT && localT.id && !taskMap.has(localT.id)) {
-                      taskMap.set(localT.id, localT);
-                    }
-                  });
-                  store.tasks = Array.from(taskMap.values());
+                  store.tasks = this.smartMergeList(store.tasks, cloudTasks);
                   store.tasks.forEach(t => {
                     if (!t.category || (t.category !== 'personal' && t.category !== 'work')) {
                       t.category = 'personal';
                     }
                   });
                 }
+
+                // 2. Categories
                 if (data.categories !== undefined && normalizeArray(data.categories).length) {
                   let cats = normalizeArray(data.categories).filter(c => c && c.id && (c.id === 'personal' || c.id === 'work' || c.id === 'schedule'));
                   cats = cats.map(c => {
@@ -852,46 +891,58 @@
                   });
                   store.categories = cats;
                 }
+
+                // 3. Wishlist
                 if (data.wishlist !== undefined) {
                   const cloudWishes = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id));
-                  const wishMap = new Map();
-                  cloudWishes.forEach(w => wishMap.set(w.id, w));
-                  store.wishlist.forEach(lw => {
-                    if (lw && lw.id && !wishMap.has(lw.id)) wishMap.set(lw.id, lw);
-                  });
-                  store.wishlist = Array.from(wishMap.values());
+                  store.wishlist = this.smartMergeList(store.wishlist, cloudWishes);
                 }
+
+                // 4. Photos
                 if (data.photos !== undefined) {
                   const cloudPhotos = normalizeArray(data.photos).filter(p => p && p.id);
-                  const photoMap = new Map();
-                  cloudPhotos.forEach(p => photoMap.set(p.id, p));
-                  store.photos.forEach(lp => {
-                    if (lp && lp.id && !photoMap.has(lp.id)) photoMap.set(lp.id, lp);
-                  });
-                  store.photos = Array.from(photoMap.values());
+                  store.photos = this.smartMergeList(store.photos, cloudPhotos);
                 }
+
+                // 5. Notes
                 if (data.notes !== undefined) {
                   const cloudNotes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id));
-                  const noteMap = new Map();
-                  cloudNotes.forEach(n => noteMap.set(n.id, n));
-                  store.notes.forEach(ln => {
-                    if (ln && ln.id && !noteMap.has(ln.id)) noteMap.set(ln.id, ln);
-                  });
-                  store.notes = Array.from(noteMap.values());
+                  store.notes = this.smartMergeList(store.notes, cloudNotes);
                 }
+
+                // 6. Honeymoon Data
                 if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
-                if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
-                if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations);
+
+                // 7. Ledger Files
+                if (data.ledgerFiles !== undefined) {
+                  const cloudLedger = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id));
+                  store.ledgerFiles = this.smartMergeList(store.ledgerFiles, cloudLedger);
+                }
+
+                // 8. 🏖️ Vacations (Absolute Zero-Data-Loss Merge)
+                if (data.vacations !== undefined) {
+                  const cloudVacations = normalizeArray(data.vacations);
+                  store.vacations = this.smartMergeList(store.vacations, cloudVacations);
+                  // Ensure INITIAL_VACATIONS are always preserved
+                  INITIAL_VACATIONS.forEach(iv => {
+                    if (!store.vacations.some(v => v.id === iv.id)) store.vacations.push(iv);
+                  });
+                  store.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+                }
+
+                // 9. Total Vacation Days
                 if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
-                if (data.sites !== undefined) store.sites = normalizeArray(data.sites);
+
+                // 10. Sites
+                if (data.sites !== undefined) {
+                  const cloudSites = normalizeArray(data.sites);
+                  store.sites = this.smartMergeList(store.sites, cloudSites);
+                }
+
+                // 11. Health Notes & Folders
                 if (data.healthNotes !== undefined) {
                   const cloudHNotes = normalizeArray(data.healthNotes);
-                  const hMap = new Map();
-                  cloudHNotes.forEach(n => hMap.set(n.id, n));
-                  store.healthNotes.forEach(ln => {
-                    if (ln && ln.id && !hMap.has(ln.id)) hMap.set(ln.id, ln);
-                  });
-                  store.healthNotes = Array.from(hMap.values());
+                  store.healthNotes = this.smartMergeList(store.healthNotes, cloudHNotes);
                 }
                 if (data.healthFolders !== undefined && Array.isArray(data.healthFolders)) {
                   let hFolders = data.healthFolders.slice();
@@ -904,14 +955,11 @@
                   });
                   store.healthFolders = hFolders;
                 }
+
+                // 12. Hobby Notes & Folders
                 if (data.hobbyNotes !== undefined) {
                   const cloudHbNotes = normalizeArray(data.hobbyNotes);
-                  const hbMap = new Map();
-                  cloudHbNotes.forEach(n => hbMap.set(n.id, n));
-                  store.hobbyNotes.forEach(ln => {
-                    if (ln && ln.id && !hbMap.has(ln.id)) hbMap.set(ln.id, ln);
-                  });
-                  store.hobbyNotes = Array.from(hbMap.values());
+                  store.hobbyNotes = this.smartMergeList(store.hobbyNotes, cloudHbNotes);
                 }
                 if (data.hobbyFolders !== undefined && Array.isArray(data.hobbyFolders)) {
                   let hbFolders = data.hobbyFolders.slice();
@@ -924,20 +972,18 @@
                   });
                   store.hobbyFolders = hbFolders;
                 }
+
+                // 13. Projects
                 if (data.projects !== undefined && Array.isArray(data.projects)) {
                   if (data.projects.length > 0) {
-                    const cloudProjects = data.projects;
-                    const pMap = new Map();
-                    cloudProjects.forEach(p => { if (p && p.id) pMap.set(p.id, p); });
-                    (store.projects || []).forEach(lp => {
-                      if (lp && lp.id && !pMap.has(lp.id)) pMap.set(lp.id, lp);
-                    });
-                    store.projects = Array.from(pMap.values());
+                    store.projects = this.smartMergeList(store.projects, data.projects);
                   }
                 }
                 if (!store.projects || store.projects.length === 0) {
                   store.projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
                 }
+
+                // 14. Sidebar Order
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
                   const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
                   let order = data.sidebarMenuOrder.slice();
@@ -978,33 +1024,11 @@
                     if (!order.includes(id)) order.push(id);
                   });
 
-                  // 1. Ensure divider-1 is positioned RIGHT AFTER work (업무 메뉴 아래에 구분선)
+                  // Ensure dividers in exact positions
                   const d1Idx = order.indexOf('divider-1');
-                  const wIdx = order.indexOf('work');
-                  if (d1Idx !== -1 && wIdx !== -1 && d1Idx !== wIdx + 1) {
+                  const hIdx = order.indexOf('hobby');
+                  if (d1Idx !== -1 && hIdx !== -1 && d1Idx !== hIdx - 1) {
                     order.splice(d1Idx, 1);
-                    const newWIdx = order.indexOf('work');
-                    order.splice(newWIdx + 1, 0, 'divider-1');
-                  }
-
-                  // 2. Ensure project is positioned RIGHT AFTER divider-1
-                  const prIdx = order.indexOf('project');
-                  const newD1Idx = order.indexOf('divider-1');
-                  if (prIdx !== -1 && newD1Idx !== -1 && prIdx !== newD1Idx + 1) {
-                    order.splice(prIdx, 1);
-                    const curD1 = order.indexOf('divider-1');
-                    order.splice(curD1 + 1, 0, 'project');
-                  }
-
-                  // 3. Ensure hobby is positioned RIGHT AFTER project
-                  const hbIdx = order.indexOf('hobby');
-                  const curPr = order.indexOf('project');
-                  if (hbIdx !== -1 && curPr !== -1 && hbIdx !== curPr + 1) {
-                    order.splice(hbIdx, 1);
-                    const latestPr = order.indexOf('project');
-                    order.splice(latestPr + 1, 0, 'hobby');
-                  }
-
                   // 4. Ensure divider-vacation is positioned RIGHT AFTER vacation
                   const dvIdx = order.indexOf('divider-vacation');
                   const vIdx = order.indexOf('vacation');
@@ -1078,43 +1102,78 @@
       if (!this.spaceId || !this.pin) return;
       this.isPushing = true;
       const key = this.getStorageKey();
-      const vaultFiles = await this.getAllVaultFiles();
-      
-      // Include full dataUrl for files up to 4.5MB (covers all typical Excel, PDF, Doc, and Image files)
-      const sanitizedVaultFiles = (vaultFiles || []).map(f => {
-        if (f.dataUrl && f.dataUrl.length > 4.5 * 1024 * 1024) {
-          const clone = Object.assign({}, f);
-          delete clone.dataUrl;
-          return clone;
-        }
-        return f;
-      });
-
-      const nowTs = Date.now();
-      this.lastSyncedUpdatedAt = nowTs;
-
-      const rawPayload = {
-        tasks: store.tasks,
-        categories: store.categories,
-        sidebarMenuOrder: store.sidebarMenuOrder,
-        wishlist: store.wishlist,
-        photos: store.photos,
-        notes: store.notes,
-        vaultFiles: sanitizedVaultFiles,
-        honeymoonData: store.honeymoonData,
-        ledgerFiles: store.ledgerFiles,
-        vacations: store.vacations,
-        totalVacationDays: store.totalVacationDays,
-        sites: store.sites,
-        healthNotes: store.healthNotes,
-        healthFolders: store.healthFolders,
-        hobbyNotes: store.hobbyNotes,
-        hobbyFolders: store.hobbyFolders,
-        projects: store.projects,
-        updatedAt: nowTs
-      };
 
       try {
+        // 🛡️ ZERO-OVERWRITE SAFEGUARD: Pre-fetch and merge before pushing to prevent blank PC overwrite!
+        try {
+          const preUrl = `${this.activeUrl}/spaces/${key}.json`;
+          const preRes = await fetch(preUrl);
+          if (preRes.ok) {
+            const rawCloud = await preRes.json();
+            if (rawCloud && typeof rawCloud === 'object') {
+              const cloudData = await E2EESecurityEngine.decrypt(rawCloud, this.pin);
+              if (cloudData && typeof cloudData === 'object') {
+                if (cloudData.tasks) store.tasks = this.smartMergeList(store.tasks, cloudData.tasks);
+                if (cloudData.vacations) store.vacations = this.smartMergeList(store.vacations, cloudData.vacations);
+                if (cloudData.notes) store.notes = this.smartMergeList(store.notes, cloudData.notes);
+                if (cloudData.wishlist) store.wishlist = this.smartMergeList(store.wishlist, cloudData.wishlist);
+                if (cloudData.photos) store.photos = this.smartMergeList(store.photos, cloudData.photos);
+                if (cloudData.healthNotes) store.healthNotes = this.smartMergeList(store.healthNotes, cloudData.healthNotes);
+                if (cloudData.hobbyNotes) store.hobbyNotes = this.smartMergeList(store.hobbyNotes, cloudData.hobbyNotes);
+                if (cloudData.sites) store.sites = this.smartMergeList(store.sites, cloudData.sites);
+                if (cloudData.projects && cloudData.projects.length > 0) store.projects = this.smartMergeList(store.projects, cloudData.projects);
+                if (cloudData.ledgerFiles) store.ledgerFiles = this.smartMergeList(store.ledgerFiles, cloudData.ledgerFiles);
+                store.saveLocalOnly();
+              }
+            }
+          }
+        } catch (preErr) {
+          console.warn('Pre-push safeguard check warning:', preErr);
+        }
+
+        // Ensure 15 INITIAL_VACATIONS are always intact
+        INITIAL_VACATIONS.forEach(iv => {
+          if (!store.vacations.some(v => v.id === iv.id)) store.vacations.push(iv);
+        });
+        store.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+
+        const vaultFiles = await this.getAllVaultFiles();
+        
+        // Include full dataUrl for files up to 4.5MB (covers all typical Excel, PDF, Doc, and Image files)
+        const sanitizedVaultFiles = (vaultFiles || []).map(f => {
+          if (f.dataUrl && f.dataUrl.length > 4.5 * 1024 * 1024) {
+            const clone = Object.assign({}, f);
+            delete clone.dataUrl;
+            return clone;
+          }
+          return f;
+        });
+
+        const nowTs = Date.now();
+        this.lastSyncedUpdatedAt = nowTs;
+
+        const rawPayload = {
+          tasks: store.tasks,
+          categories: store.categories,
+          sidebarMenuOrder: store.sidebarMenuOrder,
+          wishlist: store.wishlist,
+          photos: store.photos,
+          notes: store.notes,
+          vaultFiles: sanitizedVaultFiles,
+          honeymoonData: store.honeymoonData,
+          ledgerFiles: store.ledgerFiles,
+          vacations: store.vacations,
+          totalVacationDays: store.totalVacationDays || 15.0,
+          sites: store.sites,
+          healthNotes: store.healthNotes,
+          healthFolders: store.healthFolders,
+          hobbyNotes: store.hobbyNotes,
+          hobbyFolders: store.hobbyFolders,
+          projects: store.projects,
+          deletedIds: Array.from(store.deletedIds || []),
+          updatedAt: nowTs
+        };
+
         // Zero-Knowledge E2EE AES-GCM 256-bit Encryption (cached key for 0.01ms speed)
         const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, this.pin);
 
@@ -1124,6 +1183,16 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(encryptedBody)
         });
+
+        // 🛡️ Automatic Cloud Historical Rollback Backup Snapshot
+        try {
+          const bkUrl = `${this.activeUrl}/manual_backups/${key}/latest.json`;
+          await fetch(bkUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(encryptedBody)
+          });
+        } catch (bkErr) {}
       } catch (e) {
         console.warn('RTDB sync push error:', e);
       } finally {
@@ -1391,6 +1460,25 @@
   const INITIAL_DEMO_NOTES = [];
   const INITIAL_LEDGER_FILES = [];
 
+  // 🏖️ 2025.12 ~ 2026.08 사용자 실제 등록 연차/반차/휴가 15종 완벽 복원 데이터
+  const INITIAL_VACATIONS = [
+    { id: 'vacation-20251211-am', date: '2025-12-11', type: 'half-am', amount: 0.5, reason: '오전 반차', createdAt: 1733875200000 },
+    { id: 'vacation-20260323-pm', date: '2026-03-23', type: 'half-pm', amount: 0.5, reason: '오후 반차', createdAt: 1774224000000 },
+    { id: 'vacation-20260324-full', date: '2026-03-24', type: 'full', amount: 1.0, reason: '연차', createdAt: 1774310400000 },
+    { id: 'vacation-20260325-hol', date: '2026-03-25', type: 'holiday', amount: 0.0, reason: '휴가 (0일 차감)', createdAt: 1774396800000 },
+    { id: 'vacation-20260327-full', date: '2026-03-27', type: 'full', amount: 1.0, reason: '연차', createdAt: 1774569600000 },
+    { id: 'vacation-20260430-pm', date: '2026-04-30', type: 'half-pm', amount: 0.5, reason: '오후 반차', createdAt: 1777507200000 },
+    { id: 'vacation-20260522-full', date: '2026-05-22', type: 'full', amount: 1.0, reason: '연차', createdAt: 1779408000000 },
+    { id: 'vacation-20260529-full', date: '2026-05-29', type: 'full', amount: 1.0, reason: '연차', createdAt: 1780012800000 },
+    { id: 'vacation-20260605-am', date: '2026-06-05', type: 'half-am', amount: 0.5, reason: '오전 반차', createdAt: 1780617600000 },
+    { id: 'vacation-20260629-pm', date: '2026-06-29', type: 'half-pm', amount: 0.5, reason: '오후 반차', createdAt: 1782691200000 },
+    { id: 'vacation-20260803-pm', date: '2026-08-03', type: 'half-pm', amount: 0.5, reason: '오후 반차', createdAt: 1785715200000 },
+    { id: 'vacation-20260806-am', date: '2026-08-06', type: 'half-am', amount: 0.5, reason: '오전 반차', createdAt: 1785974400000 },
+    { id: 'vacation-20260811-am', date: '2026-08-11', type: 'half-am', amount: 0.5, reason: '오전 반차', createdAt: 1786406400000 },
+    { id: 'vacation-20260813-hol', date: '2026-08-13', type: 'holiday', amount: 0.0, reason: '휴가 (0일 차감)', createdAt: 1786579200000 },
+    { id: 'vacation-20260824-pm', date: '2026-08-24', type: 'half-pm', amount: 0.5, reason: '오후 반차 (강남차 2시예약)', createdAt: 1787532000000 }
+  ];
+
   const MOCK_DEMO_IDS = new Set([
     'task-1', 'task-2', 'task-3', 'task-4',
     'wish-1', 'wish-2', 'wish-3',
@@ -1488,8 +1576,8 @@
       this.activeFilter = localStorage.getItem('todolist_jy_active_filter') || 'all';
       this.activePriority = 'all';
       this.activeWishCat = 'all';
-      this.selectedVacationYear = '2026';
-      this.selectedVacationMonth = String(new Date().getMonth() + 1);
+      this.selectedVacationYear = 'all'; // 기본값을 'all'로 설정하여 2025년 및 2026년 등록 연차가 모두 보이도록 개선
+      this.selectedVacationMonth = 'all'; // 기본값을 'all'로 설정하여 등록된 모든 연차가 한눈에 보이도록 개선
       this.vacationTypeFilter = 'all';
       this.isReorderMode = false;
       this.selectedHealthNotes = new Set();
@@ -1501,6 +1589,7 @@
       this.sortBy = 'dueDate';
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
       this.streak = { count: 3, lastDate: TODAY_STR };
+      this.deletedIds = new Set(); // 🛡️ Tombstone registry: permanently prevent deleted items from resurrecting
       
       // 2026-08-25 Anchor Dates for Calendars
       this.currentCalendarDate = new Date(2026, 7, 25);
@@ -1510,7 +1599,30 @@
       this.loadLocalOnly();
     }
 
+    recordDeletedId(id) {
+      if (!id) return;
+      const cleanId = String(id).trim();
+      this.deletedIds.add(cleanId);
+      try {
+        localStorage.setItem('todolist_jy_deleted_ids_v1', JSON.stringify(Array.from(this.deletedIds)));
+      } catch (e) {}
+      if (window.cloudSync) {
+        window.cloudSync.pushTasksToCloud(true);
+      }
+    }
+
     loadLocalOnly() {
+      // 1. Load Tombstones first to prune any resurrected items
+      try {
+        const rawDel = localStorage.getItem('todolist_jy_deleted_ids_v1');
+        if (rawDel) {
+          const parsedDel = JSON.parse(rawDel);
+          if (Array.isArray(parsedDel)) {
+            parsedDel.forEach(id => { if (id) this.deletedIds.add(String(id).trim()); });
+          }
+        }
+      } catch (e) {}
+
       let savedData = null;
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -1519,21 +1631,84 @@
         console.error('Store load error:', e);
       }
 
-      const userTasks = (savedData && Array.isArray(savedData.tasks)) ? savedData.tasks : [];
-      const userWishlist = (savedData && Array.isArray(savedData.wishlist)) ? savedData.wishlist : [];
-      const userPhotos = (savedData && Array.isArray(savedData.photos)) ? savedData.photos : [];
-      const userNotes = (savedData && Array.isArray(savedData.notes)) ? savedData.notes : [];
-      const userLedgerFiles = (savedData && Array.isArray(savedData.ledgerFiles)) ? savedData.ledgerFiles : [];
-      const userCategories = (savedData && Array.isArray(savedData.categories)) ? savedData.categories : null;
-      const userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
-      const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
-      const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
-      const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
+      let userTasks = (savedData && Array.isArray(savedData.tasks)) ? savedData.tasks : [];
+      let userWishlist = (savedData && Array.isArray(savedData.wishlist)) ? savedData.wishlist : [];
+      let userPhotos = (savedData && Array.isArray(savedData.photos)) ? savedData.photos : [];
+      let userNotes = (savedData && Array.isArray(savedData.notes)) ? savedData.notes : [];
+      let userLedgerFiles = (savedData && Array.isArray(savedData.ledgerFiles)) ? savedData.ledgerFiles : [];
+      let userCategories = (savedData && Array.isArray(savedData.categories)) ? savedData.categories : null;
+      let userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
+      let userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
+      let userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
+      let userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
       let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS.slice();
-      const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
+      let userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
       let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS.slice();
-      const userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
-      const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
+      let userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+      let userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
+
+      // 🛡️ Legacy LocalStorage Auto-Recovery Engine (이전 버전 키에서 연차 및 데이터 자동 복구)
+      try {
+        const legacyKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('todolist_jy_data') || k.startsWith('zentask_data') || k === 'todolist_jy_data') && k !== STORAGE_KEY) {
+            legacyKeys.push(k);
+          }
+        }
+        if (legacyKeys.length > 0) {
+          const vacMap = new Map();
+          userVacations.forEach(v => { if (v && v.id && !this.deletedIds.has(v.id)) vacMap.set(v.id, v); });
+          const taskMap = new Map();
+          userTasks.forEach(t => { if (t && t.id && !this.deletedIds.has(t.id)) taskMap.set(t.id, t); });
+
+          legacyKeys.forEach(lKey => {
+            try {
+              const lRaw = localStorage.getItem(lKey);
+              if (!lRaw) return;
+              const lData = JSON.parse(lRaw);
+              if (Array.isArray(lData.vacations)) {
+                lData.vacations.forEach(v => {
+                  if (v && v.id && !this.deletedIds.has(v.id) && !vacMap.has(v.id)) vacMap.set(v.id, v);
+                });
+              }
+              if (Array.isArray(lData.tasks)) {
+                lData.tasks.forEach(t => {
+                  if (t && t.id && !MOCK_DEMO_IDS.has(t.id) && !this.deletedIds.has(t.id) && !taskMap.has(t.id)) taskMap.set(t.id, t);
+                });
+              }
+              if (typeof lData.totalVacationDays === 'number' && userTotalVacationDays === 15.0) {
+                userTotalVacationDays = lData.totalVacationDays;
+              }
+            } catch (err) {}
+          });
+
+          userVacations = Array.from(vacMap.values());
+          userTasks = Array.from(taskMap.values());
+        }
+      } catch (legacyErr) {
+        console.warn('Legacy recovery error:', legacyErr);
+      }
+
+      // 🛡️ Prune any items in deletedIds from all user arrays
+      userTasks = userTasks.filter(t => t && t.id && !this.deletedIds.has(t.id));
+      userNotes = userNotes.filter(n => n && n.id && !this.deletedIds.has(n.id));
+      userWishlist = userWishlist.filter(w => w && w.id && !this.deletedIds.has(w.id));
+      userPhotos = userPhotos.filter(p => p && p.id && !this.deletedIds.has(p.id));
+      userLedgerFiles = userLedgerFiles.filter(l => l && l.id && !this.deletedIds.has(l.id));
+      userVacations = userVacations.filter(v => v && v.id && !this.deletedIds.has(v.id));
+      userSites = userSites.filter(s => s && s.id && !this.deletedIds.has(s.id));
+      userHealthNotes = userHealthNotes.filter(h => h && h.id && !this.deletedIds.has(h.id));
+      userHobbyNotes = userHobbyNotes.filter(hb => hb && hb.id && !this.deletedIds.has(hb.id));
+
+      // 🏖️ 2025.12 ~ 2026.08 사용자 등록 15종 연차 무결성 보장 & 자동 복원
+      const defaultVacMap = new Map();
+      INITIAL_VACATIONS.forEach(iv => defaultVacMap.set(iv.id, iv));
+      userVacations.forEach(v => {
+        if (v && v.id) defaultVacMap.set(v.id, v);
+      });
+      userVacations = Array.from(defaultVacMap.values());
+      userVacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
 
       // Ensure all default health folders (including checkup) exist
       DEFAULT_HEALTH_FOLDERS.forEach(defF => {
@@ -1776,6 +1951,7 @@
     }
 
     deleteTask(id) {
+      this.recordDeletedId(id);
       const idx = this.tasks.findIndex(t => t.id === id);
       if (idx === -1) return false;
       this.tasks.splice(idx, 1);
@@ -1809,6 +1985,7 @@
     }
 
     deletePhoto(id) {
+      this.recordDeletedId(id);
       const idx = this.photos.findIndex(p => p.id === id);
       if (idx === -1) return false;
       this.photos.splice(idx, 1);
@@ -1838,6 +2015,7 @@
     }
 
     deleteNote(id) {
+      this.recordDeletedId(id);
       const targetId = String(id || '').trim();
       const idx = this.notes.findIndex(n => n && String(n.id).trim() === targetId);
       if (idx === -1) return false;
@@ -1864,6 +2042,7 @@
     }
 
     deleteLedgerFile(fileId) {
+      this.recordDeletedId(fileId);
       const idx = this.ledgerFiles.findIndex(f => f.id === fileId);
       if (idx === -1) return false;
       this.ledgerFiles.splice(idx, 1);
@@ -1910,6 +2089,7 @@
     }
 
     deleteWish(id) {
+      this.recordDeletedId(id);
       const idx = this.wishlist.findIndex(w => w.id === id);
       if (idx === -1) return false;
       this.wishlist.splice(idx, 1);
@@ -1939,6 +2119,7 @@
     }
 
     deleteVacation(id) {
+      this.recordDeletedId(id);
       const idx = this.vacations.findIndex(v => v.id === id);
       if (idx === -1) return false;
       this.vacations.splice(idx, 1);
@@ -2002,6 +2183,7 @@
     }
 
     deleteSite(id) {
+      this.recordDeletedId(id);
       const idx = this.sites.findIndex(s => s.id === id);
       if (idx === -1) return false;
       this.sites.splice(idx, 1);
@@ -2043,6 +2225,7 @@
 
     deleteHealthNote(id) {
       if (!id) return false;
+      this.recordDeletedId(id);
       const targetId = String(id).trim();
       const idx = this.healthNotes.findIndex(n => n && String(n.id).trim() === targetId);
       if (idx === -1) return false;
@@ -2122,6 +2305,7 @@
 
     deleteHobbyNote(id) {
       if (!id) return false;
+      this.recordDeletedId(id);
       const targetId = String(id).trim();
       const idx = this.hobbyNotes.findIndex(n => n && String(n.id).trim() === targetId);
       if (idx === -1) return false;
@@ -2188,6 +2372,7 @@
 
     deleteHealthNotesBatch(noteIds) {
       if (!Array.isArray(noteIds) || !noteIds.length) return 0;
+      noteIds.forEach(id => this.recordDeletedId(id));
       const initialLen = this.healthNotes.length;
       this.healthNotes = this.healthNotes.filter(n => !noteIds.includes(n.id));
       const deletedCount = initialLen - this.healthNotes.length;
@@ -2213,6 +2398,7 @@
 
     deleteHobbyNotesBatch(noteIds) {
       if (!Array.isArray(noteIds) || !noteIds.length) return 0;
+      noteIds.forEach(id => this.recordDeletedId(id));
       const initialLen = this.hobbyNotes.length;
       this.hobbyNotes = this.hobbyNotes.filter(n => !noteIds.includes(n.id));
       const deletedCount = initialLen - this.hobbyNotes.length;
@@ -2258,6 +2444,7 @@
 
     deleteProject(id) {
       if (!this.projects) this.projects = [];
+      this.recordDeletedId(id);
       this.projects = this.projects.filter(p => p.id !== id);
       if (this.activeProjectId === id) {
         this.activeProjectId = this.projects.length > 0 ? this.projects[0].id : null;
@@ -2650,6 +2837,187 @@
       this.updateNavHighlight();
     },
 
+    // --- 5-Emoji Quick Menu Engine ---
+    activeQuickGroup: null,
+
+    getQuickMenuGroups() {
+      return {
+        todo: {
+          title: '할일 & 플래너',
+          icon: '📋',
+          defaultFilter: 'all',
+          items: [
+            { id: 'all', name: '모든 할 일', icon: '📋' },
+            { id: 'personal', name: '개인 할일', icon: '🌸' },
+            { id: 'work', name: '업무 할일', icon: '💼' },
+            { id: 'calendar-month', name: '월별 달력', icon: '🗓️' },
+            { id: 'upcoming', name: '다가오는 일정', icon: '⏰' },
+            { id: 'pinned', name: '중요 표시', icon: '💖' }
+          ],
+          actions: [
+            { id: 'action-new-task', name: '+ 새 일정/할일 등록', icon: '💖', onClickName: 'openTaskModal' }
+          ]
+        },
+        life: {
+          title: '라이프 & 플랜',
+          icon: '🎯',
+          defaultFilter: 'project',
+          items: [
+            { id: 'project', name: '프로젝트', icon: '🎯' },
+            { id: 'hobby', name: '취미활동', icon: '🎨' },
+            { id: 'health', name: '건강관리', icon: '🏥' },
+            { id: 'vacation', name: '연차관리', icon: '🏖️' }
+          ],
+          actions: [
+            { id: 'action-new-vacation', name: '+ 새 연차/휴가 등록', icon: '🏖️', onClickName: 'openVacationModal' }
+          ]
+        },
+        record: {
+          title: '기록 & 메모',
+          icon: '📝',
+          defaultFilter: 'notes',
+          items: [
+            { id: 'notes', name: '끄적끄적 메모', icon: '📝' },
+            { id: 'photos', name: '기록 (사진첩)', icon: '📸' },
+            { id: 'treasure', name: '보물 지식함', icon: '💎', isSpecial: 'treasure' }
+          ],
+          actions: [
+            { id: 'action-new-note', name: '+ 끄적 메모 작성', icon: '✏️', onClickName: 'focusNoteComposer' },
+            { id: 'action-new-photo', name: '+ 사진 올리기', icon: '📸', onClickName: 'triggerPhotoUpload' }
+          ]
+        },
+        finance: {
+          title: '가계부 & 위시 & 사이트',
+          icon: '💰',
+          defaultFilter: 'ledger',
+          items: [
+            { id: 'ledger', name: '신혼 가계부', icon: '💰' },
+            { id: 'wishlist', name: '위시리스트', icon: '🎁' },
+            { id: 'sites', name: '유용한 사이트', icon: '🌐' }
+          ],
+          actions: [
+            { id: 'action-new-wish', name: '+ 새 위시 담기 💖', icon: '🎁', onClickName: 'openWishlistModal' }
+          ]
+        },
+        vault: {
+          title: '보관함 & 더보기',
+          icon: '📁',
+          defaultFilter: 'vault',
+          items: [
+            { id: 'vault', name: '파일 보관함', icon: '📁' },
+            { id: 'devlog', name: '개발 기록', icon: '🚀' },
+            { id: 'sync', name: '클라우드 동기화', icon: '🔄', isSpecial: 'sync' },
+            { id: 'theme', name: '화면 테마 변경', icon: '🌓', isSpecial: 'theme' }
+          ],
+          actions: [
+            { id: 'action-upload-vault', name: '+ 파일 보관하기', icon: '📁', onClickName: 'triggerVaultUpload' }
+          ]
+        }
+      };
+    },
+
+    toggleQuickGroupMenu(group, targetBtn) {
+      const popover = document.getElementById('quick-sub-popover');
+      const backdrop = document.getElementById('quick-menu-backdrop');
+      if (!popover || !backdrop) return;
+
+      if (this.activeQuickGroup === group && popover.style.display === 'block') {
+        this.closeQuickGroupMenu();
+        return;
+      }
+
+      this.openQuickGroupMenu(group);
+    },
+
+    openQuickGroupMenu(group) {
+      const popover = document.getElementById('quick-sub-popover');
+      const backdrop = document.getElementById('quick-menu-backdrop');
+      if (!popover || !backdrop) return;
+
+      const groups = this.getQuickMenuGroups();
+      const groupData = groups[group];
+      if (!groupData) return;
+
+      this.activeQuickGroup = group;
+
+      // Dynamic Counts
+      const counts = {
+        all: store.tasks.length,
+        personal: store.tasks.filter(t => t.category === 'personal').length,
+        work: store.tasks.filter(t => t.category === 'work').length,
+        'calendar-month': '',
+        upcoming: store.tasks.filter(t => {
+          const today = new Date().toISOString().split('T')[0];
+          return t.dueDate && t.dueDate > today && t.status !== 'completed';
+        }).length,
+        pinned: store.tasks.filter(t => t.pinned).length,
+        project: (store.projects || []).length,
+        hobby: (store.hobbyNotes || []).length,
+        health: (store.healthNotes || []).length,
+        vacation: store.vacations.length,
+        notes: store.notes.length,
+        photos: store.photos.length,
+        ledger: store.ledgerFiles.length,
+        wishlist: store.wishlist.length,
+        sites: store.sites.length,
+        devlog: (typeof DEVLOG_DATA !== 'undefined' ? DEVLOG_DATA.length : '')
+      };
+
+      // Group Items Grid
+      const gridClass = groupData.items.length === 4 ? 'col-4' : (groupData.items.length === 2 ? 'col-2' : '');
+      const itemsHtml = groupData.items.map(item => {
+        const isActive = (store.activeFilter === item.id) ? 'active' : '';
+        const specialAttr = item.isSpecial ? `data-special="${item.isSpecial}"` : '';
+        const filterAttr = item.id ? `data-filter="${item.id}"` : '';
+        const countVal = counts[item.id];
+        const countBadge = (typeof countVal === 'number' && countVal > 0) ? `<span class="quick-popover-item-badge">${countVal}</span>` : '';
+        return `
+          <button type="button" class="quick-popover-item ${isActive}" ${filterAttr} ${specialAttr} title="${item.name}">
+            ${countBadge}
+            <span class="quick-popover-item-icon">${item.icon}</span>
+            <span class="quick-popover-item-name">${item.name}</span>
+          </button>
+        `;
+      }).join('');
+
+      // Quick Actions Bar
+      const actionsHtml = (groupData.actions && groupData.actions.length > 0)
+        ? `<div class="quick-popover-action-bar">
+            ${groupData.actions.map(act => `
+              <button type="button" class="quick-popover-action-btn" data-action-handler="${act.onClickName}">
+                <span>${act.icon}</span>
+                <span>${act.name}</span>
+              </button>
+            `).join('')}
+          </div>`
+        : '';
+
+      popover.innerHTML = `
+        <div class="quick-popover-header">
+          <div class="quick-popover-title">
+            <span class="quick-popover-title-icon">${groupData.icon}</span>
+            <span>${groupData.title}</span>
+          </div>
+          <button type="button" class="quick-popover-close-btn" data-action="close-quick-popover" title="닫기">✕</button>
+        </div>
+        <div class="quick-popover-grid ${gridClass}">
+          ${itemsHtml}
+        </div>
+        ${actionsHtml}
+      `;
+
+      backdrop.style.display = 'block';
+      popover.style.display = 'block';
+    },
+
+    closeQuickGroupMenu() {
+      const popover = document.getElementById('quick-sub-popover');
+      const backdrop = document.getElementById('quick-menu-backdrop');
+      if (popover) popover.style.display = 'none';
+      if (backdrop) backdrop.style.display = 'none';
+      this.activeQuickGroup = null;
+    },
+
     updateNavHighlight() {
       // 1. Sidebar Nav
       document.querySelectorAll('.nav-item').forEach(item => {
@@ -2660,17 +3028,26 @@
         }
       });
 
-      // 2. Mobile Bottom Nav (모든할일, 위시, 메모, 기록)
-      const isCustomView = ['wishlist', 'photos', 'notes', 'ledger', 'vault', 'calendar-month', 'calendar-week', 'vacation', 'sites'].includes(store.activeFilter);
+      // 2. Mobile 5-Emoji Bottom Nav Mapping
+      const groupFilterMap = {
+        todo: ['all', 'personal', 'work', 'calendar-month', 'calendar-week', 'upcoming', 'pinned', 'completed'],
+        life: ['project', 'hobby', 'health', 'vacation'],
+        record: ['photos', 'notes', 'treasure'],
+        finance: ['ledger', 'wishlist', 'sites'],
+        vault: ['vault', 'devlog']
+      };
+
+      let activeGroup = 'todo';
+      for (const [group, filters] of Object.entries(groupFilterMap)) {
+        if (filters.includes(store.activeFilter)) {
+          activeGroup = group;
+          break;
+        }
+      }
+
       document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
-        const action = btn.dataset.mobileNav;
-        if (action === 'all') {
-          if (!isCustomView) {
-            btn.classList.add('active');
-          } else {
-            btn.classList.remove('active');
-          }
-        } else if (store.activeFilter === action) {
+        const group = btn.dataset.group;
+        if (group === activeGroup) {
           btn.classList.add('active');
         } else {
           btn.classList.remove('active');
@@ -4186,12 +4563,28 @@
         yearSelect.innerHTML = `<option value="all" ${currentSelectedYear === 'all' ? 'selected' : ''}>전체 년도</option>` + sortedYears.map(y => `<option value="${y}" ${y === currentSelectedYear ? 'selected' : ''}>${y}년</option>`).join('');
       }
 
-      // 3. Update Month Pills Active Class
+      // 3. Update Month Pills Active Class & Dynamic Count Badges
+      const monthCounts = {};
+      (store.vacations || []).forEach(v => {
+        if (v.date) {
+          const m = parseInt(v.date.split('-')[1], 10);
+          if (m >= 1 && m <= 12) {
+            monthCounts[m] = (monthCounts[m] || 0) + 1;
+          }
+        }
+      });
       document.querySelectorAll('#vacation-month-pills .vac-m-pill').forEach(pill => {
-        if (pill.dataset.vMonth === currentSelectedMonth) {
+        const vm = pill.dataset.vMonth;
+        if (vm === currentSelectedMonth) {
           pill.classList.add('active');
         } else {
           pill.classList.remove('active');
+        }
+        if (vm === 'all') {
+          pill.innerHTML = `전체 <span style="font-size:0.75rem; opacity:0.85;">(${(store.vacations || []).length})</span>`;
+        } else {
+          const c = monthCounts[parseInt(vm, 10)] || 0;
+          pill.innerHTML = c > 0 ? `${vm}월 <span style="font-weight:800; font-size:0.75rem; color: var(--primary);">(${c})</span>` : `${vm}월`;
         }
       });
 
@@ -4241,7 +4634,7 @@
       const sumBadgeEl = document.getElementById('vac-summary-badge');
 
       const periodLabel = currentSelectedMonth === 'all' 
-        ? `${currentSelectedYear === 'all' ? '전체' : currentSelectedYear + '년'}` 
+        ? `${currentSelectedYear === 'all' ? '전체 기간' : currentSelectedYear + '년 전체'}` 
         : `${currentSelectedMonth}월`;
 
       if (currentTypeFilter === 'holiday') {
@@ -4267,9 +4660,31 @@
 
       if (!listEl) return;
 
+      // Also check if user registered vacations via task modal (type: vacation or half-off in tasks)
+      const taskVacations = (store.tasks || []).filter(t => t && (t.type === 'vacation' || t.type === 'half-off'));
+
       if (filtered.length === 0) {
         listEl.innerHTML = '';
-        if (emptyEl) emptyEl.style.display = 'flex';
+        if (emptyEl) {
+          emptyEl.style.display = 'flex';
+          const totalVacCount = (store.vacations || []).length;
+          if (totalVacCount > 0 && currentSelectedMonth !== 'all') {
+            emptyEl.innerHTML = `
+              <div class="empty-state-icon">🏖️</div>
+              <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.35rem;">선택하신 기간(${periodLabel})에는 등록된 연차 내역이 없어요</h3>
+              <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 0.85rem;">다른 월을 포함하여 전체 기간에 총 <b style="color: var(--primary);">${totalVacCount}건</b>의 연차/휴가가 안전하게 등록되어 있습니다 🌸</p>
+              <button type="button" class="btn btn-primary" style="font-size: 0.84rem; padding: 0.5rem 1.15rem;" onclick="store.selectedVacationMonth='all'; UI.renderVacation();">
+                🌴 전체 기간 연차 목록 보기 (${totalVacCount}건)
+              </button>
+            `;
+          } else {
+            emptyEl.innerHTML = `
+              <div class="empty-state-icon">🏖️</div>
+              <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.35rem;">해당 기간에 등록된 연차/휴가 내역이 없어요</h3>
+              <p style="font-size: 0.88rem; color: var(--text-muted);">연차, 반차 또는 휴가를 사용하셨다면 상단의 '+ 연차/반차 등록' 버튼을 눌러 기록해 보세요 🌸</p>
+            `;
+          }
+        }
       } else {
         if (emptyEl) emptyEl.style.display = 'none';
         listEl.innerHTML = filtered.map(v => {
@@ -4309,6 +4724,21 @@
             </div>
           `;
         }).join('');
+      }
+
+      // If there are task-based vacation/half-off items, display helpful banner
+      if (taskVacations.length > 0) {
+        const taskVacBanner = document.createElement('div');
+        taskVacBanner.style.cssText = 'background: rgba(250, 176, 5, 0.08); border: 1px dashed rgba(250, 176, 5, 0.4); border-radius: 10px; padding: 0.65rem 0.9rem; margin-top: 0.85rem; font-size: 0.82rem; color: var(--text-main);';
+        taskVacBanner.innerHTML = `
+          <div style="font-weight: 800; margin-bottom: 0.35rem; color: #d97706; display: flex; align-items: center; gap: 0.35rem;">
+            <span>💡 캘린더/일정에서 등록된 휴가/반차 (${taskVacations.length}건)</span>
+          </div>
+          <div style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.4;">
+            '+ 새 일정' 팝업에서 등록하신 휴가 일정은 <b>'🗓️ 월별 달력'</b> 및 <b>'🌸 개인/💼 업무'</b> 탭에서 개나리색 칩으로 확인하실 수 있습니다.
+          </div>
+        `;
+        listEl.appendChild(taskVacBanner);
       }
 
       this.renderSidebar();
@@ -6175,10 +6605,75 @@
         }
       }
 
+      // Mobile 5-Emoji Bottom Navigation Button Click
       const mobileNavBtn = e.target.closest('.mobile-nav-btn');
-      if (mobileNavBtn && mobileNavBtn.dataset.mobileNav) {
-        const newFilter = mobileNavBtn.dataset.mobileNav;
-        window.selectCategoryFilter(newFilter, e);
+      if (mobileNavBtn && mobileNavBtn.dataset.group) {
+        const group = mobileNavBtn.dataset.group;
+        UI.toggleQuickGroupMenu(group, mobileNavBtn);
+        return;
+      }
+
+      // Quick Menu Sub Popover Backdrop & Close Button
+      if (e.target.closest('#quick-menu-backdrop') || e.target.closest('[data-action="close-quick-popover"]')) {
+        UI.closeQuickGroupMenu();
+        return;
+      }
+
+      // Quick Popover Item Click
+      const popoverItem = e.target.closest('.quick-popover-item');
+      if (popoverItem) {
+        const special = popoverItem.dataset.special;
+        const filterId = popoverItem.dataset.filter;
+        if (special === 'treasure') {
+          const btnTreasure = document.getElementById('btn-open-treasure');
+          if (btnTreasure) btnTreasure.click();
+          UI.closeQuickGroupMenu();
+        } else if (special === 'sync') {
+          UI.openCloudModal();
+          UI.closeQuickGroupMenu();
+        } else if (special === 'theme') {
+          const btnTheme = document.getElementById('theme-toggle-btn') || document.getElementById('theme-toggle');
+          if (btnTheme) btnTheme.click();
+          UI.closeQuickGroupMenu();
+        } else if (filterId) {
+          window.selectCategoryFilter(filterId, e);
+          UI.closeQuickGroupMenu();
+        }
+        return;
+      }
+
+      // Quick Popover Action Buttons Click
+      const popoverActionBtn = e.target.closest('.quick-popover-action-btn');
+      if (popoverActionBtn && popoverActionBtn.dataset.actionHandler) {
+        const handler = popoverActionBtn.dataset.actionHandler;
+        if (handler === 'openTaskModal') {
+          UI.openTaskModal();
+          UI.closeQuickGroupMenu();
+        } else if (handler === 'openVacationModal') {
+          UI.openVacationModal();
+          UI.closeQuickGroupMenu();
+        } else if (handler === 'openWishlistModal') {
+          UI.openWishlistModal();
+          UI.closeQuickGroupMenu();
+        } else if (handler === 'focusNoteComposer') {
+          window.selectCategoryFilter('notes');
+          UI.closeQuickGroupMenu();
+          setTimeout(() => {
+            const inp = document.getElementById('note-composer-input');
+            if (inp) inp.focus();
+          }, 150);
+        } else if (handler === 'triggerPhotoUpload') {
+          window.selectCategoryFilter('photos');
+          UI.closeQuickGroupMenu();
+          setTimeout(() => {
+            const inp = document.getElementById('polaroid-file-input');
+            if (inp) inp.click();
+          }, 150);
+        } else if (handler === 'triggerVaultUpload') {
+          const f = document.getElementById('vault-file-hidden-input');
+          if (f) f.click();
+          UI.closeQuickGroupMenu();
+        }
         return;
       }
 
@@ -8341,6 +8836,7 @@
         if (vList) vList.classList.remove('active');
         UI.renderTasks();
       } else if (e.key === 'Escape') {
+        UI.closeQuickGroupMenu();
         UI.closeTaskModal();
         UI.closePhotoModal();
         UI.closePhotoLightbox();
