@@ -1039,6 +1039,9 @@
                   });
                   // Save strictly the synchronized list (deleted items in cloud are safely pruned locally)
                   await this.saveVaultFiles(mergedFiles);
+                  try { UI.renderFilesVault(); } catch (e) {}
+                }
+
                 if (data.customMenuNames && typeof data.customMenuNames === 'object') {
                   store.customMenuNames = Object.assign({}, store.customMenuNames, data.customMenuNames);
                 }
