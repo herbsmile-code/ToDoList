@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260903_v123">
-  <link rel="stylesheet" href="css/animations.css?v=20260903_v123">
+  <link rel="stylesheet" href="css/style.css?v=20260904_chatbot_v1">
+  <link rel="stylesheet" href="css/animations.css?v=20260904_chatbot_v1">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -2411,11 +2411,41 @@
     </div>
   </div>
 
+  <!-- =========================================================================
+       🌸 스마트 다이어리 비서 챗봇 플로팅 버튼 & 대화 모달
+       ========================================================================= -->
+  <button type="button" id="btn-open-chatbot" class="chatbot-floating-btn" title="스마트 다이어리 비서 (JY Bot)">
+    <span>🌸</span>
+    <span class="chatbot-floating-badge">AI</span>
+  </button>
+
+  <div id="chatbot-modal-window" class="chatbot-modal-window" style="display: none;">
+    <div class="chatbot-header">
+      <div class="chatbot-header-title">
+        <span>🌸</span>
+        <span>스마트 다이어리 비서</span>
+      </div>
+      <div class="chatbot-header-actions">
+        <button type="button" id="btn-clear-chatbot" class="chatbot-icon-btn" title="대화 내용 비우기">🧹</button>
+        <button type="button" id="btn-close-chatbot" class="chatbot-icon-btn" title="닫기">✕</button>
+      </div>
+    </div>
+    
+    <div class="chatbot-messages-container" id="chatbot-messages-container">
+      <!-- Dynamically populated chat bubbles -->
+    </div>
+
+    <div class="chatbot-input-bar">
+      <input type="text" id="chatbot-input-text" class="chatbot-input-field" placeholder="무엇이든 물어보거나 지시해 보세요 (예: 라벤더 테마, 가계부 이름 변경)">
+      <button type="button" id="btn-chatbot-send" class="chatbot-send-btn" title="전송">➔</button>
+    </div>
+  </div>
+
   <!-- External Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=20260903_v123"></script>
-  <script src="js/treasure.js?v=20260903_v123"></script>
+  <script src="js/app.js?v=20260904_chatbot_v1"></script>
+  <script src="js/treasure.js?v=20260904_chatbot_v1"></script>
 </body>
 </html>

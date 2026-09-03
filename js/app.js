@@ -1039,7 +1039,12 @@
                   });
                   // Save strictly the synchronized list (deleted items in cloud are safely pruned locally)
                   await this.saveVaultFiles(mergedFiles);
-                  try { UI.renderFilesVault(); } catch (e) {}
+                if (data.customMenuNames && typeof data.customMenuNames === 'object') {
+                  store.customMenuNames = Object.assign({}, store.customMenuNames, data.customMenuNames);
+                }
+                if (data.customTheme) {
+                  store.customTheme = data.customTheme;
+                  store.applyThemeToDOM(data.customTheme);
                 }
                 
                 store.saveLocalOnly(this.lastSyncedUpdatedAt, this.lastSyncedRevision);
@@ -1131,6 +1136,8 @@
         hobbyNotes: (store.hobbyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
         hobbyFolders: store.hobbyFolders,
         projects: (store.projects || []).filter(p => p && p.id && !deletedIds.has(p.id)),
+        customMenuNames: store.customMenuNames,
+        customTheme: store.customTheme,
         revision: nextRevision,
         updatedAt: nowTs
       };
@@ -1561,6 +1568,10 @@
       this.selectedHobbyNotes = new Set();
       this.projects = [];
       this.activeProjectId = null;
+      this.customMenuNames = {};
+      this.customTheme = null;
+      this.themeHistory = [];
+      this.menuNameHistory = [];
       this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
       this.searchQuery = '';
       this.sortBy = 'dueDate';
@@ -1604,6 +1615,11 @@
       let userVaultFolders = (savedData && Array.isArray(savedData.vaultFolders)) ? savedData.vaultFolders : DEFAULT_VAULT_FOLDERS.slice();
       const userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
       const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
+      this.customMenuNames = (savedData && typeof savedData.customMenuNames === 'object' && savedData.customMenuNames) ? savedData.customMenuNames : {};
+      this.customTheme = (savedData && savedData.customTheme) ? savedData.customTheme : null;
+      if (this.customTheme) {
+        this.applyThemeToDOM(this.customTheme);
+      }
 
       // Ensure all default health folders (including checkup) exist
       DEFAULT_HEALTH_FOLDERS.forEach(defF => {
@@ -1811,6 +1827,8 @@
           hobbyFolders: this.hobbyFolders,
           vaultFolders: this.vaultFolders,
           projects: this.projects,
+          customMenuNames: this.customMenuNames,
+          customTheme: this.customTheme,
           syncRevision: rev,
           updatedAt: ts
         }));
@@ -2508,6 +2526,118 @@
       return null;
     }
 
+    // --- Custom Menu Names & Theme Engine ---
+    setCustomMenuName(menuId, newName) {
+      if (!menuId || !newName) return;
+      if (!this.customMenuNames) this.customMenuNames = {};
+      if (!this.menuNameHistory) this.menuNameHistory = [];
+      
+      // Push snapshot of current menu names for 100% safe Undo
+      this.menuNameHistory.push(JSON.parse(JSON.stringify(this.customMenuNames)));
+      if (this.menuNameHistory.length > 10) this.menuNameHistory.shift();
+
+      this.customMenuNames[menuId] = String(newName).trim();
+      this.save(true);
+    }
+
+    undoCustomMenuName() {
+      if (!this.menuNameHistory || this.menuNameHistory.length === 0) {
+        if (this.customMenuNames && Object.keys(this.customMenuNames).length > 0) {
+          this.customMenuNames = {};
+          this.save(true);
+          return { success: true, restored: '기본 메뉴명' };
+        }
+        return { success: false, msg: '되돌릴 이전 메뉴명 기록이 없어요' };
+      }
+      const prev = this.menuNameHistory.pop();
+      this.customMenuNames = prev || {};
+      this.save(true);
+      return { success: true, restored: this.customMenuNames };
+    }
+
+    resetCustomMenuNames() {
+      if (!this.menuNameHistory) this.menuNameHistory = [];
+      this.menuNameHistory.push(JSON.parse(JSON.stringify(this.customMenuNames || {})));
+      this.customMenuNames = {};
+      this.save(true);
+    }
+
+    getMenuName(menuId, defaultName) {
+      if (this.customMenuNames && this.customMenuNames[menuId]) {
+        return this.customMenuNames[menuId];
+      }
+      return defaultName;
+    }
+
+    setCustomTheme(themeKey) {
+      const themePresets = {
+        'cherry': { name: '체리블라썸 🌸', primary: '#ff6b8b', light: '#ffe0e6', gradient: 'linear-gradient(135deg, #ff6b8b, #ff8e8e)' },
+        'lavender': { name: '라벤더 퍼플 💜', primary: '#845ef7', light: '#f3f0ff', gradient: 'linear-gradient(135deg, #845ef7, #b197fc)' },
+        'mint': { name: '민트 브리즈 🌿', primary: '#20c997', light: '#e6fcf5', gradient: 'linear-gradient(135deg, #20c997, #63e6be)' },
+        'sky': { name: '스카이블루 🌊', primary: '#339af0', light: '#e7f5ff', gradient: 'linear-gradient(135deg, #339af0, #74c0fc)' },
+        'peach': { name: '소프트 피치 🍑', primary: '#ff922b', light: '#fff4e6', gradient: 'linear-gradient(135deg, #ff922b, #ffa94d)' },
+        'sage': { name: '세이지 그린 🍃', primary: '#5c940d', light: '#f4fce3', gradient: 'linear-gradient(135deg, #5c940d, #8ce99a)' },
+        'rose': { name: '로즈 골드 🌹', primary: '#e64980', light: '#fff0f6', gradient: 'linear-gradient(135deg, #e64980, #f783ac)' }
+      };
+
+      const preset = themePresets[themeKey];
+      if (!preset) return null;
+
+      if (!this.themeHistory) this.themeHistory = [];
+      this.themeHistory.push(this.customTheme || 'cherry');
+      if (this.themeHistory.length > 10) this.themeHistory.shift();
+
+      this.customTheme = themeKey;
+      this.applyThemeToDOM(themeKey);
+      this.save(true);
+      return preset;
+    }
+
+    applyThemeToDOM(themeKey) {
+      const themePresets = {
+        'cherry': { primary: '#ff6b8b', light: '#ffe0e6', gradient: 'linear-gradient(135deg, #ff6b8b, #ff8e8e)' },
+        'lavender': { primary: '#845ef7', light: '#f3f0ff', gradient: 'linear-gradient(135deg, #845ef7, #b197fc)' },
+        'mint': { primary: '#20c997', light: '#e6fcf5', gradient: 'linear-gradient(135deg, #20c997, #63e6be)' },
+        'sky': { primary: '#339af0', light: '#e7f5ff', gradient: 'linear-gradient(135deg, #339af0, #74c0fc)' },
+        'peach': { primary: '#ff922b', light: '#fff4e6', gradient: 'linear-gradient(135deg, #ff922b, #ffa94d)' },
+        'sage': { primary: '#5c940d', light: '#f4fce3', gradient: 'linear-gradient(135deg, #5c940d, #8ce99a)' },
+        'rose': { primary: '#e64980', light: '#fff0f6', gradient: 'linear-gradient(135deg, #e64980, #f783ac)' },
+        'default': { primary: '#ff6b8b', light: '#ffe0e6', gradient: 'linear-gradient(135deg, #ff6b8b, #ff8e8e)' }
+      };
+
+      const preset = themePresets[themeKey] || themePresets['cherry'];
+      const root = document.documentElement;
+      root.style.setProperty('--primary', preset.primary);
+      root.style.setProperty('--primary-hover', preset.primary);
+      root.style.setProperty('--primary-light', preset.light);
+      root.style.setProperty('--primary-gradient', preset.gradient);
+    }
+
+    undoCustomTheme() {
+      if (!this.themeHistory || this.themeHistory.length === 0) {
+        if (this.customTheme && this.customTheme !== 'cherry') {
+          this.customTheme = 'cherry';
+          this.applyThemeToDOM('cherry');
+          this.save(true);
+          return { success: true, theme: '체리블라썸 🌸 (기본)' };
+        }
+        return { success: false, msg: '되돌릴 이전 테마 기록이 없어요' };
+      }
+      const prevTheme = this.themeHistory.pop();
+      this.customTheme = prevTheme || 'cherry';
+      this.applyThemeToDOM(this.customTheme);
+      this.save(true);
+      return { success: true, theme: this.customTheme };
+    }
+
+    resetCustomTheme() {
+      if (!this.themeHistory) this.themeHistory = [];
+      this.themeHistory.push(this.customTheme || 'cherry');
+      this.customTheme = 'cherry';
+      this.applyThemeToDOM('cherry');
+      this.save(true);
+    }
+
     updateStreak() {
       const today = TODAY_STR;
       if (this.streak.lastDate === today) return;
@@ -2538,7 +2668,7 @@
           case 'completed':
             return task.status === 'completed';
           case 'all':
-            return true;
+            return task.status !== 'completed';
           default:
             return task.category === this.activeFilter;
         }
@@ -2663,7 +2793,7 @@
     async renderSidebar() {
       const stats = store.getStats();
       const counts = {
-        all: store.tasks.length,
+        all: store.tasks.filter(t => t.status !== 'completed').length,
         upcoming: store.tasks.filter(t => t.dueDate && t.dueDate > TODAY_STR && t.status !== 'completed').length,
         overdue: stats.overdue,
         pinned: store.tasks.filter(t => t.pinned).length,
@@ -2754,20 +2884,21 @@
           vaultCount = vaultFiles.length;
         } catch (e) {}
 
+        const customNames = store.customMenuNames || {};
         const itemMeta = {
-          'personal': { name: '개인 🌸', icon: '', color: '#f06595', count: store.tasks.filter(t => t.category === 'personal').length },
-          'work': { name: '업무 💼', icon: '', color: '#868e96', count: store.tasks.filter(t => t.category === 'work').length },
-          'project': { name: '프로젝트', icon: '🎯', count: (store.projects || []).length },
-          'hobby': { name: '취미활동', icon: '🎨', count: (store.hobbyNotes || []).length },
-          'health': { name: '건강관리', icon: '🏥', count: (store.healthNotes || []).length },
-          'vacation': { name: '연차관리', icon: '🏖️', count: store.vacations.length },
-          'photos': { name: '기록', icon: '📸', count: store.photos.length },
-          'notes': { name: '끄적끄적', icon: '✏️', count: store.notes.length },
-          'ledger': { name: '가계부', icon: '💰', count: store.ledgerFiles.length },
-          'wishlist': { name: '위시리스트', icon: '🎁', count: store.wishlist.length },
-          'sites': { name: '사이트', icon: '🌐', count: store.sites.length },
-          'devlog': { name: '개발기록', icon: '🚀', count: DEVLOG_DATA.length },
-          'vault': { name: '파일 보관함', icon: '📁', count: vaultCount }
+          'personal': { name: customNames.personal || '개인 🌸', icon: '', color: '#f06595', count: store.tasks.filter(t => t.category === 'personal' && t.status !== 'completed').length },
+          'work': { name: customNames.work || '업무 💼', icon: '', color: '#868e96', count: store.tasks.filter(t => t.category === 'work' && t.status !== 'completed').length },
+          'project': { name: customNames.project || '프로젝트', icon: '🎯', count: (store.projects || []).length },
+          'hobby': { name: customNames.hobby || '취미활동', icon: '🎨', count: (store.hobbyNotes || []).length },
+          'health': { name: customNames.health || '건강관리', icon: '🏥', count: (store.healthNotes || []).length },
+          'vacation': { name: customNames.vacation || '연차관리', icon: '🏖️', count: store.vacations.length },
+          'photos': { name: customNames.photos || '기록', icon: '📸', count: store.photos.length },
+          'notes': { name: customNames.notes || '끄적끄적', icon: '✏️', count: store.notes.length },
+          'ledger': { name: customNames.ledger || '가계부', icon: '💰', count: store.ledgerFiles.length },
+          'wishlist': { name: customNames.wishlist || '위시리스트', icon: '🎁', count: store.wishlist.length },
+          'sites': { name: customNames.sites || '사이트', icon: '🌐', count: store.sites.length },
+          'devlog': { name: customNames.devlog || '개발기록', icon: '🚀', count: DEVLOG_DATA.length },
+          'vault': { name: customNames.vault || '파일 보관함', icon: '📁', count: vaultCount }
         };
 
         let itemsHTML = '';
@@ -6181,6 +6312,391 @@
         modal.style.display = 'none';
         modal.classList.remove('active');
       }
+    },
+
+    // =======================================================================
+    // 🌸 스마트 다이어리 비서 (Chatbot UI Engine)
+    // =======================================================================
+    initChatbot() {
+      const openBtn = document.getElementById('btn-open-chatbot');
+      const modal = document.getElementById('chatbot-modal-window');
+      const closeBtn = document.getElementById('btn-close-chatbot');
+      const clearBtn = document.getElementById('btn-clear-chatbot');
+      const sendBtn = document.getElementById('btn-chatbot-send');
+      const input = document.getElementById('chatbot-input-text');
+      const container = document.getElementById('chatbot-messages-container');
+
+      if (!openBtn || !modal) return;
+
+      const toggleModal = () => {
+        const isHidden = modal.style.display === 'none' || !modal.style.display;
+        modal.style.display = isHidden ? 'flex' : 'none';
+        if (isHidden) {
+          if (container && container.children.length === 0) {
+            this.sendChatbotQuery('도움말', false);
+          }
+          if (input) setTimeout(() => input.focus(), 100);
+        }
+      };
+
+      openBtn.addEventListener('click', toggleModal);
+      if (closeBtn) closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+      if (clearBtn) clearBtn.addEventListener('click', () => {
+        if (container) container.innerHTML = '';
+        this.sendChatbotQuery('도움말', false);
+      });
+
+      const handleSend = () => {
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        this.sendChatbotQuery(text, true);
+      };
+
+      if (sendBtn) sendBtn.addEventListener('click', handleSend);
+      if (input) {
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+          }
+        });
+      }
+    },
+
+    sendChatbotQuery(text, showUserBubble = true) {
+      const container = document.getElementById('chatbot-messages-container');
+      const modal = document.getElementById('chatbot-modal-window');
+      if (modal && (modal.style.display === 'none' || !modal.style.display)) {
+        modal.style.display = 'flex';
+      }
+
+      if (showUserBubble) {
+        this.appendChatbotMessage('user', text, false);
+      }
+
+      // 0.15s Quick response simulation
+      setTimeout(() => {
+        const result = ChatbotEngine.processMessage(text);
+        if (result && result.html) {
+          this.appendChatbotMessage('bot', result.html, true);
+        }
+      }, 150);
+    },
+
+    appendChatbotMessage(sender, content, isHtml = false) {
+      const container = document.getElementById('chatbot-messages-container');
+      if (!container) return;
+
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `chatbot-msg-item ${sender === 'user' ? 'user-msg' : 'bot-msg'}`;
+
+      if (sender === 'bot') {
+        msgDiv.innerHTML = `
+          <div class="bot-avatar-icon">🌸</div>
+          <div class="bot-bubble-content">${isHtml ? content : escapeHTML(content)}</div>
+        `;
+      } else {
+        msgDiv.innerHTML = `
+          <div class="user-bubble-content">${isHtml ? content : escapeHTML(content)}</div>
+        `;
+      }
+
+      container.appendChild(msgDiv);
+      container.scrollTop = container.scrollHeight;
+    }
+  };
+
+  // =========================================================================
+  // 6.9. 🌸 스마트 다이어리 비서 (Smart Chatbot & Assistant Engine)
+  // =========================================================================
+  const ChatbotEngine = {
+    processMessage(rawText) {
+      if (!rawText || !rawText.trim()) return null;
+      const text = rawText.trim();
+      const lower = text.toLowerCase();
+
+      // 1. 도움말 / 기능 가이드
+      if (['뭐 할 수 있어', '기능', '도움말', '명령어', '사용법', 'help', 'guide', '안내', '할 수 있는 일'].some(k => lower.includes(k))) {
+        return {
+          type: 'guide',
+          html: `
+            <div class="chatbot-rich-msg">
+              <div class="chatbot-msg-title">🌸 스마트 다이어리 비서가 도와드릴 수 있는 일</div>
+              <p style="margin-bottom: 0.6rem; font-size: 0.82rem; color: var(--text-muted);">아래의 예시처럼 자연스럽게 말씀해 주시면 제가 0.1초 만에 실행해 드려요! ✨</p>
+              
+              <div class="chatbot-guide-section">
+                <div class="chatbot-guide-header">🎨 1. 테마 & 색상 변경</div>
+                <div class="chatbot-chips-wrap">
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('테마를 라벤더로 바꿔줘')">💜 라벤더 퍼플</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('테마를 민트로 바꿔줘')">🌿 민트 브리즈</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('테마를 스카이블루로 바꿔줘')">🌊 스카이블루</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('테마를 핑크로 바꿔줘')">🌸 체리블라썸</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('테마를 피치로 바꿔줘')">🍑 소프트 피치</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('테마를 세이지그린으로 바꿔줘')">🍃 세이지 그린</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('테마를 로즈골드로 바꿔줘')">🌹 로즈 골드</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('기본 테마로 초기화해줘')">🤍 기본 테마</button>
+                </div>
+              </div>
+
+              <div class="chatbot-guide-section">
+                <div class="chatbot-guide-header">🏷️ 2. 메뉴 이름 맞춤 변경</div>
+                <div class="chatbot-chips-wrap">
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('가계부 이름을 지출기록으로 바꿔줘')">가계부 ➡️ 지출기록</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('프로젝트 이름을 인생목표로 바꿔줘')">프로젝트 ➡️ 인생목표</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('끄적끄적 이름을 빠른메모로 바꿔줘')">끄적끄적 ➡️ 빠른메모</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('메뉴 이름 원래대로 복구해줘')">↩️ 메뉴명 초기화</button>
+                </div>
+              </div>
+
+              <div class="chatbot-guide-section">
+                <div class="chatbot-guide-header">✍️ 3. 자연어 빠른 등록</div>
+                <div class="chatbot-chips-wrap">
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('내일 오후 2시 병원 예약 일정 등록해줘')">⏰ 내일 14시 병원예약</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('오늘 점심 12000원 가계부에 적어줘')">💰 점심 12000원 가계부</button>
+                  <button type="button" class="chatbot-action-chip" onclick="window.UI.sendChatbotQuery('오늘 남은 할 일 몇 개야?')">📊 오늘 남은 할일</button>
+                </div>
+              </div>
+
+              <div class="chatbot-guide-section">
+                <div class="chatbot-guide-header">↩️ 4. 안전 원복 (Undo)</div>
+                <div class="chatbot-chips-wrap">
+                  <button type="button" class="chatbot-action-chip undo-chip" onclick="window.UI.sendChatbotQuery('방금 적용한 CSS 다시 이전 상태로 돌려줘')">↩️ 이전 테마로 원복</button>
+                  <button type="button" class="chatbot-action-chip undo-chip" onclick="window.UI.sendChatbotQuery('방금 바꾼 메뉴 이름 취소해줘')">↩️ 메뉴 이름 원복</button>
+                </div>
+              </div>
+            </div>
+          `
+        };
+      }
+
+      // 2. CSS / 테마 원복 (Undo)
+      if (['방금 적용한 css', '방금 적용한 테마', '이전 상태로 돌려줘', '이전 테마', '테마 원복', 'css 원복', '테마 취소', '원래 테마', '테마 되돌려', '원복해줘'].some(k => lower.includes(k))) {
+        const res = store.undoCustomTheme();
+        if (res.success) {
+          return {
+            type: 'undo-theme',
+            html: `
+              <div class="chatbot-result-box success">
+                <div style="font-weight:800; font-size:0.95rem; margin-bottom:4px;">↩️ 테마 원복 완료!</div>
+                <div>방금 적용했던 테마를 이전 상태(<strong>${res.theme}</strong>)로 안전하게 되돌렸어요! 🌸</div>
+              </div>
+            `
+          };
+        } else {
+          return {
+            type: 'undo-fail',
+            html: `
+              <div class="chatbot-result-box info">
+                <div>${res.msg || '되돌릴 이전 테마 변경 기록이 없습니다.'} 기본 체리블라썸 테마가 유지 중입니다 🌸</div>
+              </div>
+            `
+          };
+        }
+      }
+
+      // 3. 메뉴명 원복 (Undo)
+      if (['메뉴 이름 원래대로', '메뉴명 원래대로', '메뉴 이름 원복', '메뉴명 원복', '메뉴 이름 취소', '메뉴명 초기화', '메뉴 이름 초기화'].some(k => lower.includes(k))) {
+        const res = store.undoCustomMenuName();
+        UI.renderSidebar();
+        UI.renderTasks();
+        return {
+          type: 'undo-menu',
+          html: `
+            <div class="chatbot-result-box success">
+              <div style="font-weight:800; font-size:0.95rem; margin-bottom:4px;">↩️ 메뉴 이름 복구 완료!</div>
+              <div>메뉴 이름을 이전 상태로 안전하게 복구했습니다. 사이드바를 확인해 보세요! ✨</div>
+            </div>
+          `
+        };
+      }
+
+      // 4. 테마 변경
+      const themeMap = {
+        '라벤더': 'lavender', '퍼플': 'lavender', '보라': 'lavender', '보라색': 'lavender',
+        '민트': 'mint', '민트색': 'mint', '그린': 'mint', '초록': 'mint',
+        '스카이블루': 'sky', '하늘': 'sky', '하늘색': 'sky', '블루': 'sky', '파랑': 'sky', '파란색': 'sky',
+        '핑크': 'cherry', '분홍': 'cherry', '체리블라썸': 'cherry', '벚꽃': 'cherry',
+        '피치': 'peach', '복숭아': 'peach', '오렌지': 'peach', '주황': 'peach',
+        '세이지': 'sage', '올리브': 'sage', '세이지그린': 'sage',
+        '로즈': 'rose', '로즈골드': 'rose', '장미': 'rose',
+        '다크': 'dark', '어두운': 'dark',
+        '기본': 'default', '초기화': 'default'
+      };
+
+      if (['테마', '색상', '컬러', '스타일', '분위기'].some(k => lower.includes(k)) || Object.keys(themeMap).some(k => lower.includes(k))) {
+        for (const [kw, key] of Object.entries(themeMap)) {
+          if (lower.includes(kw)) {
+            if (key === 'dark') {
+              document.documentElement.setAttribute('data-theme', 'dark');
+              localStorage.setItem('todolist_jy_theme', 'dark');
+              return {
+                type: 'theme-dark',
+                html: `
+                  <div class="chatbot-result-box success">
+                    <div style="font-weight:800; font-size:0.95rem; margin-bottom:4px;">🌙 다크 모드 적용 완료!</div>
+                    <div>눈이 편안한 다크 모드로 화면을 전환했어요.</div>
+                    <button type="button" class="chatbot-inline-btn" onclick="window.UI.sendChatbotQuery('테마를 핑크로 바꿔줘')">🌸 라이트 모드로 돌아가기</button>
+                  </div>
+                `
+              };
+            }
+
+            const preset = store.setCustomTheme(key);
+            return {
+              type: 'theme-change',
+              html: `
+                <div class="chatbot-result-box success">
+                  <div style="font-weight:800; font-size:0.95rem; margin-bottom:4px;">🎨 테마 변경 완료!</div>
+                  <div>화면 테마를 <strong>${preset ? preset.name : kw}</strong>(으)로 산뜻하게 변경했어요! ✨</div>
+                  <div style="margin-top: 8px;">
+                    <button type="button" class="chatbot-inline-btn undo" onclick="window.UI.sendChatbotQuery('방금 적용한 CSS 다시 이전 상태로 돌려줘')">↩️ 방금 변경 원복하기</button>
+                  </div>
+                </div>
+              `
+            };
+          }
+        }
+      }
+
+      // 5. 메뉴 이름 변경
+      const menuTargetMap = {
+        '가계부': 'ledger', '신혼가계부': 'ledger', '지출': 'ledger', '가계': 'ledger',
+        '프로젝트': 'project', '목표': 'project', '로드맵': 'project',
+        '끄적끄적': 'notes', '메모': 'notes', '노트': 'notes',
+        '기록': 'photos', '사진': 'photos', '사진첩': 'photos', '앨범': 'photos',
+        '위시리스트': 'wishlist', '위시': 'wishlist', '선물': 'wishlist',
+        '연차관리': 'vacation', '연차': 'vacation', '휴가': 'vacation',
+        '취미활동': 'hobby', '취미': 'hobby',
+        '건강관리': 'health', '건강': 'health',
+        '사이트': 'sites', '링크': 'sites',
+        '개인': 'personal', '업무': 'work'
+      };
+
+      for (const [mKw, mId] of Object.entries(menuTargetMap)) {
+        if (text.includes(mKw) && (text.includes('이름') || text.includes('명칭') || text.includes('바꿔') || text.includes('변경') || text.includes('수정') || text.includes('으로'))) {
+          let newName = '';
+          const matchQuotes = text.match(/['"‘“]([가-힣a-zA-Z0-9\s]+)['"’”]/);
+          if (matchQuotes && matchQuotes[1]) {
+            newName = matchQuotes[1].trim();
+          } else {
+            const roMatch = text.match(/(?:을|를|이름을|은|는)?\s*([가-힣a-zA-Z0-9]+)(?:(으)?로\s*(?:바꿔|변경|수정|설정))/);
+            if (roMatch && roMatch[1] && roMatch[1] !== mKw) {
+              newName = roMatch[1].trim();
+            }
+          }
+
+          if (newName && newName !== mKw) {
+            const oldName = (store.customMenuNames && store.customMenuNames[mId]) || mKw;
+            store.setCustomMenuName(mId, newName);
+            UI.renderSidebar();
+            UI.renderTasks();
+            return {
+              type: 'menu-change',
+              html: `
+                <div class="chatbot-result-box success">
+                  <div style="font-weight:800; font-size:0.95rem; margin-bottom:4px;">🏷️ 메뉴 이름 변경 완료!</div>
+                  <div>'${oldName}' 메뉴 이름을 <strong>'${newName}'</strong>(으)로 변경했어요! 사이드바에서 확인해 보세요 ✨</div>
+                  <div style="margin-top: 8px;">
+                    <button type="button" class="chatbot-inline-btn undo" onclick="window.UI.sendChatbotQuery('방금 바꾼 메뉴 이름 취소해줘')">↩️ 메뉴 이름 되돌리기</button>
+                  </div>
+                </div>
+              `
+            };
+          }
+        }
+      }
+
+      // 6. 자연어 일정 등록 ("내일 2시 병원 예약 등록해줘")
+      if (['등록', '추가', '적어', '일정'].some(k => text.includes(k)) && (text.includes('오늘') || text.includes('내일') || text.includes('모레') || text.includes('시') || text.includes('월') || text.includes('일'))) {
+        let dueDate = TODAY_STR;
+        if (text.includes('내일')) {
+          const d = new Date(); d.setDate(d.getDate() + 1);
+          dueDate = d.toISOString().split('T')[0];
+        } else if (text.includes('모레')) {
+          const d = new Date(); d.setDate(d.getDate() + 2);
+          dueDate = d.toISOString().split('T')[0];
+        }
+
+        let dueTime = '';
+        const timeMatch = text.match(/(오전|오후)?\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?/);
+        if (timeMatch) {
+          let h = parseInt(timeMatch[2], 10);
+          const m = timeMatch[3] ? String(parseInt(timeMatch[3], 10)).padStart(2, '0') : '00';
+          if (timeMatch[1] === '오후' && h < 12) h += 12;
+          if (timeMatch[1] === '오전' && h === 12) h = 0;
+          dueTime = `${String(h).padStart(2, '0')}:${m}`;
+        }
+
+        let title = text
+          .replace(/오늘|내일|모레/g, '')
+          .replace(/(오전|오후)?\s*\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?/g, '')
+          .replace(/일정|할일|할 일|등록해줘|등록|추가해줘|추가|적어줘/g, '')
+          .replace(/[은는이가을를]/g, ' ')
+          .trim();
+
+        if (title.length >= 2) {
+          store.addTask({
+            title: title,
+            dueDate: dueDate,
+            dueTime: dueTime,
+            category: 'personal',
+            priority: 'medium',
+            type: 'todo'
+          });
+          UI.renderTasks();
+          UI.renderSidebar();
+          return {
+            type: 'task-added',
+            html: `
+              <div class="chatbot-result-box success">
+                <div style="font-weight:800; font-size:0.95rem; margin-bottom:4px;">💖 새 일정 등록 완료!</div>
+                <div><strong>[${dueDate} ${dueTime ? dueTime + ' ' : ''}] ${escapeHTML(title)}</strong> 일정을 다이어리에 추가했어요! 📋</div>
+              </div>
+            `
+          };
+        }
+      }
+
+      // 7. 현황 요약 브리핑 ("오늘 할 일", "남은 할 일", "현황", "연차 얼마")
+      if (['할 일', '남은', '현황', '연차', '브리핑', '요약'].some(k => text.includes(k))) {
+        const activeTasks = store.tasks.filter(t => t.status !== 'completed').length;
+        const todayTasks = store.tasks.filter(t => t.dueDate === TODAY_STR && t.status !== 'completed').length;
+        const remainingVac = (store.totalVacationDays || 15.0) - (store.vacations || []).reduce((s, v) => s + (v.amount || 1.0), 0);
+
+        return {
+          type: 'status-summary',
+          html: `
+            <div class="chatbot-result-box info">
+              <div style="font-weight:800; font-size:0.95rem; margin-bottom:6px;">📊 현재 다이어리 현황 브리핑</div>
+              <ul style="margin:0; padding-left:1.2rem; font-size:0.83rem; line-height:1.6;">
+                <li>📋 <strong>진행 중인 할 일</strong>: 총 <strong>${activeTasks}개</strong> (오늘 마감: ${todayTasks}개)</li>
+                <li>🏖️ <strong>올해 남은 연차</strong>: <strong>${Math.max(0, remainingVac).toFixed(1)}일</strong></li>
+                <li>🎯 <strong>인생 프로젝트</strong>: <strong>${(store.projects || []).length}개</strong> 진행 중</li>
+              </ul>
+            </div>
+          `
+        };
+      }
+
+      // 8. 친절한 폴백 / 일상 대화 응답
+      const friendlyResponses = [
+        `안녕하세요! 🌸 오늘도 반짝이는 하루 보내고 계신가요? 무엇이든 말씀해 주시면 도와드릴게요! ✨ ("도움말"이라고 입력하시면 사용법을 볼 수 있어요)`,
+        `네, 듣고 있어요! 💖 테마 변경, 메뉴 이름 바꾸기, 일정 등록 등 언제든 명령해 주세요!`,
+        `주인님의 소중한 하루를 기록하고 관리하는 AI 다이어리 비서입니다 🌸 궁금한 점이 있다면 언제든 편하게 물어보세요!`
+      ];
+      const randomReply = friendlyResponses[Math.floor(Math.random() * friendlyResponses.length)];
+
+      return {
+        type: 'chat',
+        html: `
+          <div>${randomReply}</div>
+          <div style="margin-top:8px;">
+            <button type="button" class="chatbot-inline-btn" onclick="window.UI.sendChatbotQuery('도움말')">💡 기능 가이드 보기</button>
+          </div>
+        `
+      };
     }
   };
 
@@ -9338,6 +9854,7 @@
       }
       UI.renderTasks();
       UI.renderSidebar();
+      UI.initChatbot();
     } catch (err) {
       console.error('initApp fatal error:', err);
       const box = document.getElementById('debug-error-banner') || (function() {
