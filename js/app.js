@@ -945,10 +945,9 @@
                       if (lp && lp.id && !pMap.has(lp.id) && !store.deletedItemIds.has(lp.id)) pMap.set(lp.id, lp);
                     });
                     store.projects = Array.from(pMap.values());
+                  } else if (data.projects.length === 0) {
+                    store.projects = (store.projects || []).filter(p => p && p.id && !store.deletedItemIds.has(p.id));
                   }
-                }
-                if (!store.projects || store.projects.length === 0) {
-                  store.projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
                 }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
                   const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
@@ -1757,18 +1756,20 @@
       this.activeVaultFolder = 'all';
       this.selectedVaultFiles = new Set();
 
-      // Self-Healing Projects initialization:
-      let cleanProjects = (userProjects || []).filter(p => p && p.id && p.id !== 'proj-honeymoon-refresh');
-      
-      // Ensure all 3 default projects (왕숙, 시험관, 레벨업) exist
-      DEFAULT_PROJECTS.forEach(defProj => {
-        if (!cleanProjects.some(p => p.id === defProj.id)) {
-          cleanProjects.push(JSON.parse(JSON.stringify(defProj)));
-        }
-      });
+      // 1. Initial 1-time project migration / seeding flag (Zombie item resurrection prevention)
+      const PROJ_SEED_KEY = 'todolist_jy_projects_seeded_v3';
+      const isSeeded = localStorage.getItem(PROJ_SEED_KEY) === 'true';
 
-      if (cleanProjects.length === 0) {
-        cleanProjects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+      let cleanProjects = (userProjects || []).filter(p => p && p.id && p.id !== 'proj-honeymoon-refresh' && !this.deletedItemIds.has(p.id));
+
+      if (!isSeeded) {
+        // 최초 1회만 기본 3개 프로젝트(왕숙, 시험관, 레벨업) 시딩
+        localStorage.setItem(PROJ_SEED_KEY, 'true');
+        DEFAULT_PROJECTS.forEach(defProj => {
+          if (!this.deletedItemIds.has(defProj.id) && !cleanProjects.some(p => p.id === defProj.id)) {
+            cleanProjects.push(JSON.parse(JSON.stringify(defProj)));
+          }
+        });
       }
 
       this.projects = cleanProjects;
@@ -4985,11 +4986,6 @@
       const detailContainer = document.getElementById('project-detail-dashboard');
       const emptyState = document.getElementById('project-empty-state');
       if (!tabsContainer || !detailContainer) return;
-
-      if (!store.projects || store.projects.length === 0) {
-        store.projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
-        store.save(true);
-      }
 
       const projects = store.projects || [];
       if (projects.length === 0) {
