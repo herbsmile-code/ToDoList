@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260904_chatbot_v2">
-  <link rel="stylesheet" href="css/animations.css?v=20260904_chatbot_v2">
+  <link rel="stylesheet" href="css/style.css?v=20260904_sites_v1">
+  <link rel="stylesheet" href="css/animations.css?v=20260904_sites_v1">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -1010,17 +1010,36 @@
           <div class="dashboard-header">
             <div class="view-heading">
               <h1>🌐 사이트 바로가기 (Sites)</h1>
-              <p>자주 방문하는 웹사이트, 회사 인트라넷, 유용한 링크를 한곳에 모아보세요 🚀</p>
+              <p>자주 방문하는 웹사이트, 금융/포털/쇼핑 링크를 폴더별로 깔끔하게 모아보세요 🚀</p>
             </div>
-            <button type="button" id="btn-open-add-site-modal" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
-              <span>+</span>
-              <span>새 사이트 등록 💖</span>
-            </button>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" id="btn-open-add-site-folder" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-main); font-size: 0.82rem; padding: 0.5rem 0.85rem;" title="새 사이트 폴더 추가">
+                <span>📁 + 새 폴더 추가</span>
+              </button>
+              <button type="button" id="btn-open-add-site-modal" class="btn btn-primary" style="padding: 0.55rem 1.15rem;">
+                <span>+</span>
+                <span>새 사이트 등록 💖</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Site Folders Tabs Bar -->
+          <div class="hobby-folders-bar" style="display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.4rem 0.2rem; -webkit-overflow-scrolling: touch; scrollbar-width: none;" id="site-folder-tabs">
+            <!-- Dynamically rendered folder tabs (전체보기, 포털/검색, 금융/부동산, 쇼핑/생활, 업무/도구 등) -->
+          </div>
+
+          <!-- Site Summary Info Bar -->
+          <div id="site-summary-bar" style="background: linear-gradient(135deg, rgba(51, 154, 240, 0.08), rgba(32, 201, 151, 0.08)); border: 1px solid rgba(51, 154, 240, 0.2); border-radius: 12px; padding: 0.65rem 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span id="site-cur-folder-badge" style="font-size: 0.82rem; font-weight: 800; color: #fff; background: var(--primary); padding: 3px 9px; border-radius: 6px;">전체보기</span>
+              <span id="site-cur-folder-desc" style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">총 0개의 사이트 바로가기가 보관 중입니다.</span>
+            </div>
+            <span id="site-count-badge" style="font-size: 0.78rem; color: var(--text-muted); font-weight: 700;">총 0건</span>
           </div>
 
           <!-- Stored Sites Grid -->
           <div class="sites-grid" id="sites-grid-container">
-            <!-- Dynamically rendered site cards -->
+            <!-- Dynamically rendered site cards with folder badges -->
           </div>
 
           <!-- Sites Empty State -->
@@ -2360,6 +2379,13 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label" for="site-input-folder">카테고리 폴더 선택 *</label>
+          <select id="site-input-folder" class="form-select" required>
+            <!-- Dynamically populated folder options -->
+          </select>
+        </div>
+
+        <div class="form-group">
           <label class="form-label" for="site-input-memo">메모 / 용도 (선택)</label>
           <textarea id="site-input-memo" class="form-textarea" placeholder="예: 매월 10일 세금계산서 발행 및 조회용 (아이디 힌트 등)" rows="2"></textarea>
         </div>
@@ -2367,6 +2393,41 @@
         <div class="modal-actions" style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
           <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" id="btn-cancel-site-modal">취소</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-site">사이트 저장하기 💖</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add / Edit Site Folder (사이트 폴더 추가/수정 모달) -->
+  <div id="site-folder-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none; z-index: 10006;">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="site-folder-modal-title">📁 새 사이트 폴더 추가</h3>
+        <button class="modal-close-btn" id="btn-close-site-folder-modal" title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="site-folder-form">
+        <input type="hidden" id="site-folder-edit-id" value="">
+
+        <div class="form-group">
+          <label class="form-label" for="site-folder-input-name">폴더 이름 *</label>
+          <input type="text" id="site-folder-input-name" class="form-input" placeholder="예: 개발/IT, 유튜브/음악, 공공기관" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">대표 아이콘 (이모지)</label>
+          <input type="hidden" id="site-folder-selected-icon" value="📁">
+          <div class="vault-emoji-picker-grid" id="site-folder-emoji-picker">
+            <!-- Dynamically rendered emoji grid -->
+          </div>
+        </div>
+
+        <div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn" style="background: rgba(255, 77, 77, 0.1); color: #ff4d4d; display: none;" id="btn-delete-site-folder">폴더 삭제 🗑️</button>
+          <div style="display: flex; gap: 0.5rem; margin-left: auto;">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" id="btn-cancel-site-folder-modal">취소</button>
+            <button type="submit" class="btn btn-primary" id="btn-submit-site-folder">폴더 저장 ✨</button>
+          </div>
         </div>
       </form>
     </div>
@@ -2445,7 +2506,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=20260904_chatbot_v2"></script>
-  <script src="js/treasure.js?v=20260904_chatbot_v2"></script>
+  <script src="js/app.js?v=20260904_sites_v1"></script>
+  <script src="js/treasure.js?v=20260904_sites_v1"></script>
 </body>
 </html>

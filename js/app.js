@@ -75,9 +75,26 @@
   // =========================================================================
   const DEVLOG_DATA = [
     {
+      version: 'v1.2.6',
+      date: '2026-09-04',
+      dateFormatted: '2026년 9월 4일 (오늘)',
+      title: '🌐 유용한 사이트 폴더별 분류·관리 시스템 구축 & 🌸 스마트 다이어리 비서 (AI Chatbot) 및 4중 데이터 안전 무결성 완비 (v1.2.6)',
+      badge: '최신 배포 🌟',
+      badgeColor: '#ff6b8b',
+      summary: '🌐 사이트 모음(Sites) 폴더별 탭 분류 & 자유로운 폴더 생성/수정/삭제, 🌸 스마트 다이어리 비서(AI 챗봇) 탑재(테마 실시간 변경, 메뉴명 커스텀, 자연어 일정 등록, 1초 원복 Undo 시스템), 📋 모든 할 일 완료 항목 숨김 분리, 🛡️ 인생 프로젝트 4중 데이터 무결성(Zero Data Loss & Anti-Zombie) 영구 보장',
+      details: [
+        '🌐 유용한 사이트 모음(Sites) 폴더별 분류 & 맞춤 폴더 관리 시스템 신설: 포털/검색 🔍, 금융/부동산 🏦, 쇼핑/생활 🛍️, 업무/도구 💼 등 기본 폴더 제공 및 자유로운 새 폴더 생성/수정/삭제, 사이트 등록/수정 시 폴더 지정 및 사이트 카드 내 폴더 뱃지 지원',
+        '🌸 스마트 다이어리 비서 (AI Chatbot) 탑재: 우측 하단 플로팅 챗봇 버튼을 통해 테마 변경("테마를 라벤더로 바꿔줘"), 메뉴 이름 커스텀("가계부 이름을 지출기록으로 바꿔줘"), 자연어 일정/가계부 등록, 다이어리 현황 브리핑 및 "챗봇으로 뭐 할 수 있어?" 기능 가이드 지원',
+        '↩️ 1초 안전 원복(Undo / Rollback) 엔진 구축: 챗봇을 통해 테마나 메뉴명을 변경했을 때 "방금 적용한 CSS 다시 이전 상태로 돌려줘" 또는 말풍선 내 [↩️ 방금 변경 원복하기] 버튼으로 즉시 100% 원상 복구',
+        '🛡️ 4대 안전 방어 대책 (Anti-Crash Guardrails): 화이트리스트 기반 CSS 변수 제어로 UI 깨짐 원천 방지, 시스템 고유 ID 불변성 유지, 파괴적 명령 확인 모달 강제, 100% 무료 오프라인 로컬 NLP 엔진',
+        '📋 \'모든 할 일\' 메뉴 필터링 고도화: 완료된 할 일은 숨기고 진행 중인 미완료 일정만 깔끔하게 노출하며, 완료된 항목은 \'✨ 완료된 목록\'에서만 별도로 모아볼 수 있도록 완벽 분리',
+        '🎯 인생 프로젝트 3종(왕숙 입주, 시험관, 레벨업) 4중 무결성 보호: 1회성 시딩(One-Time Seeding) 플래그 + 톰스톤(Tombstone) 영구 삭제 시스템으로 사용자 수정분 100% 보존 및 좀비 부활 원천 차단'
+      ]
+    },
+    {
       version: 'v1.1.8',
       date: '2026-09-02',
-      dateFormatted: '2026년 9월 2일 (오늘)',
+      dateFormatted: '2026년 9월 2일',
       title: '🛡️ 파일보관함 폴더관리·파일이동 완비 & 톰스톤(Tombstone) 기반 삭제 부활 방지 및 연차내역 편집 고도화 (v1.1.8)',
       badge: '최신 배포 🌟',
       badgeColor: '#ff6b8b',
@@ -175,6 +192,20 @@
     '📁', '📂', '🌸', '💼', '📦', '📑', '📊', '📄',
     '🏠', '🏢', '💍', '💰', '💳', '🩺', '🎨', '✈️',
     '🔑', '🏷️', '📌', '⭐', '💖', '🔒', '🛡️', '✨'
+  ];
+
+  const DEFAULT_SITE_FOLDERS = [
+    { id: 'all', name: '전체보기', icon: '🌐' },
+    { id: 'portal', name: '포털 & 검색', icon: '🔍' },
+    { id: 'finance', name: '금융 & 부동산', icon: '🏦' },
+    { id: 'shopping', name: '쇼핑 & 생활', icon: '🛍️' },
+    { id: 'work', name: '업무 & 도구', icon: '💼' }
+  ];
+
+  const SITE_EMOJI_LIST = [
+    '🌐', '🔍', '🏦', '🛍️', '💼', '📊', '📈', '🏢',
+    '📰', '🎬', '📚', '✈️', '🚗', '🩺', '🎨', '💡',
+    '🔗', '💻', '📱', '📦', '⭐', '💖', '🚀', '✨'
   ];
 
   const DEFAULT_PROJECT_EMOJIS = [
@@ -925,6 +956,18 @@
                   });
                   store.hobbyFolders = hbFolders;
                 }
+                if (data.sites !== undefined) {
+                  store.sites = normalizeArray(data.sites).filter(s => s && s.id && !deletedIds.has(s.id));
+                }
+                if (data.siteFolders !== undefined && Array.isArray(data.siteFolders)) {
+                  let sFolders = data.siteFolders.slice();
+                  DEFAULT_SITE_FOLDERS.forEach(defF => {
+                    if (!sFolders.some(f => f && f.id === defF.id)) {
+                      sFolders.push(Object.assign({}, defF));
+                    }
+                  });
+                  store.siteFolders = sFolders;
+                }
                 if (data.vaultFolders !== undefined && Array.isArray(data.vaultFolders)) {
                   let vFolders = data.vaultFolders.slice();
                   DEFAULT_VAULT_FOLDERS.forEach(defF => {
@@ -1134,6 +1177,7 @@
         vacations: (store.vacations || []).filter(v => v && v.id && !deletedIds.has(v.id)),
         totalVacationDays: store.totalVacationDays,
         sites: (store.sites || []).filter(s => s && s.id && !deletedIds.has(s.id)),
+        siteFolders: store.siteFolders,
         healthNotes: (store.healthNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
         healthFolders: store.healthFolders,
         hobbyNotes: (store.hobbyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
@@ -1611,6 +1655,7 @@
       const userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
       const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
       const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
+      let userSiteFolders = (savedData && Array.isArray(savedData.siteFolders)) ? savedData.siteFolders : DEFAULT_SITE_FOLDERS.slice();
       const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
       let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS.slice();
       const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
@@ -1623,6 +1668,13 @@
       if (this.customTheme) {
         this.applyThemeToDOM(this.customTheme);
       }
+
+      // Ensure all default site folders exist
+      DEFAULT_SITE_FOLDERS.forEach(defF => {
+        if (!userSiteFolders.some(f => f && f.id === defF.id)) {
+          userSiteFolders.push(Object.assign({}, defF));
+        }
+      });
 
       // Ensure all default health folders (including checkup) exist
       DEFAULT_HEALTH_FOLDERS.forEach(defF => {
@@ -1765,6 +1817,8 @@
       this.vacations = (userVacations || []).filter(v => v && v.id && !this.deletedItemIds.has(v.id));
       this.totalVacationDays = userTotalVacationDays;
       this.sites = (userSites || []).filter(s => s && s.id && !this.deletedItemIds.has(s.id));
+      this.siteFolders = userSiteFolders;
+      this.activeSiteFolder = 'all';
       this.healthNotes = (userHealthNotes || []).filter(h => h && h.id && !this.deletedItemIds.has(h.id));
       this.healthFolders = userHealthFolders;
       this.activeHealthFolder = 'all';
@@ -1824,6 +1878,7 @@
           vacations: this.vacations,
           totalVacationDays: this.totalVacationDays,
           sites: this.sites,
+          siteFolders: this.siteFolders,
           healthNotes: this.healthNotes,
           healthFolders: this.healthFolders,
           hobbyNotes: this.hobbyNotes,
@@ -2137,7 +2192,7 @@
       return { total, used, remain, pct, holidayCount };
     }
 
-    // --- Sites / Bookmarks Methods ---
+    // --- Sites / Bookmarks & Folders Methods ---
     addSite(data) {
       let rawUrl = (data.url || '').trim();
       if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
@@ -2148,6 +2203,7 @@
         title: (data.title || '').trim(),
         url: rawUrl,
         memo: (data.memo || '').trim(),
+        folder: data.folder || (this.activeSiteFolder !== 'all' ? this.activeSiteFolder : 'portal'),
         createdAt: Date.now()
       };
       this.sites.unshift(newSite);
@@ -2177,6 +2233,44 @@
       this.deletedItemIds.add(targetId);
       const idx = this.sites.findIndex(s => s && String(s.id).trim() === targetId);
       if (idx !== -1) this.sites.splice(idx, 1);
+      this.save(true);
+      return true;
+    }
+
+    addSiteFolder(name, icon = '📁') {
+      const cleanName = (name || '').trim();
+      if (!cleanName) return null;
+      const folderId = 'sfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      const newFolder = {
+        id: folderId,
+        name: cleanName,
+        icon: icon || '📁'
+      };
+      this.siteFolders.push(newFolder);
+      this.save(true);
+      return newFolder;
+    }
+
+    updateSiteFolder(id, updates) {
+      const folder = this.siteFolders.find(f => f.id === id);
+      if (!folder) return null;
+      if (updates.name) folder.name = updates.name.trim();
+      if (updates.icon) folder.icon = updates.icon;
+      this.save(true);
+      return folder;
+    }
+
+    deleteSiteFolder(id) {
+      const idx = this.siteFolders.findIndex(f => f.id === id);
+      if (idx === -1) return false;
+      this.siteFolders.splice(idx, 1);
+      // Migrate any sites in this deleted folder to 'portal' so zero sites are lost
+      this.sites.forEach(site => {
+        if (site.folder === id) {
+          site.folder = 'portal';
+        }
+      });
+      if (this.activeSiteFolder === id) this.activeSiteFolder = 'all';
       this.save(true);
       return true;
     }
@@ -5425,19 +5519,70 @@
     },
 
     // =========================================================================
-    // 🌐 Sites / Bookmarks (사이트 바로가기)
+    // 🌐 Sites / Bookmarks & Folder Manager (사이트 바로가기 & 폴더 관리)
     // =========================================================================
     renderSites() {
+      const tabsBar = document.getElementById('site-folder-tabs');
       const grid = document.getElementById('sites-grid-container');
       const emptyEl = document.getElementById('sites-empty-state');
+      const curFolderBadge = document.getElementById('site-cur-folder-badge');
+      const curFolderDesc = document.getElementById('site-cur-folder-desc');
+      const countBadge = document.getElementById('site-count-badge');
       if (!grid) return;
 
-      if (store.sites.length === 0) {
+      const activeFolder = store.activeSiteFolder || 'all';
+      const folders = store.siteFolders || DEFAULT_SITE_FOLDERS;
+      const allSites = store.sites || [];
+
+      // 1. Render Folder Tabs
+      if (tabsBar) {
+        tabsBar.innerHTML = folders.map(f => {
+          const isActive = (f.id === activeFolder);
+          const count = f.id === 'all' 
+            ? allSites.length 
+            : allSites.filter(s => (s.folder || 'portal') === f.id).length;
+
+          const editBtn = (f.id !== 'all')
+            ? `<span class="health-folder-edit-btn" data-action="open-edit-site-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
+            : '';
+
+          return `
+            <button type="button" class="hobby-folder-tab-btn ${isActive ? 'active' : ''}" data-action="select-site-folder" data-id="${f.id}">
+              <span class="folder-tab-icon">${f.icon || '📁'}</span>
+              <span class="folder-tab-name">${escapeHTML(f.name)}</span>
+              <span class="folder-tab-count">${count}</span>
+              ${editBtn}
+            </button>
+          `;
+        }).join('');
+      }
+
+      // 2. Filter Sites based on activeFolder
+      const filteredSites = (activeFolder === 'all')
+        ? allSites
+        : allSites.filter(s => (s.folder || 'portal') === activeFolder);
+
+      // 3. Update Summary Bar
+      const currentFolderObj = folders.find(f => f.id === activeFolder) || { name: '전체보기', icon: '🌐' };
+      if (curFolderBadge) {
+        curFolderBadge.innerHTML = `${currentFolderObj.icon || '📁'} ${escapeHTML(currentFolderObj.name)}`;
+      }
+      if (curFolderDesc) {
+        curFolderDesc.textContent = activeFolder === 'all'
+          ? `총 ${filteredSites.length}개의 사이트 바로가기가 등록되어 있습니다.`
+          : `'${currentFolderObj.name}' 폴더에 ${filteredSites.length}개의 사이트가 보관 중입니다.`;
+      }
+      if (countBadge) {
+        countBadge.textContent = `총 ${filteredSites.length}건`;
+      }
+
+      // 4. Render Grid / Empty State
+      if (filteredSites.length === 0) {
         grid.innerHTML = '';
         if (emptyEl) emptyEl.style.display = 'flex';
       } else {
         if (emptyEl) emptyEl.style.display = 'none';
-        grid.innerHTML = store.sites.map(site => {
+        grid.innerHTML = filteredSites.map(site => {
           let hostname = '';
           try {
             hostname = new URL(site.url).hostname;
@@ -5445,13 +5590,18 @@
             hostname = site.url;
           }
 
+          const siteFolder = folders.find(f => f.id === (site.folder || 'portal')) || { name: '포털/검색', icon: '🔍' };
+
           return `
             <div class="site-card" data-site-id="${site.id}">
               <div class="site-card-header">
                 <div class="site-title-box">
-                  <div class="site-favicon-bubble">🌐</div>
+                  <div class="site-favicon-bubble">${siteFolder.icon || '🌐'}</div>
                   <div>
-                    <h4 class="site-title-text">${escapeHTML(site.title)}</h4>
+                    <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                      <h4 class="site-title-text">${escapeHTML(site.title)}</h4>
+                      <span class="badge" style="font-size: 0.68rem; padding: 2px 6px; background: rgba(255, 107, 139, 0.12); color: var(--primary); font-weight: 700; border-radius: 6px;">${siteFolder.icon || '📁'} ${escapeHTML(siteFolder.name)}</span>
+                    </div>
                     <span style="font-size: 0.75rem; color: var(--text-muted);">${escapeHTML(hostname)}</span>
                   </div>
                 </div>
@@ -5487,10 +5637,20 @@
       const hiddenId = document.getElementById('site-edit-id');
       const inputTitle = document.getElementById('site-input-title');
       const inputUrl = document.getElementById('site-input-url');
+      const inputFolder = document.getElementById('site-input-folder');
       const inputMemo = document.getElementById('site-input-memo');
       if (!modal || !form) return;
 
       form.reset();
+
+      // Populate Folder select options
+      if (inputFolder) {
+        const folders = (store.siteFolders || DEFAULT_SITE_FOLDERS).filter(f => f.id !== 'all');
+        inputFolder.innerHTML = folders.map(f => `
+          <option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>
+        `).join('');
+      }
+
       if (siteId) {
         const site = store.sites.find(s => s.id === siteId);
         if (!site) return;
@@ -5498,10 +5658,12 @@
         if (hiddenId) hiddenId.value = site.id;
         if (inputTitle) inputTitle.value = site.title || '';
         if (inputUrl) inputUrl.value = site.url || '';
+        if (inputFolder) inputFolder.value = site.folder || 'portal';
         if (inputMemo) inputMemo.value = site.memo || '';
       } else {
         if (titleEl) titleEl.textContent = '🌐 새 사이트 바로가기 등록 💖';
         if (hiddenId) hiddenId.value = '';
+        if (inputFolder) inputFolder.value = (store.activeSiteFolder && store.activeSiteFolder !== 'all') ? store.activeSiteFolder : 'portal';
       }
 
       modal.style.display = 'flex';
@@ -5511,6 +5673,66 @@
 
     closeSiteModal() {
       const modal = document.getElementById('site-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    openSiteFolderModal(folderId = null) {
+      const modal = document.getElementById('site-folder-modal');
+      const titleEl = document.getElementById('site-folder-modal-title');
+      const hiddenId = document.getElementById('site-folder-edit-id');
+      const nameInput = document.getElementById('site-folder-input-name');
+      const iconInput = document.getElementById('site-folder-selected-icon');
+      const deleteBtn = document.getElementById('btn-delete-site-folder');
+      const emojiContainer = document.getElementById('site-folder-emoji-picker');
+
+      if (!modal) return;
+
+      let selectedIcon = '📁';
+      if (folderId) {
+        const folder = store.siteFolders.find(f => f.id === folderId);
+        if (!folder) return;
+        if (titleEl) titleEl.textContent = '📁 사이트 폴더 수정';
+        if (hiddenId) hiddenId.value = folder.id;
+        if (nameInput) nameInput.value = folder.name;
+        selectedIcon = folder.icon || '📁';
+        if (deleteBtn) deleteBtn.style.display = 'inline-block';
+      } else {
+        if (titleEl) titleEl.textContent = '📁 새 사이트 폴더 추가';
+        if (hiddenId) hiddenId.value = '';
+        if (nameInput) nameInput.value = '';
+        selectedIcon = '🌐';
+        if (deleteBtn) deleteBtn.style.display = 'none';
+      }
+
+      if (iconInput) iconInput.value = selectedIcon;
+
+      // Render emoji picker grid
+      if (emojiContainer) {
+        emojiContainer.innerHTML = SITE_EMOJI_LIST.map(emoji => `
+          <button type="button" class="vault-emoji-option-btn ${emoji === selectedIcon ? 'selected' : ''}" data-emoji="${emoji}">
+            ${emoji}
+          </button>
+        `).join('');
+
+        emojiContainer.querySelectorAll('.vault-emoji-option-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            emojiContainer.querySelectorAll('.vault-emoji-option-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            if (iconInput) iconInput.value = btn.dataset.emoji;
+          });
+        });
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (nameInput) setTimeout(() => nameInput.focus(), 80);
+    },
+
+    closeSiteFolderModal() {
+      const modal = document.getElementById('site-folder-modal');
       if (modal) {
         modal.style.display = 'none';
         modal.classList.remove('active');
@@ -8852,6 +9074,30 @@
       }
 
       // 14. Sites / Bookmarks Action Triggers
+      if (target.closest('[data-action="select-site-folder"]')) {
+        const btn = target.closest('[data-action="select-site-folder"]');
+        if (target.closest('[data-action="open-edit-site-folder"]')) return;
+        const fId = btn.dataset.id;
+        if (fId) {
+          store.activeSiteFolder = fId;
+          UI.renderSites();
+        }
+      }
+
+      if (target.closest('[data-action="open-edit-site-folder"]')) {
+        const btn = target.closest('[data-action="open-edit-site-folder"]');
+        const fId = btn.dataset.id;
+        if (fId) UI.openSiteFolderModal(fId);
+      }
+
+      if (target.closest('#btn-open-add-site-folder')) {
+        UI.openSiteFolderModal();
+      }
+
+      if (target.closest('#btn-close-site-folder-modal') || target.closest('#btn-cancel-site-folder-modal')) {
+        UI.closeSiteFolderModal();
+      }
+
       if (target.closest('[data-action="edit-site"]')) {
         const btn = target.closest('[data-action="edit-site"]');
         const siteId = btn.dataset.siteId;
@@ -9067,18 +9313,55 @@
         const id = document.getElementById('site-edit-id')?.value;
         const title = document.getElementById('site-input-title')?.value;
         const url = document.getElementById('site-input-url')?.value;
+        const folder = document.getElementById('site-input-folder')?.value || 'portal';
         const memo = document.getElementById('site-input-memo')?.value;
 
         if (id) {
-          store.updateSite(id, { title, url, memo });
+          store.updateSite(id, { title, url, folder, memo });
           UI.showToast('사이트 정보가 수정되었어요 🌐✨', 'info');
         } else {
-          store.addSite({ title, url, memo });
+          store.addSite({ title, url, folder, memo });
           sounds.playComplete();
           UI.showToast('새 사이트 바로가기가 등록되었어요 🚀💖', 'success');
         }
         UI.closeSiteModal();
         UI.renderSites();
+      });
+    }
+
+    const siteFolderForm = document.getElementById('site-folder-form');
+    if (siteFolderForm) {
+      siteFolderForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('site-folder-edit-id')?.value;
+        const name = document.getElementById('site-folder-input-name')?.value;
+        const icon = document.getElementById('site-folder-selected-icon')?.value || '📁';
+
+        if (id) {
+          store.updateSiteFolder(id, { name, icon });
+          UI.showToast('사이트 폴더가 수정되었어요 📁✨', 'info');
+        } else {
+          store.addSiteFolder(name, icon);
+          sounds.playComplete();
+          UI.showToast('새 사이트 폴더가 생성되었어요 📂💖', 'success');
+        }
+        UI.closeSiteFolderModal();
+        UI.renderSites();
+      });
+    }
+
+    const btnDeleteSiteFolder = document.getElementById('btn-delete-site-folder');
+    if (btnDeleteSiteFolder) {
+      btnDeleteSiteFolder.addEventListener('click', () => {
+        const id = document.getElementById('site-folder-edit-id')?.value;
+        if (!id) return;
+        if (confirm('정말 이 사이트 폴더를 삭제하시겠습니까?\n(폴더 안의 사이트들은 포털/검색 폴더로 안전하게 이관됩니다)')) {
+          store.deleteSiteFolder(id);
+          sounds.playDelete();
+          UI.showToast('사이트 폴더가 삭제되고 사이트들이 안전하게 이동되었어요 🗑️', 'danger');
+          UI.closeSiteFolderModal();
+          UI.renderSites();
+        }
       });
     }
 
