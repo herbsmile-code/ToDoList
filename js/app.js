@@ -217,6 +217,23 @@
         { id: 'ivf-4', title: '난자 채취 및 수정란/배아 5일 배양', date: '2026-09-10', amount: '80만원', completed: false, memo: '채취 당일 안정 취하기, 이온음료 충분히 섭취' },
         { id: 'ivf-5', title: '동결 배아 이식 & 1차 혈액 피검사 (희망 가득!)', date: '2026-10-15', amount: '30만원', completed: false, memo: '착상에 좋은 따뜻한 음식 섭취 및 편안한 마음 유지하기 🌸' }
       ]
+    },
+    {
+      id: 'proj-levelup',
+      title: '레벨업 프로젝트',
+      category: '자기계발/성장',
+      icon: '📈',
+      targetDate: '2026-12-31',
+      budget: '',
+      description: '꾸준한 역량 강화와 성장을 위한 나만의 레벨업 로드맵 🚀✨',
+      createdAt: 1724510000000,
+      milestones: [
+        { id: 'lvl-1', title: '기본 역량 점검 및 핵심 목표 설정', date: '2026-06-30', amount: '', completed: true, memo: '성장을 위한 로드맵 및 단계별 목표 정리' },
+        { id: 'lvl-2', title: '실전 프로젝트 기획 및 설계', date: '2026-08-31', amount: '', completed: true, memo: '업무 및 자기계발 실전 프로젝트 구성' },
+        { id: 'lvl-3', title: '핵심 기능 개발 및 자동화 구축', date: '2026-10-31', amount: '', completed: false, memo: '생산성 향상을 위한 핵심 기능 개발 및 적용' },
+        { id: 'lvl-4', title: '실전 적용 및 피드백 개선', date: '2026-11-30', amount: '', completed: false, memo: '실제 업무 및 일상에 적용하여 고도화' },
+        { id: 'lvl-5', title: '최종 완성 및 성과 리뷰 🌟', date: '2026-12-31', amount: '', completed: false, memo: '1년간의 성장 성과 정리 및 다음 단계 플랜 수립' }
+      ]
     }
   ];
 
@@ -919,8 +936,19 @@
                   });
                   store.vaultFolders = vFolders;
                 }
-                if (Array.isArray(data.projects)) {
-                  store.projects = data.projects;
+                if (data.projects !== undefined && Array.isArray(data.projects)) {
+                  const cloudProjects = data.projects.filter(p => p && p.id && !store.deletedItemIds.has(p.id));
+                  if (cloudProjects.length > 0) {
+                    const pMap = new Map();
+                    cloudProjects.forEach(p => { if (p && p.id) pMap.set(p.id, p); });
+                    (store.projects || []).forEach(lp => {
+                      if (lp && lp.id && !pMap.has(lp.id) && !store.deletedItemIds.has(lp.id)) pMap.set(lp.id, lp);
+                    });
+                    store.projects = Array.from(pMap.values());
+                  }
+                }
+                if (!store.projects || store.projects.length === 0) {
+                  store.projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
                 }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
                   const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
@@ -1103,7 +1131,7 @@
         healthFolders: store.healthFolders,
         hobbyNotes: (store.hobbyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
         hobbyFolders: store.hobbyFolders,
-        projects: store.projects,
+        projects: (store.projects || []).filter(p => p && p.id && !deletedIds.has(p.id)),
         revision: nextRevision,
         updatedAt: nowTs
       };
@@ -1728,6 +1756,23 @@
       this.vaultFolders = userVaultFolders;
       this.activeVaultFolder = 'all';
       this.selectedVaultFiles = new Set();
+
+      // Self-Healing Projects initialization:
+      let cleanProjects = (userProjects || []).filter(p => p && p.id && p.id !== 'proj-honeymoon-refresh');
+      
+      // Ensure all 3 default projects (왕숙, 시험관, 레벨업) exist
+      DEFAULT_PROJECTS.forEach(defProj => {
+        if (!cleanProjects.some(p => p.id === defProj.id)) {
+          cleanProjects.push(JSON.parse(JSON.stringify(defProj)));
+        }
+      });
+
+      if (cleanProjects.length === 0) {
+        cleanProjects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+      }
+
+      this.projects = cleanProjects;
+      this.activeProjectId = (this.projects && this.projects.length > 0) ? this.projects[0].id : null;
 
       this.lastUpdatedAt = (savedData && savedData.updatedAt) ? Number(savedData.updatedAt) : 0;
 
@@ -2381,8 +2426,7 @@
       }, project);
       this.projects.push(newProj);
       this.activeProjectId = newProj.id;
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return newProj;
     }
 
@@ -2391,21 +2435,23 @@
       const idx = this.projects.findIndex(p => p.id === id);
       if (idx !== -1) {
         this.projects[idx] = Object.assign({}, this.projects[idx], updates);
-        this.saveLocalOnly();
-        cloudSync.pushTasksToCloud(true);
+        this.save(true);
         return this.projects[idx];
       }
       return null;
     }
 
     deleteProject(id) {
+      if (!id) return;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
       if (!this.projects) this.projects = [];
-      this.projects = this.projects.filter(p => p.id !== id);
-      if (this.activeProjectId === id) {
+      this.projects = this.projects.filter(p => p && String(p.id).trim() !== targetId);
+      if (this.activeProjectId === targetId) {
         this.activeProjectId = this.projects.length > 0 ? this.projects[0].id : null;
       }
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
     }
 
     addMilestone(projectId, milestone) {
@@ -2423,8 +2469,7 @@
         createdAt: Date.now()
       }, milestone);
       proj.milestones.push(newM);
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
       return newM;
     }
 
@@ -2435,8 +2480,7 @@
       const idx = proj.milestones.findIndex(m => m.id === milestoneId);
       if (idx !== -1) {
         proj.milestones[idx] = Object.assign({}, proj.milestones[idx], updates);
-        this.saveLocalOnly();
-        cloudSync.pushTasksToCloud(true);
+        this.save(true);
         return proj.milestones[idx];
       }
       return null;
@@ -2447,8 +2491,7 @@
       const proj = this.projects.find(p => p.id === projectId);
       if (!proj || !proj.milestones) return;
       proj.milestones = proj.milestones.filter(m => m.id !== milestoneId);
-      this.saveLocalOnly();
-      cloudSync.pushTasksToCloud(true);
+      this.save(true);
     }
 
     toggleMilestoneComplete(projectId, milestoneId) {
@@ -2458,8 +2501,7 @@
       const m = proj.milestones.find(x => x.id === milestoneId);
       if (m) {
         m.completed = !m.completed;
-        this.saveLocalOnly();
-        cloudSync.pushTasksToCloud(true);
+        this.save(true);
         return m;
       }
       return null;
@@ -4943,6 +4985,11 @@
       const detailContainer = document.getElementById('project-detail-dashboard');
       const emptyState = document.getElementById('project-empty-state');
       if (!tabsContainer || !detailContainer) return;
+
+      if (!store.projects || store.projects.length === 0) {
+        store.projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+        store.save(true);
+      }
 
       const projects = store.projects || [];
       if (projects.length === 0) {
