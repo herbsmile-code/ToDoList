@@ -5193,7 +5193,7 @@
             : allSites.filter(s => (s.folder || 'portal') === f.id).length;
 
           const editBtn = (f.id !== 'all')
-            ? `<span class="site-folder-edit-btn" data-action="open-edit-site-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
+            ? `<span class="site-folder-edit-btn" data-action="open-edit-site-folder" data-id="${f.id}" onclick="event.stopPropagation(); UI.openSiteFolderModal('${f.id}');" title="?대뜑 ?섏젙/??젣">✏️</span>`
             : '';
 
           return `
@@ -9026,22 +9026,18 @@
       }
 
       // 14. Sites / Bookmarks Action Triggers
-      if (target.closest('[data-action="select-site-folder"]')) {
+      if (target.closest('[data-action="open-edit-site-folder"]')) {
+        const btn = target.closest('[data-action="open-edit-site-folder"]');
+        const fId = btn ? btn.dataset.id : null;
+        if (fId) UI.openSiteFolderModal(fId);
+      } else if (target.closest('[data-action="select-site-folder"]')) {
         const btn = target.closest('[data-action="select-site-folder"]');
-        if (target.closest('[data-action="open-edit-site-folder"]')) return;
-        const fId = btn.dataset.id;
+        const fId = btn ? btn.dataset.id : null;
         if (fId) {
           store.activeSiteFolder = fId;
           UI.renderSites();
         }
       }
-
-      if (target.closest('[data-action="open-edit-site-folder"]')) {
-        const btn = target.closest('[data-action="open-edit-site-folder"]');
-        const fId = btn.dataset.id;
-        if (fId) UI.openSiteFolderModal(fId);
-      }
-
       if (target.closest('#btn-open-add-site-folder')) {
         UI.openSiteFolderModal();
       }
