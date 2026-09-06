@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260906_v133">
-  <link rel="stylesheet" href="css/animations.css?v=20260906_v133">
+  <link rel="stylesheet" href="css/style.css?v=20260907_v134">
+  <link rel="stylesheet" href="css/animations.css?v=20260907_v134">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -1475,10 +1475,11 @@
           <input type="text" id="sub-modal-memo" class="form-input" placeholder="예: Pro 플랜, 4인 파티 공유, 12개월 약정 할인 등">
         </div>
 
-        <!-- Official Website URL -->
+        <!-- Subscription Expiry Date (만료일 / 약정 종료일) -->
         <div class="form-group">
-          <label class="form-label" for="sub-modal-url">공식 홈페이지 / 결제 관리 링크 (선택)</label>
-          <input type="url" id="sub-modal-url" class="form-input" placeholder="https://...">
+          <label class="form-label" for="sub-modal-expiry">구독 만료일 / 약정 종료일 (선택)</label>
+          <input type="date" id="sub-modal-expiry" class="form-input">
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 3px; display: block;">* 미설정 시 정기 자동 갱신으로 관리됩니다.</span>
         </div>
 
         <!-- Active Status Checkbox -->
@@ -2857,10 +2858,10 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts (Phase 1 Modularization) -->
-  <script src="js/utils/constants.js?v=20260906_v133"></script>
-  <script src="js/utils/helpers.js?v=20260906_v133"></script>
-  <script src="js/services/crypto.js?v=20260906_v133"></script>
-  <script src="js/app.js?v=20260906_v133"></script>
-  <script src="js/treasure.js?v=20260906_v133"></script>
+  <script src="js/utils/constants.js?v=20260907_v134"></script>
+  <script src="js/utils/helpers.js?v=20260907_v134"></script>
+  <script src="js/services/crypto.js?v=20260907_v134"></script>
+  <script src="js/app.js?v=20260907_v134"></script>
+  <script src="js/treasure.js?v=20260907_v134"></script>
 </body>
 </html>

@@ -2112,7 +2112,7 @@
         icon: data.icon || '💳',
         isActive: data.isActive !== false,
         memo: (data.memo || '').trim(),
-        url: (data.url || '').trim(),
+        expiryDate: (data.expiryDate || '').trim(),
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
@@ -2134,7 +2134,7 @@
           icon: data.icon || this.subscriptions[idx].icon,
           isActive: data.isActive !== undefined ? data.isActive : this.subscriptions[idx].isActive,
           memo: data.memo !== undefined ? data.memo.trim() : this.subscriptions[idx].memo,
-          url: data.url !== undefined ? data.url.trim() : this.subscriptions[idx].url,
+          expiryDate: data.expiryDate !== undefined ? (data.expiryDate || '').trim() : (this.subscriptions[idx].expiryDate || ''),
           updatedAt: Date.now()
         };
         this.save(true);
@@ -4161,6 +4161,27 @@
           const catObj = DEFAULT_SUBSCRIPTION_CATEGORIES.find(c => c.id === sub.category) || { name: '기타', icon: '✨' };
           const cycleText = sub.billingCycle === 'yearly' ? '매년' : '매월';
 
+          // 만료일 (약정 종료일) 계산
+          let expiryHtml = '';
+          if (sub.expiryDate) {
+            const expDate = new Date(sub.expiryDate);
+            const expDiff = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+            const expDdayText = expDiff < 0 ? '만료됨 ⚠️' : (expDiff === 0 ? '오늘 만료! 🚨' : `D-${expDiff}`);
+            const expUrgent = expDiff <= 7 && expDiff >= 0;
+            const expExpired = expDiff < 0;
+            expiryHtml = `
+              <div class="sub-card-expiry-badge ${expExpired ? 'expired' : (expUrgent ? 'urgent' : '')}">
+                📅 만료: ${escapeHTML(sub.expiryDate)} (${expDdayText})
+              </div>
+            `;
+          } else {
+            expiryHtml = `
+              <div class="sub-card-expiry-badge auto">
+                🔄 정기 자동 갱신
+              </div>
+            `;
+          }
+
           return `
             <div class="subscription-card ${!sub.isActive ? 'is-inactive' : ''}" data-sub-id="${sub.id}">
               <div class="sub-card-header">
@@ -4177,7 +4198,7 @@
                   </div>
                 </div>
                 <div class="sub-card-actions">
-                  <button type="button" class="sub-action-btn" data-action="edit-subscription" data-sub-id="${sub.id}" title="구독 정보 수정">
+                  <button type="button" class="sub-action-btn edit-btn" data-action="edit-subscription" data-sub-id="${sub.id}" title="구독 정보 수정">
                     ✏️
                   </button>
                   <button type="button" class="sub-action-btn delete-btn" data-action="delete-subscription" data-sub-id="${sub.id}" title="구독 삭제">
@@ -4192,9 +4213,11 @@
                   <span class="amount-cycle">/ ${sub.billingCycle === 'yearly' ? '년' : '월'}</span>
                 </div>
                 <div class="sub-card-dday-badge ${isUrgent ? 'urgent' : ''}">
-                  ${sub.isActive ? `⏰ 매월 ${sub.payDay}일 (${ddayText})` : '⏸️ 구독 일시중지'}
+                  ${sub.isActive ? `⏰ 결제일: 매월 ${sub.payDay}일 (${ddayText})` : '⏸️ 구독 일시중지'}
                 </div>
               </div>
+
+              ${expiryHtml}
 
               ${sub.memo ? `<div class="sub-card-memo">💬 ${escapeHTML(sub.memo)}</div>` : ''}
 
@@ -4205,11 +4228,6 @@
                     <span class="toggle-text">${sub.isActive ? '구독 중 🟢' : '일시중지 ⏸️'}</span>
                   </button>
                 </div>
-                ${sub.url ? `
-                  <a href="${escapeHTML(sub.url)}" target="_blank" rel="noopener noreferrer" class="sub-link-btn" title="공식 사이트 바로가기">
-                    <span>🔗 바로가기</span>
-                  </a>
-                ` : ''}
               </div>
             </div>
           `;
@@ -4255,7 +4273,7 @@
           document.getElementById('sub-modal-payday').value = sub.payDay || 1;
           if (catSelect) catSelect.value = sub.category || 'ai';
           document.getElementById('sub-modal-memo').value = sub.memo || '';
-          document.getElementById('sub-modal-url').value = sub.url || '';
+          document.getElementById('sub-modal-expiry').value = sub.expiryDate || '';
           document.getElementById('sub-modal-active').checked = sub.isActive !== false;
           activeEmoji = sub.icon || '🤖';
           if (deleteBtn) deleteBtn.style.display = 'inline-block';
@@ -4266,6 +4284,7 @@
         if (titleEl) titleEl.textContent = '🔄 새로운 구독 서비스 추가';
         document.getElementById('sub-modal-active').checked = true;
         document.getElementById('sub-modal-payday').value = new Date().getDate();
+        document.getElementById('sub-modal-expiry').value = '';
         if (deleteBtn) deleteBtn.style.display = 'none';
       }
 
@@ -4274,6 +4293,7 @@
       if (previewIcon) previewIcon.textContent = activeEmoji;
       this.renderSubscriptionEmojiPicker(activeEmoji);
 
+      modal.classList.add('active');
       modal.style.display = 'flex';
       setTimeout(() => {
         const nameInput = document.getElementById('sub-modal-name');
@@ -4283,7 +4303,10 @@
 
     closeSubscriptionModal() {
       const modal = document.getElementById('subscription-modal');
-      if (modal) modal.style.display = 'none';
+      if (modal) {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+      }
     },
 
     // =======================================================================
@@ -8098,7 +8121,7 @@
         const icon = document.getElementById('sub-modal-selected-icon').value || '🤖';
         const isActive = document.getElementById('sub-modal-active').checked;
         const memo = document.getElementById('sub-modal-memo').value.trim();
-        const url = document.getElementById('sub-modal-url').value.trim();
+        const expiryDate = (document.getElementById('sub-modal-expiry')?.value || '').trim();
 
         if (!name) {
           alert('구독 서비스명을 입력해주세요.');
@@ -8106,11 +8129,11 @@
         }
 
         if (subId) {
-          store.updateSubscription(subId, { name, amount, billingCycle, payDay, category, icon, isActive, memo, url });
+          store.updateSubscription(subId, { name, amount, billingCycle, payDay, category, icon, isActive, memo, expiryDate });
           sounds.playComplete();
           UI.showToast('구독 정보가 수정되었어요! ✨', 'success');
         } else {
-          store.addSubscription({ name, amount, billingCycle, payDay, category, icon, isActive, memo, url });
+          store.addSubscription({ name, amount, billingCycle, payDay, category, icon, isActive, memo, expiryDate });
           sounds.playPop();
           UI.showToast('새로운 구독 서비스가 등록되었어요! 🔄💖', 'success');
         }
