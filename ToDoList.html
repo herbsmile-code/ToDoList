@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260904_sites_v1">
-  <link rel="stylesheet" href="css/animations.css?v=20260904_sites_v1">
+  <link rel="stylesheet" href="css/style.css?v=20260906_v127">
+  <link rel="stylesheet" href="css/animations.css?v=20260906_v127">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -119,12 +119,12 @@
         <div class="sidebar-card">
           <div class="sidebar-title">다이어리 & 플래너 📌</div>
           <ul class="nav-list" id="main-nav-list">
-            <li class="nav-item nav-item-calendar" data-filter="calendar-month" id="nav-filter-calendar-month" onclick="window.selectCategoryFilter('calendar-month')" title="2026년 8월 기준 월별 달력 (반차/휴가 개나리색 표시)">
+            <li class="nav-item nav-item-calendar" data-filter="calendar-month" id="nav-filter-calendar-month" onclick="window.selectCategoryFilter('calendar-month')" title="실시간 오늘 기준 월별 달력 (반차/휴가 개나리색 표시)">
               <div class="nav-item-left">
                 <span>🗓️</span>
                 <span>월별 달력</span>
               </div>
-              <span class="nav-pill-badge">8월</span>
+              <span class="nav-pill-badge">9월</span>
             </li>
             <li class="nav-item active" data-filter="all" id="nav-filter-all" onclick="window.selectCategoryFilter('all')">
               <div class="nav-item-left">
@@ -424,7 +424,7 @@
 
             <div class="calendar-nav-controls">
               <button type="button" class="btn btn-cal-nav" id="btn-week-prev" title="이전 주">◀ 이전 주</button>
-              <button type="button" class="btn btn-cal-today" id="btn-week-today" title="이번 주로 이동">이번 주 (8월 4주차)</button>
+              <button type="button" class="btn btn-cal-today" id="btn-week-today" title="이번 주로 이동">이번 주 (오늘)</button>
               <button type="button" class="btn btn-cal-nav" id="btn-week-next" title="다음 주">다음 주 ▶</button>
             </div>
           </div>
@@ -1024,7 +1024,7 @@
           </div>
 
           <!-- Site Folders Tabs Bar -->
-          <div class="hobby-folders-bar" style="display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.4rem 0.2rem; -webkit-overflow-scrolling: touch; scrollbar-width: none;" id="site-folder-tabs">
+          <div class="site-folders-bar" id="site-folder-tabs">
             <!-- Dynamically rendered folder tabs (전체보기, 포털/검색, 금융/부동산, 쇼핑/생활, 업무/도구 등) -->
           </div>
 
@@ -2506,7 +2506,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts -->
-  <script src="js/app.js?v=20260904_sites_v1"></script>
-  <script src="js/treasure.js?v=20260904_sites_v1"></script>
+  <script src="js/app.js?v=20260906_v127"></script>
+  <script src="js/treasure.js?v=20260906_v127"></script>
 </body>
 </html>

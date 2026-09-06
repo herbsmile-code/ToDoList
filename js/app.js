@@ -20,6 +20,16 @@
     try {
       if (window.store) {
         window.store.activeFilter = filter;
+        if (filter === 'calendar-month') {
+          window.store.currentCalendarDate = new Date();
+          window.store.selectedCalendarDateStr = getRealTodayStr();
+        } else if (filter === 'calendar-week') {
+          window.store.currentWeeklyDate = new Date();
+        } else if (filter === 'ledger') {
+          if (!window.store.selectedLedgerMonth) {
+            window.store.selectedLedgerMonth = new Date().getMonth() + 1;
+          }
+        }
         window.scrollTo({ top: 0, behavior: 'instant' });
         if (window.UI) {
           window.UI.renderTasks();
@@ -1603,11 +1613,11 @@
       this.notes = [];
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.ledgerFiles = [];
-      this.selectedLedgerMonth = 7;
+      this.selectedLedgerMonth = new Date().getMonth() + 1;
       this.activeFilter = localStorage.getItem('todolist_jy_active_filter') || 'all';
       this.activePriority = 'all';
       this.activeWishCat = 'all';
-      this.selectedVacationYear = '2026';
+      this.selectedVacationYear = String(new Date().getFullYear());
       this.selectedVacationMonth = String(new Date().getMonth() + 1);
       this.vacationTypeFilter = 'all';
       this.isReorderMode = false;
@@ -1625,10 +1635,10 @@
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
       this.streak = { count: 3, lastDate: TODAY_STR };
       
-      // 2026-08-25 Anchor Dates for Calendars
-      this.currentCalendarDate = new Date(2026, 7, 25);
+      // Dynamic Real-time Today Anchor Dates for Calendars
+      this.currentCalendarDate = new Date();
       this.selectedCalendarDateStr = TODAY_STR;
-      this.currentWeeklyDate = new Date(2026, 7, 25);
+      this.currentWeeklyDate = new Date();
       this.lastUpdatedAt = 0;
 
       this.loadLocalOnly();
@@ -2909,6 +2919,12 @@
         if (el) el.textContent = counts[k];
       });
 
+      // Update dynamic calendar month badge
+      const calBadge = document.querySelector('#nav-filter-calendar-month .nav-pill-badge');
+      if (calBadge) {
+        calBadge.textContent = `${new Date().getMonth() + 1}월`;
+      }
+
       // Update Vault files count
       try {
         const vaultFiles = await cloudSync.getAllVaultFiles();
@@ -3324,8 +3340,12 @@
         ? `background: rgba(134, 142, 150, 0.18); color: #495057; font-weight: 700; border: 1px solid rgba(134, 142, 150, 0.35);`
         : `background: ${cat.color}18; color: ${cat.color}; font-weight: 700; border: 1px solid ${cat.color}30;`;
 
+      const isImportant = (task.priority === 'urgent' || task.priority === 'high' || task.pinned);
+      const importantClass = isImportant ? 'is-important' : '';
+      const titleHighlightClass = isImportant ? 'highlight-important' : '';
+
       return `
-        <div class="task-card ${isCompleted ? 'completed' : ''} ${task.pinned ? 'pinned' : ''} ${categoryClass}" 
+        <div class="task-card ${isCompleted ? 'completed' : ''} ${task.pinned ? 'pinned' : ''} ${importantClass} ${categoryClass}" 
              id="${task.id}" data-id="${task.id}" draggable="true">
           
           <div class="task-checkbox-container">
@@ -3335,7 +3355,7 @@
 
           <div class="task-body" data-action="open-edit">
             <div class="task-header-row">
-              <h4 class="task-title">${escapeHTML(task.title)}</h4>
+              <h4 class="task-title ${titleHighlightClass}">${escapeHTML(task.title)}</h4>
             </div>
 
             ${task.description ? `<p class="task-desc">${escapeHTML(task.description)}</p>` : ''}
@@ -3828,14 +3848,14 @@
             const chipStyle = isSpecial
               ? 'background: linear-gradient(135deg, #fff3bf, #ffd43b); color: #8c5300; font-weight: 800; border: 1px solid #fab005;'
               : '';
-            const isImportant = (task.priority === 'urgent' || task.priority === 'high');
+            const isImportant = (task.priority === 'urgent' || task.priority === 'high' || task.pinned);
             const star = isImportant ? '⭐ ' : '';
             const chipLabel = task.type === 'half-off' ? `${star}🌿 반차` : (task.type === 'vacation' ? `${star}🌴 휴가` : `${star}${escapeHTML(task.title)}`);
 
             return `
-              <div class="weekly-item-chip ${isDone ? 'completed' : ''}" style="${chipStyle}" data-task-id="${task.id}" data-action="toggle-complete">
+              <div class="weekly-item-chip ${isDone ? 'completed' : ''} ${isImportant ? 'is-important' : ''}" style="${chipStyle}" data-task-id="${task.id}" data-action="toggle-complete">
                 <input type="checkbox" class="task-checkbox" ${isDone ? 'checked' : ''} style="width: 14px; height: 14px;">
-                <span class="weekly-item-chip-title" title="${escapeHTML(task.title)}">${chipLabel}</span>
+                <span class="weekly-item-chip-title ${isImportant ? 'highlight-important' : ''}" title="${escapeHTML(task.title)}">${chipLabel}</span>
               </div>
             `;
           }).join('');
@@ -5543,11 +5563,11 @@
             : allSites.filter(s => (s.folder || 'portal') === f.id).length;
 
           const editBtn = (f.id !== 'all')
-            ? `<span class="health-folder-edit-btn" data-action="open-edit-site-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
+            ? `<span class="site-folder-edit-btn" data-action="open-edit-site-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
             : '';
 
           return `
-            <button type="button" class="hobby-folder-tab-btn ${isActive ? 'active' : ''}" data-action="select-site-folder" data-id="${f.id}">
+            <button type="button" class="site-folder-tab ${isActive ? 'active' : ''}" data-action="select-site-folder" data-id="${f.id}">
               <span class="folder-tab-icon">${f.icon || '📁'}</span>
               <span class="folder-tab-name">${escapeHTML(f.name)}</span>
               <span class="folder-tab-count">${count}</span>
@@ -8150,10 +8170,10 @@
     }
     if (btnMonthToday) {
       btnMonthToday.addEventListener('click', () => {
-        store.currentCalendarDate = new Date(2026, 7, 25);
-        store.selectedCalendarDateStr = TODAY_STR;
+        store.currentCalendarDate = new Date();
+        store.selectedCalendarDateStr = getRealTodayStr();
         UI.renderCalendarMonth();
-        UI.showToast('오늘 날짜(2026.08.25)로 이동했어요! 🌸', 'info');
+        UI.showToast(`오늘 날짜(${getRealTodayStr().replace(/-/g, '.')})로 이동했어요! 🌸`, 'info');
       });
     }
 
@@ -8198,9 +8218,9 @@
     }
     if (btnWeekToday) {
       btnWeekToday.addEventListener('click', () => {
-        store.currentWeeklyDate = new Date(2026, 7, 25);
+        store.currentWeeklyDate = new Date();
         UI.renderCalendarWeek();
-        UI.showToast('이번 주(8월 4주차)로 이동했어요! 🌸', 'info');
+        UI.showToast('이번 주로 이동했어요! 🌸', 'info');
       });
     }
 

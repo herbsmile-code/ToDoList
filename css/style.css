@@ -865,6 +865,56 @@ body::after {
   word-break: break-word;
 }
 
+/* 🌟 Important Task Title Yellow Highlighter Style (노란색 형광펜 하이라이트) */
+.task-card.is-important .task-title,
+.task-title.highlight-important {
+  background: linear-gradient(120deg, rgba(255, 224, 102, 0.58) 0%, rgba(255, 236, 153, 0.8) 100%);
+  display: inline;
+  padding: 2px 7px;
+  border-radius: 5px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: 750;
+  color: #5c3e00;
+  border-bottom: 2px solid rgba(245, 159, 0, 0.45);
+  box-shadow: 0 1px 4px rgba(250, 176, 5, 0.15);
+}
+
+[data-theme="dark"] .task-card.is-important .task-title,
+[data-theme="dark"] .task-title.highlight-important {
+  background: linear-gradient(120deg, rgba(245, 159, 0, 0.32) 0%, rgba(255, 212, 59, 0.42) 100%);
+  color: #ffe066;
+  border-bottom: 2px solid rgba(255, 212, 59, 0.55);
+  box-shadow: 0 1px 4px rgba(245, 159, 0, 0.25);
+}
+
+.task-card.completed.is-important .task-title,
+.task-card.completed .task-title.highlight-important {
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  text-decoration: line-through;
+}
+
+/* Weekly Planner Highlighted Chip */
+.weekly-item-chip-title.highlight-important {
+  background: linear-gradient(120deg, rgba(255, 224, 102, 0.55) 0%, rgba(255, 236, 153, 0.75) 100%);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #5c3e00;
+  font-weight: 750;
+}
+[data-theme="dark"] .weekly-item-chip-title.highlight-important {
+  background: rgba(245, 159, 0, 0.35);
+  color: #ffe066;
+}
+.weekly-item-chip.completed .weekly-item-chip-title.highlight-important {
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  text-decoration: line-through;
+}
+
 .task-card.completed .task-title {
   text-decoration: line-through;
   color: var(--text-muted);
@@ -4651,6 +4701,107 @@ body::after {
   flex-direction: column;
   gap: 1.35rem;
   width: 100%;
+}
+
+/* Site Folders Bar & Tab Styles (Pill Aesthetic matching Quick Notes & Life Planner) */
+.site-folders-bar {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding: 0.4rem 0.2rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.site-folders-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.site-folder-tab {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.45rem 0.95rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.site-folder-tab:hover {
+  border-color: #339af0;
+  color: #1c7ed6;
+  background: rgba(51, 154, 240, 0.08);
+  transform: translateY(-1px);
+}
+
+.site-folder-tab.active {
+  background: linear-gradient(135deg, #339af0, #20c997) !important;
+  color: #ffffff !important;
+  border-color: #339af0 !important;
+  font-weight: 800;
+  box-shadow: 0 3px 10px rgba(51, 154, 240, 0.3);
+}
+
+.site-folder-tab .folder-tab-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.site-folder-tab .folder-tab-name {
+  font-size: 0.85rem;
+}
+
+.site-folder-tab .folder-tab-count {
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+  font-weight: 700;
+}
+
+.site-folder-tab.active .folder-tab-count {
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.site-folder-edit-btn {
+  font-size: 0.72rem;
+  opacity: 0.65;
+  margin-left: 0.2rem;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.site-folder-tab.active .site-folder-edit-btn {
+  background: rgba(255, 255, 255, 0.28);
+  color: #fff;
+  opacity: 0.9;
+}
+
+.site-folder-edit-btn:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+[data-theme="dark"] .site-folder-tab {
+  background: rgba(255, 255, 255, 0.04);
+}
+[data-theme="dark"] .site-folder-tab:hover {
+  background: rgba(51, 154, 240, 0.15);
 }
 
 .sites-grid {
