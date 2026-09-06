@@ -3665,9 +3665,9 @@
         const devlogItem = DEVLOG_DATA.find(d => d.date === dateStr);
         if (devlogItem) {
           taskChipsHTML += `
-            <div class="cal-devlog-chip ${devlogItem.version === 'v1.1' ? 'v1-1' : ''}" data-action="open-devlog-modal" data-devlog-ver="${devlogItem.version}" title="🚀 클릭하여 ${devlogItem.version} 개발기록 보기">
-              <span>🚀</span>
-              <span>개발기록 ${devlogItem.version}</span>
+            <div class="cal-devlog-chip ${devlogItem.version === 'v1.1' ? 'v1-1' : ''}" data-action="open-devlog-modal" data-devlog-ver="${devlogItem.version}" title="🚀 클릭하여 ${devlogItem.version} 개발기록 보기" data-date="${dateStr}">
+              <span class="cal-chip-icon">🚀</span>
+              <span class="cal-chip-text">개발기록 ${devlogItem.version}</span>
             </div>
           `;
         }
@@ -3679,9 +3679,9 @@
           const vLabel = isFull ? '🌴 연차 (1.0)' : (isAm ? '🌅 오전반차 (0.5)' : '🌇 오후반차 (0.5)');
           const vClass = isFull ? 'vacation' : 'half-off';
           taskChipsHTML += `
-            <div class="cal-task-chip ${vClass}" title="${vLabel} ${v.reason ? '- ' + escapeHTML(v.reason) : ''}">
-              <span>${isFull ? '🌴' : '🌿'}</span>
-              <span>${vLabel}</span>
+            <div class="cal-task-chip ${vClass}" title="${vLabel} ${v.reason ? '- ' + escapeHTML(v.reason) : ''}" data-date="${dateStr}">
+              <span class="cal-chip-icon">${isFull ? '🌴' : '🌿'}</span>
+              <span class="cal-chip-text">${vLabel}</span>
             </div>
           `;
         });
@@ -3698,10 +3698,10 @@
           const pClass = isImportant ? 'high' : 'medium';
           const icon = isDone ? '✨' : '📋';
           taskChipsHTML += `
-            <div class="cal-task-chip ${isDone ? 'completed' : ''} ${pClass}" title="${escapeHTML(task.title)}">
+            <div class="cal-task-chip ${isDone ? 'completed' : ''} ${pClass}" title="${escapeHTML(task.title)}" data-date="${dateStr}">
               ${starIcon}
-              <span>${icon}</span>
-              <span>${escapeHTML(task.title)}</span>
+              <span class="cal-chip-icon">${icon}</span>
+              <span class="cal-chip-text">${escapeHTML(task.title)}</span>
             </div>
           `;
         });
@@ -3758,18 +3758,20 @@
       const selectedDate = store.selectedCalendarDateStr || TODAY_STR;
       const titleEl = document.getElementById('cal-selected-day-title');
       const listEl = document.getElementById('cal-selected-tasks-list');
-      if (!listEl) return;
+      const modalTitleEl = document.getElementById('cal-day-modal-title');
+      const modalListEl = document.getElementById('cal-day-modal-list');
 
       const dateObj = new Date(selectedDate);
       const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
       const dayName = dayNames[dateObj.getDay()] || '';
+      const formattedTitle = `${selectedDate.replace(/-/g, '.')} (${dayName}요일) 일정/할 일 목록`;
 
-      if (titleEl) {
-        titleEl.textContent = `${selectedDate.replace(/-/g, '.')} (${dayName}요일) 일정/할 일 목록`;
-      }
+      if (titleEl) titleEl.textContent = formattedTitle;
+      if (modalTitleEl) modalTitleEl.textContent = `${selectedDate.replace(/-/g, '.')} (${dayName}요일) 일정`;
 
       const tasksForDate = store.tasks.filter(t => t.dueDate === selectedDate);
       const vacationsForDate = (store.vacations || []).filter(v => v.date === selectedDate);
+      const devlogItem = DEVLOG_DATA.find(d => d.date === selectedDate);
 
       let vacBannerHTML = '';
       if (vacationsForDate.length > 0) {
@@ -3789,14 +3791,47 @@
         }).join('');
       }
 
-      if (tasksForDate.length === 0 && vacationsForDate.length === 0) {
-        listEl.innerHTML = `
+      let devlogBannerHTML = '';
+      if (devlogItem) {
+        devlogBannerHTML = `
+          <div class="cal-devlog-chip v1-1" data-action="open-devlog-modal" data-devlog-ver="${devlogItem.version}" style="margin-bottom: 0.5rem; padding: 0.6rem 0.85rem; font-size: 0.86rem; border-radius: 8px; cursor: pointer;" title="클릭하여 상세 보기">
+            <span>🚀</span>
+            <span style="font-weight: 800;">${devlogItem.version} 배포: ${escapeHTML(devlogItem.title)}</span>
+          </div>
+        `;
+      }
+
+      let fullHTML = '';
+      if (tasksForDate.length === 0 && vacationsForDate.length === 0 && !devlogItem) {
+        fullHTML = `
           <div style="padding: 1.5rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.88rem; background: rgba(0,0,0,0.02); border-radius: var(--radius-md);">
             <span>🌷 이 날짜에 등록된 일정이 없어요. '+ 이 날짜에 새 일정/할 일 추가' 버튼을 눌러보세요!</span>
           </div>
         `;
       } else {
-        listEl.innerHTML = vacBannerHTML + tasksForDate.map(t => this.createTaskCardHTML(t)).join('');
+        fullHTML = vacBannerHTML + devlogBannerHTML + tasksForDate.map(t => this.createTaskCardHTML(t)).join('');
+      }
+
+      if (listEl) listEl.innerHTML = fullHTML;
+      if (modalListEl) modalListEl.innerHTML = fullHTML;
+    },
+
+    openDayDetailModal(dateStr) {
+      const modal = document.getElementById('cal-day-detail-modal');
+      if (!modal) return;
+      if (dateStr) {
+        store.selectedCalendarDateStr = dateStr;
+      }
+      this.renderSelectedDayTasks();
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    },
+
+    closeDayDetailModal() {
+      const modal = document.getElementById('cal-day-detail-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
       }
     },
 
@@ -8181,13 +8216,39 @@
     const calGrid = document.getElementById('month-days-grid');
     if (calGrid) {
       calGrid.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="open-devlog-modal"]')) return;
         const cell = e.target.closest('.cal-day-cell');
         if (cell && cell.dataset.date) {
           store.selectedCalendarDateStr = cell.dataset.date;
           calGrid.querySelectorAll('.cal-day-cell').forEach(c => c.classList.remove('selected'));
           cell.classList.add('selected');
           UI.renderSelectedDayTasks();
+          UI.openDayDetailModal(cell.dataset.date);
         }
+      });
+    }
+
+    // Calendar Day Detail Modal Event Listeners
+    const btnCloseCalDayModal = document.getElementById('btn-close-cal-day-modal');
+    const btnCancelCalDayModal = document.getElementById('btn-cancel-cal-day-modal');
+    const calDayModal = document.getElementById('cal-day-detail-modal');
+    const btnCalModalAddTask = document.getElementById('btn-cal-modal-add-task');
+
+    if (btnCloseCalDayModal) {
+      btnCloseCalDayModal.addEventListener('click', () => UI.closeDayDetailModal());
+    }
+    if (btnCancelCalDayModal) {
+      btnCancelCalDayModal.addEventListener('click', () => UI.closeDayDetailModal());
+    }
+    if (calDayModal) {
+      calDayModal.addEventListener('click', (e) => {
+        if (e.target === calDayModal) UI.closeDayDetailModal();
+      });
+    }
+    if (btnCalModalAddTask) {
+      btnCalModalAddTask.addEventListener('click', () => {
+        UI.closeDayDetailModal();
+        UI.openTaskModal(null, store.selectedCalendarDateStr || TODAY_STR);
       });
     }
 

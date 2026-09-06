@@ -4540,6 +4540,109 @@ body::after {
   .note-composer-card {
     padding: 0.85rem 1rem;
   }
+
+  /* =========================================================================
+     🌸 Mobile Optimization: Hide Chatbot & Square Calendar Grid with Emoji Chips
+     ========================================================================= */
+  /* 1. Hide AI Chatbot on Mobile Screen */
+  .chatbot-floating-btn,
+  .chatbot-modal-window,
+  #btn-open-chatbot,
+  #chatbot-modal-window {
+    display: none !important;
+  }
+
+  /* 2. Monthly Calendar Compact Square Grid */
+  .cal-days-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    grid-auto-rows: 1fr !important;
+    gap: 2px !important;
+    background: var(--border-subtle) !important;
+    padding: 2px !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .cal-day-cell {
+    aspect-ratio: 1 / 1 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 2px 1px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    gap: 1px !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+    position: relative !important;
+  }
+
+  .cal-day-header {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 0 2px !important;
+    margin-bottom: 1px !important;
+  }
+
+  .cal-day-num {
+    font-size: 0.72rem !important;
+    width: 17px !important;
+    height: 17px !important;
+    line-height: 17px !important;
+    font-weight: 800 !important;
+    margin: 0 auto !important;
+  }
+
+  .cal-today-badge,
+  .cal-day-count-badge {
+    display: none !important;
+  }
+
+  .cal-day-tasks {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 2px !important;
+    width: 100% !important;
+    max-height: calc(100% - 18px) !important;
+    overflow: hidden !important;
+    padding: 0 1px !important;
+  }
+
+  .cal-task-chip,
+  .cal-devlog-chip {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: 0.78rem !important;
+    line-height: 1 !important;
+    min-width: unset !important;
+    max-width: unset !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .cal-chip-text,
+  .cal-task-chip span:last-child:not(.cal-chip-icon),
+  .cal-devlog-chip span:last-child:not(.cal-chip-icon) {
+    display: none !important;
+  }
+
+  .cal-task-more {
+    font-size: 0.58rem !important;
+    font-weight: 800 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 1 !important;
+    color: var(--primary) !important;
+  }
 }
 
 /* =========================================================================
