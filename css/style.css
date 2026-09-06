@@ -7097,5 +7097,421 @@ body::after {
   transform: scale(1.08);
 }
 
+/* ==========================================================================
+   AI Study Hub (AI 스터디 & 개발 지식 노트) Styles
+   ========================================================================== */
+
+#aistudy-view-container {
+  width: 100%;
+  padding-bottom: 3rem;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.aistudy-header-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.aistudy-controls-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg-card);
+  padding: 1rem 1.2rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+}
+
+.aistudy-search-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.aistudy-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.aistudy-search-input {
+  width: 100%;
+  padding: 0.65rem 1rem 0.65rem 2.5rem;
+  background: var(--bg-main);
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.aistudy-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(255, 107, 139, 0.15);
+  background: var(--bg-card);
+}
+
+.aistudy-category-tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.aistudy-cat-tab {
+  padding: 0.45rem 0.95rem;
+  border-radius: 20px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.aistudy-cat-tab:hover {
+  color: var(--text-main);
+  border-color: rgba(255, 107, 139, 0.4);
+  transform: translateY(-1px);
+}
+
+.aistudy-cat-tab.active {
+  background: linear-gradient(135deg, var(--primary) 0%, #ff8e8e 100%);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 3px 10px rgba(255, 107, 139, 0.3);
+  font-weight: 700;
+}
+
+/* AI Study Cards Grid */
+.aistudy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1.25rem;
+}
+
+.aistudy-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.aistudy-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  border-color: rgba(255, 107, 139, 0.35);
+}
+
+.aistudy-card.is-pinned {
+  border: 1.5px solid rgba(255, 179, 0, 0.5);
+  background: linear-gradient(to bottom, rgba(255, 248, 225, 0.35), var(--bg-card));
+  box-shadow: 0 6px 18px rgba(255, 179, 0, 0.08);
+}
+
+[data-theme="dark"] .aistudy-card.is-pinned {
+  background: linear-gradient(to bottom, rgba(255, 179, 0, 0.06), var(--bg-card));
+  border-color: rgba(255, 179, 0, 0.35);
+}
+
+.aistudy-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.aistudy-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.22rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.73rem;
+  font-weight: 700;
+  background: rgba(255, 107, 139, 0.1);
+  color: var(--primary);
+  border: 1px solid rgba(255, 107, 139, 0.2);
+  letter-spacing: 0.02em;
+}
+
+.aistudy-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.aistudy-action-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.88rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.aistudy-action-btn:hover {
+  background: var(--bg-main);
+  color: var(--text-main);
+  transform: scale(1.1);
+}
+
+.aistudy-action-btn.pin-active {
+  color: #f59f00;
+}
+
+.aistudy-action-btn.delete-btn:hover {
+  background: rgba(235, 87, 87, 0.1);
+  color: #eb5757;
+}
+
+.aistudy-card-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.4;
+  margin: 0;
+  word-break: break-word;
+}
+
+.aistudy-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* 요약 / 설명 영역 */
+.aistudy-summary-box {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-main);
+  background: var(--bg-main);
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border-left: 3.5px solid var(--primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 프롬프트 & 코드 스니펫 박스 */
+.aistudy-snippet-box {
+  background: #1e1e2e;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.aistudy-snippet-header {
+  background: #181825;
+  padding: 0.45rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.aistudy-snippet-label {
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #a6adc8;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.aistudy-copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #cdd6f4;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.aistudy-copy-btn:hover {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.aistudy-copy-btn.copied {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  border-color: #10b981 !important;
+}
+
+.aistudy-snippet-content {
+  padding: 0.75rem 0.85rem;
+  margin: 0;
+  font-family: 'Fira Code', Consolas, Monaco, 'Courier New', monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #cdd6f4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.aistudy-snippet-content::-webkit-scrollbar {
+  width: 5px;
+}
+.aistudy-snippet-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+/* 태그 & 링크 바 */
+.aistudy-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.4rem;
+}
+
+.aistudy-tags-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.aistudy-tag-chip {
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aistudy-tag-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(255, 107, 139, 0.06);
+}
+
+.aistudy-link-btn {
+  font-size: 0.75rem;
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 107, 139, 0.08);
+  transition: all 0.15s ease;
+}
+
+.aistudy-link-btn:hover {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+/* AI Study Empty State */
+.aistudy-empty-card {
+  grid-column: 1 / -1;
+  padding: 3.5rem 1.5rem;
+  text-align: center;
+  background: var(--bg-card);
+  border: 2px dashed var(--border-color);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.aistudy-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 0.25rem;
+  animation: float 3s ease-in-out infinite;
+}
+
+.aistudy-empty-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.aistudy-empty-desc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  max-width: 380px;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .aistudy-grid {
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+  }
+  
+  .aistudy-controls-bar {
+    padding: 0.75rem 0.85rem;
+    gap: 0.65rem;
+  }
+
+  .aistudy-card {
+    padding: 1rem;
+  }
+
+  .aistudy-card-title {
+    font-size: 0.98rem;
+  }
+
+  .aistudy-snippet-content {
+    max-height: 180px;
+    font-size: 0.78rem;
+  }
+}
+
 
 

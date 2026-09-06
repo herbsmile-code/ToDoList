@@ -51,6 +51,8 @@
             'ledger': '💰 가계부로 이동했어요!',
             'wishlist': '🎁 위시리스트로 이동했어요!',
             'sites': '🌐 사이트 모음으로 이동했어요!',
+            'aistudy': '🤖 AI 스터디 지식 노트로 이동했어요!',
+            'devlog': '🚀 개발기록으로 이동했어요!',
             'vault': '📁 파일 보관함으로 이동했어요!'
           };
           if (catMap[filter]) {
@@ -816,7 +818,7 @@
         'tasks-view-container', 'files-view-container', 'wishlist-view-container',
         'photos-view-container', 'notes-view-container', 'ledger-view-container',
         'calendar-month-view-container', 'calendar-week-view-container',
-        'vacation-view-container', 'sites-view-container'
+        'vacation-view-container', 'sites-view-container', 'aistudy-view-container', 'devlog-view-container'
       ].map(id => document.getElementById(id));
 
       const isLogged = !!(this.spaceId && this.pin);
@@ -846,6 +848,7 @@
       try { UI.renderCalendarWeek(); } catch (e) {}
       try { UI.renderVacation(); } catch (e) {}
       try { UI.renderSites(); } catch (e) {}
+      try { UI.renderAiStudy(); } catch (e) {}
       try { UI.renderSidebar(); } catch (e) {}
     }
 
@@ -1002,8 +1005,11 @@
                     store.projects = (store.projects || []).filter(p => p && p.id && !store.deletedItemIds.has(p.id));
                   }
                 }
+                if (data.aiStudyNotes !== undefined) {
+                  store.aiStudyNotes = normalizeArray(data.aiStudyNotes).filter(n => n && n.id && !deletedIds.has(n.id));
+                }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
-                  const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+                  const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'aistudy', 'devlog', 'vault'];
                   let order = data.sidebarMenuOrder.slice();
                   if (!order.includes('project')) {
                     const d1Idx = order.indexOf('divider-1');
@@ -1027,6 +1033,15 @@
                     const vacIdx = order.indexOf('vacation');
                     if (vacIdx !== -1) order.splice(vacIdx, 0, 'health');
                     else order.push('health');
+                  }
+                  if (!order.includes('aistudy')) {
+                    const devIdx = order.indexOf('devlog');
+                    if (devIdx !== -1) order.splice(devIdx, 0, 'aistudy');
+                    else {
+                      const vaultIdx = order.indexOf('vault');
+                      if (vaultIdx !== -1) order.splice(vaultIdx, 0, 'aistudy');
+                      else order.push('aistudy');
+                    }
                   }
                   if (!order.includes('devlog')) {
                     const vaultIdx = order.indexOf('vault');
@@ -1192,6 +1207,7 @@
         healthFolders: store.healthFolders,
         hobbyNotes: (store.hobbyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
         hobbyFolders: store.hobbyFolders,
+        aiStudyNotes: (store.aiStudyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
         projects: (store.projects || []).filter(p => p && p.id && !deletedIds.has(p.id)),
         customMenuNames: store.customMenuNames,
         customTheme: store.customTheme,
@@ -1515,6 +1531,47 @@
     { id: 'work', name: '업무 💼', color: '#868e96' }
   ];
 
+  // 4.1. AI Study & Prompt Knowledge Categories & Sample Notes
+  const DEFAULT_AI_STUDY_CATEGORIES = [
+    { id: 'all', name: '전체 보기', icon: '🌟', color: '#ff6b8b' },
+    { id: 'llm', name: 'LLM & 프롬프트', icon: '🤖', color: '#7048e8' },
+    { id: 'vibe', name: 'Vibe 코딩 & 실전', icon: '💻', color: '#10b981' },
+    { id: 'agent', name: 'AI 에이전트 & 도구', icon: '🛠️', color: '#f59f00' },
+    { id: 'tips', name: '핵심 지식 & 팁', icon: '📚', color: '#339af0' },
+    { id: 'scrap', name: '아이디어 & 스크랩', icon: '💡', color: '#e64980' }
+  ];
+
+  const DEFAULT_AI_STUDY_NOTES = [
+    {
+      id: 'ai-vibe-best-practices',
+      title: 'Claude Code & Antigravity 바이브 코딩 베스트 프랙티스',
+      category: 'vibe',
+      summary: '명확한 요구사항 분리와 단계적 검증으로 AI와 페어 프로그래밍 시 환각(Hallucination) 없이 고품질 코드 생산하기',
+      content: '1. 모듈 단위 진행: 한 번에 너무 많은 변경을 요구하지 않고 단일 책임 단위로 지시\n2. 아키텍처 및 계획 먼저 수립: 구현 전 Plan과 데이터 모델링을 먼저 정렬\n3. 즉각적인 검증: 브라우저 및 단위 테스트로 회귀 버그 방지',
+      codeSnippet: `// 구조화된 AI 프롬프트 템플릿\n[Role]: 시니어 풀스택 엔지니어\n[Goal]: ToDoList 앱에 'AI 스터디' 노트 관리 모듈 추가\n[Constraints]:\n1. Zero Data Loss 보장 (로컬스토리지 및 E2EE 클라우드 동기화)\n2. 기존 코드베이스의 CSS 변수와 디자인 시스템 유지\n3. 프롬프트/코드 원클릭 복사 기능 구현`,
+      snippetLang: 'Prompt',
+      tags: ['#VibeCoding', '#Prompt', '#BestPractice'],
+      refUrl: 'https://docs.anthropic.com',
+      pinned: true,
+      createdAt: 1788690000000,
+      updatedAt: 1788690000000
+    },
+    {
+      id: 'ai-gemini-sys-instruction',
+      title: 'Gemini 2.0 Flash / Pro 시스템 프롬프트 최적화 가이드',
+      category: 'llm',
+      summary: '출력 형식 강제(JSON/Markdown) 및 Role-Play 설정을 통한 추론 정확도 및 속도 극대화',
+      content: 'Gemini 모델은 간결하고 명확한 Role-Play 및 Output Constraints에 민감하게 반응합니다. System Instruction에 규칙을 번호 매겨 작성하면 지시 이행률이 대폭 향상됩니다.',
+      codeSnippet: `import google.generativeai as genai\n\nmodel = genai.GenerativeModel(\n    model_name="gemini-2.0-flash",\n    system_instruction="너는 AI 지식 정리 전문 어시스턴트야. 사용자가 입력한 내용을 핵심 요약, 상세 설명, 코드 스니펫으로 구조화해서 답변해줘."\n)\n\nresponse = model.generate_content("바이브 코딩 핵심 정리해줘")\nprint(response.text)`,
+      snippetLang: 'Python',
+      tags: ['#Gemini', '#Python', '#LLM'],
+      refUrl: 'https://ai.google.dev',
+      pinned: false,
+      createdAt: 1788680000000,
+      updatedAt: 1788680000000
+    }
+  ];
+
   const INITIAL_DEMO_TASKS = [];
   const INITIAL_DEMO_WISHLIST = [];
   const INITIAL_DEMO_NOTES = [];
@@ -1625,11 +1682,14 @@
       this.selectedHobbyNotes = new Set();
       this.projects = [];
       this.activeProjectId = null;
+      this.aiStudyNotes = [];
+      this.activeAiStudyCategory = 'all';
+      this.aiStudySearchQuery = '';
       this.customMenuNames = {};
       this.customTheme = null;
       this.themeHistory = [];
       this.menuNameHistory = [];
-      this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+      this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'aistudy', 'devlog', 'vault'];
       this.searchQuery = '';
       this.sortBy = 'dueDate';
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
@@ -1672,6 +1732,7 @@
       let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS.slice();
       let userVaultFolders = (savedData && Array.isArray(savedData.vaultFolders)) ? savedData.vaultFolders : DEFAULT_VAULT_FOLDERS.slice();
       const userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+      const userAiStudyNotes = (savedData && Array.isArray(savedData.aiStudyNotes)) ? savedData.aiStudyNotes : [];
       const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
       this.customMenuNames = (savedData && typeof savedData.customMenuNames === 'object' && savedData.customMenuNames) ? savedData.customMenuNames : {};
       this.customTheme = (savedData && savedData.customTheme) ? savedData.customTheme : null;
@@ -1757,7 +1818,7 @@
       });
 
       // Sidebar menu items order with dividers, project, hobby, health, and devlog
-      const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'devlog', 'vault'];
+      const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'aistudy', 'devlog', 'vault'];
       let finalOrder = userSidebarOrder ? userSidebarOrder.slice() : defaultOrder;
 
       // 1. Ensure essential items exist
@@ -1783,6 +1844,15 @@
         const vacIdx = finalOrder.indexOf('vacation');
         if (vacIdx !== -1) finalOrder.splice(vacIdx, 0, 'health');
         else finalOrder.push('health');
+      }
+      if (!finalOrder.includes('aistudy')) {
+        const devIdx = finalOrder.indexOf('devlog');
+        if (devIdx !== -1) finalOrder.splice(devIdx, 0, 'aistudy');
+        else {
+          const vaultIdx = finalOrder.indexOf('vault');
+          if (vaultIdx !== -1) finalOrder.splice(vaultIdx, 0, 'aistudy');
+          else finalOrder.push('aistudy');
+        }
       }
       if (!finalOrder.includes('devlog')) {
         const vaultIdx = finalOrder.indexOf('vault');
@@ -1814,6 +1884,15 @@
         finalOrder.splice(dvIdx, 1);
         const newVIdx = finalOrder.indexOf('vacation');
         finalOrder.splice(newVIdx + 1, 0, 'divider-vacation');
+      }
+
+      // 4. Ensure aistudy is positioned RIGHT BEFORE devlog (개발기록 메뉴 바로 위에 AI 스터디)
+      const aiIdx = finalOrder.indexOf('aistudy');
+      const dlIdx = finalOrder.indexOf('devlog');
+      if (aiIdx !== -1 && dlIdx !== -1 && aiIdx !== dlIdx - 1) {
+        finalOrder.splice(aiIdx, 1);
+        const newDlIdx = finalOrder.indexOf('devlog');
+        finalOrder.splice(newDlIdx, 0, 'aistudy');
       }
 
       this.tasks = combinedTasks;
@@ -1858,6 +1937,21 @@
       this.projects = cleanProjects;
       this.activeProjectId = (this.projects && this.projects.length > 0) ? this.projects[0].id : null;
 
+      // 2. Initial 1-time AI Study notes migration / seeding flag
+      const AI_STUDY_SEED_KEY = 'todolist_jy_aistudy_seeded_v1';
+      const isAiSeeded = localStorage.getItem(AI_STUDY_SEED_KEY) === 'true';
+      let cleanAiStudy = (userAiStudyNotes || []).filter(n => n && n.id && !this.deletedItemIds.has(n.id));
+
+      if (!isAiSeeded) {
+        localStorage.setItem(AI_STUDY_SEED_KEY, 'true');
+        DEFAULT_AI_STUDY_NOTES.forEach(defNote => {
+          if (!this.deletedItemIds.has(defNote.id) && !cleanAiStudy.some(n => n.id === defNote.id)) {
+            cleanAiStudy.push(JSON.parse(JSON.stringify(defNote)));
+          }
+        });
+      }
+      this.aiStudyNotes = cleanAiStudy;
+
       this.lastUpdatedAt = (savedData && savedData.updatedAt) ? Number(savedData.updatedAt) : 0;
 
       try {
@@ -1895,6 +1989,7 @@
           hobbyFolders: this.hobbyFolders,
           vaultFolders: this.vaultFolders,
           projects: this.projects,
+          aiStudyNotes: this.aiStudyNotes,
           customMenuNames: this.customMenuNames,
           customTheme: this.customTheme,
           syncRevision: rev,
@@ -2489,6 +2584,96 @@
       return deletedCount;
     }
 
+    // --- AI Study & Knowledge Hub Methods ---
+    addAiStudyNote(data) {
+      let tags = [];
+      if (Array.isArray(data.tags)) tags = data.tags;
+      else if (typeof data.tags === 'string') {
+        tags = data.tags.split(/[\s,]+/).map(t => t.trim()).filter(Boolean).map(t => t.startsWith('#') ? t : `#${t}`);
+      }
+
+      const newNote = {
+        id: 'ai-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        title: (data.title || '').trim(),
+        category: data.category || 'llm',
+        summary: (data.summary || '').trim(),
+        content: (data.content || '').trim(),
+        codeSnippet: (data.codeSnippet || '').trim(),
+        snippetLang: data.snippetLang || 'Prompt',
+        tags: tags,
+        refUrl: (data.refUrl || '').trim(),
+        pinned: !!data.pinned,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      this.aiStudyNotes.unshift(newNote);
+      this.save(true);
+      return newNote;
+    }
+
+    updateAiStudyNote(id, updates) {
+      const note = this.aiStudyNotes.find(n => n.id === id);
+      if (!note) return null;
+      if (updates.tags !== undefined) {
+        if (Array.isArray(updates.tags)) {
+          note.tags = updates.tags;
+        } else if (typeof updates.tags === 'string') {
+          note.tags = updates.tags.split(/[\s,]+/).map(t => t.trim()).filter(Boolean).map(t => t.startsWith('#') ? t : `#${t}`);
+        }
+        delete updates.tags;
+      }
+      Object.assign(note, updates, { updatedAt: Date.now() });
+      this.save(true);
+      return note;
+    }
+
+    deleteAiStudyNote(id) {
+      if (!id) return false;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
+      const idx = this.aiStudyNotes.findIndex(n => n && String(n.id).trim() === targetId);
+      if (idx !== -1) this.aiStudyNotes.splice(idx, 1);
+      this.save(true);
+      return true;
+    }
+
+    togglePinAiStudyNote(id) {
+      const note = this.aiStudyNotes.find(n => n.id === id);
+      if (!note) return false;
+      note.pinned = !note.pinned;
+      note.updatedAt = Date.now();
+      this.save(true);
+      return note.pinned;
+    }
+
+    getFilteredAiStudyNotes() {
+      const category = this.activeAiStudyCategory || 'all';
+      const q = (this.aiStudySearchQuery || '').toLowerCase().trim();
+
+      return (this.aiStudyNotes || []).filter(note => {
+        if (!note || !note.id || this.deletedItemIds.has(note.id)) return false;
+
+        // Category filter
+        if (category !== 'all' && note.category !== category) return false;
+
+        // Search query filter
+        if (q) {
+          const matchTitle = (note.title || '').toLowerCase().includes(q);
+          const matchSummary = (note.summary || '').toLowerCase().includes(q);
+          const matchContent = (note.content || '').toLowerCase().includes(q);
+          const matchCode = (note.codeSnippet || '').toLowerCase().includes(q);
+          const matchTags = (note.tags || []).some(tag => tag.toLowerCase().includes(q));
+          if (!matchTitle && !matchSummary && !matchContent && !matchCode && !matchTags) return false;
+        }
+
+        return true;
+      }).sort((a, b) => {
+        if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
+        return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
+      });
+    }
+
     // --- Vault Folders Methods ---
     addVaultFolder(name, icon = '📁') {
       const cleanName = (name || '').trim();
@@ -2911,7 +3096,8 @@
         wishlist: store.wishlist.length,
         vacation: store.vacations.length,
         sites: store.sites.length,
-        project: (store.projects || []).length
+        project: (store.projects || []).length,
+        aistudy: (store.aiStudyNotes || []).length
       };
 
       Object.keys(counts).forEach(k => {
@@ -3010,6 +3196,7 @@
           'ledger': { name: customNames.ledger || '가계부', icon: '💰', count: store.ledgerFiles.length },
           'wishlist': { name: customNames.wishlist || '위시리스트', icon: '🎁', count: store.wishlist.length },
           'sites': { name: customNames.sites || '사이트', icon: '🌐', count: store.sites.length },
+          'aistudy': { name: customNames.aistudy || 'AI 스터디', icon: '🤖', count: (store.aiStudyNotes || []).length },
           'devlog': { name: customNames.devlog || '개발기록', icon: '🚀', count: DEVLOG_DATA.length },
           'vault': { name: customNames.vault || '파일 보관함', icon: '📁', count: vaultCount }
         };
@@ -3397,6 +3584,7 @@
       const healthView = document.getElementById('health-view-container');
       const vacationView = document.getElementById('vacation-view-container');
       const sitesView = document.getElementById('sites-view-container');
+      const aistudyView = document.getElementById('aistudy-view-container');
       const devlogView = document.getElementById('devlog-view-container');
       const projectView = document.getElementById('project-view-container');
 
@@ -3408,7 +3596,7 @@
 
       const isLogged = !!(cloudSync.spaceId && cloudSync.pin);
 
-      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, hobbyView, healthView, vacationView, sitesView, devlogView, projectView];
+      const allViews = [tasksView, filesView, wishView, photosView, notesView, ledgerView, calMView, calWView, hobbyView, healthView, vacationView, sitesView, aistudyView, devlogView, projectView];
 
       if (lockedScreen) lockedScreen.style.display = 'none';
       if (mobileBar && mobileBar.style.display !== 'flex') mobileBar.style.display = 'flex';
@@ -3427,6 +3615,7 @@
       else if (filter === 'ledger') targetView = ledgerView;
       else if (filter === 'wishlist') targetView = wishView;
       else if (filter === 'sites') targetView = sitesView;
+      else if (filter === 'aistudy') targetView = aistudyView;
       else if (filter === 'devlog') targetView = devlogView;
       else if (filter === 'vault') targetView = filesView;
       else targetView = tasksView;
@@ -3506,6 +3695,12 @@
       // 6.5. 🌐 사이트 모음 (Sites) View
       if (filter === 'sites') {
         this.renderSites();
+        return;
+      }
+
+      // 6.7. 🤖 AI 스터디 & 지식 노트 (AI Study Hub) View
+      if (filter === 'aistudy') {
+        this.renderAiStudy();
         return;
       }
 
@@ -6515,6 +6710,241 @@
     },
 
     // =========================================================================
+    // 🤖 AI 스터디 & 지식 노트 (AI Study Hub UI Engine)
+    // =========================================================================
+    renderAiStudy() {
+      const tabsBar = document.getElementById('aistudy-category-tabs');
+      const gridContainer = document.getElementById('aistudy-grid-container');
+      const emptyState = document.getElementById('aistudy-empty-state');
+      const countBadge = document.getElementById('aistudy-count-badge');
+      const searchInput = document.getElementById('aistudy-search-input');
+
+      if (!gridContainer) return;
+
+      const activeCat = store.activeAiStudyCategory || 'all';
+      const categories = DEFAULT_AI_STUDY_CATEGORIES;
+      const allNotes = store.aiStudyNotes || [];
+      const filteredNotes = store.getFilteredAiStudyNotes();
+
+      // 1. Render Category Tabs
+      if (tabsBar) {
+        tabsBar.innerHTML = categories.map(cat => {
+          const isActive = (cat.id === activeCat);
+          const count = (cat.id === 'all')
+            ? allNotes.length
+            : allNotes.filter(n => n.category === cat.id).length;
+          
+          return `
+            <button type="button" class="aistudy-cat-tab ${isActive ? 'active' : ''}" data-aistudy-cat="${cat.id}">
+              <span>${cat.icon}</span>
+              <span>${escapeHTML(cat.name)}</span>
+              <span class="badge" style="font-size: 0.72rem; padding: 1px 6px; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)'}; color: ${isActive ? '#fff' : 'var(--text-muted)'}; border-radius: 10px;">${count}</span>
+            </button>
+          `;
+        }).join('');
+      }
+
+      if (countBadge) {
+        countBadge.textContent = `총 ${filteredNotes.length}개`;
+      }
+
+      if (searchInput && searchInput.value !== (store.aiStudySearchQuery || '')) {
+        searchInput.value = store.aiStudySearchQuery || '';
+      }
+
+      // 2. Empty State
+      if (filteredNotes.length === 0) {
+        if (gridContainer) gridContainer.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'flex';
+        return;
+      }
+
+      if (emptyState) emptyState.style.display = 'none';
+
+      // 3. Render Cards
+      gridContainer.innerHTML = filteredNotes.map(note => {
+        const catObj = categories.find(c => c.id === note.category) || categories[1];
+        const dateStr = new Date(note.updatedAt || note.createdAt || Date.now()).toLocaleDateString('ko-KR', {
+          year: 'numeric', month: 'short', day: 'numeric'
+        });
+
+        // Code/Prompt snippet box
+        let codeHtml = '';
+        if (note.codeSnippet && note.codeSnippet.trim()) {
+          const langLabel = note.snippetLang || 'Code';
+          codeHtml = `
+            <div class="aistudy-code-box">
+              <div class="aistudy-code-header">
+                <span class="aistudy-lang-badge">${escapeHTML(langLabel)}</span>
+                <button type="button" class="aistudy-copy-btn" data-action="copy-ai-snippet" data-id="${note.id}" title="프롬프트/코드 복사">
+                  <span>📋</span>
+                  <span>복사</span>
+                </button>
+              </div>
+              <pre class="aistudy-code-content"><code>${escapeHTML(note.codeSnippet)}</code></pre>
+            </div>
+          `;
+        }
+
+        // Tags
+        let tagsHtml = '';
+        if (Array.isArray(note.tags) && note.tags.length > 0) {
+          tagsHtml = `
+            <div class="aistudy-tags-row">
+              ${note.tags.map(t => `<span class="aistudy-tag-chip">${escapeHTML(t)}</span>`).join('')}
+            </div>
+          `;
+        }
+
+        // Reference link button
+        let refLinkHtml = '';
+        if (note.refUrl && note.refUrl.trim()) {
+          const safeUrl = escapeHTML(note.refUrl.trim());
+          refLinkHtml = `
+            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="aistudy-ref-link" title="참고 링크 열기">
+              <span>🔗</span>
+              <span>참고 문서</span>
+            </a>
+          `;
+        }
+
+        return `
+          <div class="aistudy-card ${note.pinned ? 'is-pinned' : ''}" data-aistudy-id="${note.id}">
+            <div class="aistudy-card-header">
+              <div class="aistudy-card-meta">
+                <span class="aistudy-cat-badge" style="background: ${catObj.color}15; color: ${catObj.color}; border: 1px solid ${catObj.color}35;">
+                  ${catObj.icon} ${escapeHTML(catObj.name)}
+                </span>
+                <span class="aistudy-date">📅 ${dateStr}</span>
+                ${note.pinned ? `<span class="aistudy-pin-badge" title="상단 고정됨">📌 고정</span>` : ''}
+              </div>
+              <div class="aistudy-card-actions">
+                <button type="button" class="aistudy-action-btn ${note.pinned ? 'active' : ''}" data-action="toggle-pin-aistudy" data-id="${note.id}" title="${note.pinned ? '고정 해제' : '상단 고정'}">
+                  📌
+                </button>
+                <button type="button" class="aistudy-action-btn" data-action="edit-aistudy" data-id="${note.id}" title="수정">
+                  ✏️
+                </button>
+                <button type="button" class="aistudy-action-btn delete-btn" data-action="delete-aistudy" data-id="${note.id}" title="삭제">
+                  🗑️
+                </button>
+              </div>
+            </div>
+
+            <h3 class="aistudy-card-title">${escapeHTML(note.title)}</h3>
+
+            ${note.summary ? `
+              <div class="aistudy-summary-box">
+                <span class="aistudy-summary-icon">💡</span>
+                <div class="aistudy-summary-text">${escapeHTML(note.summary)}</div>
+              </div>
+            ` : ''}
+
+            ${note.content ? `
+              <div class="aistudy-content-text">${escapeHTML(note.content).replace(/\n/g, '<br>')}</div>
+            ` : ''}
+
+            ${codeHtml}
+
+            <div class="aistudy-card-footer">
+              ${tagsHtml}
+              ${refLinkHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      this.renderSidebar();
+    },
+
+    openAiStudyModal(noteId = null) {
+      const modal = document.getElementById('aistudy-modal');
+      const titleInput = document.getElementById('aistudy-modal-title');
+      const catSelect = document.getElementById('aistudy-modal-category');
+      const summaryInput = document.getElementById('aistudy-modal-summary');
+      const contentInput = document.getElementById('aistudy-modal-content');
+      const codeInput = document.getElementById('aistudy-modal-code');
+      const langSelect = document.getElementById('aistudy-modal-lang');
+      const tagsInput = document.getElementById('aistudy-modal-tags');
+      const urlInput = document.getElementById('aistudy-modal-url');
+      const pinCheckbox = document.getElementById('aistudy-modal-pinned');
+      const modalHeaderTitle = document.getElementById('aistudy-modal-header-title');
+      const editIdHidden = document.getElementById('aistudy-modal-edit-id');
+
+      if (!modal) return;
+
+      if (noteId) {
+        const note = (store.aiStudyNotes || []).find(n => n.id === noteId);
+        if (!note) return;
+        if (modalHeaderTitle) modalHeaderTitle.textContent = '✏️ AI 스터디 노트 수정';
+        if (editIdHidden) editIdHidden.value = note.id;
+        if (titleInput) titleInput.value = note.title || '';
+        if (catSelect) catSelect.value = note.category || 'llm';
+        if (summaryInput) summaryInput.value = note.summary || '';
+        if (contentInput) contentInput.value = note.content || '';
+        if (codeInput) codeInput.value = note.codeSnippet || '';
+        if (langSelect) langSelect.value = note.snippetLang || 'Prompt';
+        if (tagsInput) tagsInput.value = Array.isArray(note.tags) ? note.tags.join(', ') : (note.tags || '');
+        if (urlInput) urlInput.value = note.refUrl || '';
+        if (pinCheckbox) pinCheckbox.checked = !!note.pinned;
+      } else {
+        if (modalHeaderTitle) modalHeaderTitle.textContent = '💡 새 AI 스터디 노트 작성';
+        if (editIdHidden) editIdHidden.value = '';
+        if (titleInput) titleInput.value = '';
+        if (catSelect) catSelect.value = store.activeAiStudyCategory !== 'all' ? store.activeAiStudyCategory : 'llm';
+        if (summaryInput) summaryInput.value = '';
+        if (contentInput) contentInput.value = '';
+        if (codeInput) codeInput.value = '';
+        if (langSelect) langSelect.value = 'Prompt';
+        if (tagsInput) tagsInput.value = '';
+        if (urlInput) urlInput.value = '';
+        if (pinCheckbox) pinCheckbox.checked = false;
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (titleInput) setTimeout(() => titleInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeAiStudyModal() {
+      const modal = document.getElementById('aistudy-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
+    async copyAiStudySnippet(noteId, targetBtn) {
+      const note = (store.aiStudyNotes || []).find(n => n.id === noteId);
+      if (!note || !note.codeSnippet) return;
+
+      try {
+        await navigator.clipboard.writeText(note.codeSnippet);
+        if (targetBtn) {
+          const originalHTML = targetBtn.innerHTML;
+          targetBtn.innerHTML = '<span>✓</span><span>복사됨!</span>';
+          targetBtn.classList.add('copied');
+          setTimeout(() => {
+            targetBtn.innerHTML = originalHTML;
+            targetBtn.classList.remove('copied');
+          }, 1800);
+        }
+        UI.showToast('프롬프트/코드가 클립보드에 복사되었어요! 📋✨', 'success');
+      } catch (err) {
+        const textarea = document.createElement('textarea');
+        textarea.value = note.codeSnippet;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        UI.showToast('프롬프트/코드가 클립보드에 복사되었어요! 📋✨', 'success');
+      }
+    },
+
+    // =========================================================================
     // 🚀 개발기록 (Dev Log Engine)
     // =========================================================================
     renderDevLog() {
@@ -7649,6 +8079,10 @@
         } else if (handler === 'openWishlistModal') {
           UI.openWishlistModal();
           UI.closeQuickGroupMenu();
+        } else if (handler === 'openAiStudyModal') {
+          window.selectCategoryFilter('aistudy');
+          UI.closeQuickGroupMenu();
+          setTimeout(() => UI.openAiStudyModal(), 120);
         } else if (handler === 'focusNoteComposer') {
           window.selectCategoryFilter('notes');
           UI.closeQuickGroupMenu();
@@ -10084,6 +10518,123 @@
       }
     });
 
+    // --- AI Study & Knowledge Hub Event Handlers ---
+    // 1. Search input
+    const aiSearchInput = document.getElementById('aistudy-search-input');
+    if (aiSearchInput) {
+      aiSearchInput.addEventListener('input', (e) => {
+        store.aiStudySearchQuery = e.target.value;
+        UI.renderAiStudy();
+      });
+    }
+
+    // 2. Category Tabs Click
+    const aiTabsBar = document.getElementById('aistudy-category-tabs');
+    if (aiTabsBar) {
+      aiTabsBar.addEventListener('click', (e) => {
+        const tab = e.target.closest('.aistudy-cat-tab');
+        if (tab && tab.dataset.aistudyCat) {
+          store.activeAiStudyCategory = tab.dataset.aistudyCat;
+          UI.renderAiStudy();
+        }
+      });
+    }
+
+    // 3. Open Modal Buttons
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-open-aistudy-modal') || e.target.closest('#btn-aistudy-empty-add')) {
+        UI.openAiStudyModal();
+      }
+      if (e.target.closest('[data-close-aistudy-modal]')) {
+        UI.closeAiStudyModal();
+      }
+    });
+
+    // 4. Modal Form Submit
+    const aiModalForm = document.getElementById('aistudy-modal-form');
+    if (aiModalForm) {
+      aiModalForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const editId = document.getElementById('aistudy-modal-edit-id')?.value;
+        const title = (document.getElementById('aistudy-modal-title')?.value || '').trim();
+        const category = document.getElementById('aistudy-modal-category')?.value || 'llm';
+        const summary = (document.getElementById('aistudy-modal-summary')?.value || '').trim();
+        const content = (document.getElementById('aistudy-modal-content')?.value || '').trim();
+        const codeSnippet = (document.getElementById('aistudy-modal-code')?.value || '').trim();
+        const snippetLang = document.getElementById('aistudy-modal-lang')?.value || 'Prompt';
+        const tags = (document.getElementById('aistudy-modal-tags')?.value || '').trim();
+        const refUrl = (document.getElementById('aistudy-modal-url')?.value || '').trim();
+        const pinned = !!document.getElementById('aistudy-modal-pinned')?.checked;
+
+        if (!title) {
+          UI.showToast('스터디 노트 제목을 입력해주세요 💡', 'danger');
+          return;
+        }
+
+        if (editId) {
+          store.updateAiStudyNote(editId, {
+            title, category, summary, content, codeSnippet, snippetLang, tags, refUrl, pinned
+          });
+          UI.showToast('AI 스터디 노트가 수정되었어요! ✨', 'info');
+        } else {
+          store.addAiStudyNote({
+            title, category, summary, content, codeSnippet, snippetLang, tags, refUrl, pinned
+          });
+          sounds.playAdd();
+          if (window.confetti && window.confetti.burst) {
+            window.confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 20);
+          }
+          UI.showToast('새 AI 스터디 노트가 등록되었어요! 🤖💡', 'success');
+        }
+
+        UI.closeAiStudyModal();
+        UI.renderAiStudy();
+        UI.renderSidebar();
+      });
+    }
+
+    // 5. Card Actions Delegation (Copy, Pin, Edit, Delete)
+    const aiGrid = document.getElementById('aistudy-grid-container');
+    if (aiGrid) {
+      aiGrid.addEventListener('click', (e) => {
+        const copyBtn = e.target.closest('[data-action="copy-ai-snippet"]');
+        if (copyBtn) {
+          const id = copyBtn.dataset.id;
+          UI.copyAiStudySnippet(id, copyBtn);
+          return;
+        }
+
+        const pinBtn = e.target.closest('[data-action="toggle-pin-aistudy"]');
+        if (pinBtn) {
+          const id = pinBtn.dataset.id;
+          const isPinned = store.togglePinAiStudyNote(id);
+          UI.showToast(isPinned ? '상단에 고정되었어요! 📌' : '고정이 해제되었어요', 'info');
+          UI.renderAiStudy();
+          return;
+        }
+
+        const editBtn = e.target.closest('[data-action="edit-aistudy"]');
+        if (editBtn) {
+          const id = editBtn.dataset.id;
+          UI.openAiStudyModal(id);
+          return;
+        }
+
+        const deleteBtn = e.target.closest('[data-action="delete-aistudy"]');
+        if (deleteBtn) {
+          const id = deleteBtn.dataset.id;
+          if (confirm('이 AI 스터디 노트를 정말 삭제하시겠습니까?')) {
+            store.deleteAiStudyNote(id);
+            sounds.playDelete();
+            UI.showToast('AI 스터디 노트가 안전하게 삭제되었어요 🗑️', 'info');
+            UI.renderAiStudy();
+            UI.renderSidebar();
+          }
+          return;
+        }
+      });
+    }
+
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
@@ -10124,6 +10675,7 @@
         UI.closeWishlistModal();
         UI.closeLedgerModal();
         UI.closeFileUploadModal();
+        UI.closeAiStudyModal();
         UI.closeCloudModal();
         const sc = document.getElementById('shortcuts-modal');
         const st = document.getElementById('settings-modal');
