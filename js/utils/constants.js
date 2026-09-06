@@ -26,12 +26,28 @@
   // =========================================================================
   const DEVLOG_DATA = [
     {
-      version: 'v1.3.0',
+      version: 'v1.3.3',
       date: '2026-09-06',
       dateFormatted: '2026년 9월 6일 (오늘)',
-      title: '🏗️ 1단계 안전 모듈화 (상수/유틸/E2EE 보안 엔진 분리) & 📖 AI 스터디 지식 노트 상세 뷰어 완비 (v1.3.0)',
+      title: '💍 신혼 가계부 탭 분리(가계부 / 구독관리) & 🔄 스마트 구독관리 허브 신설 (v1.3.3)',
       badge: '최신 배포 🌟',
       badgeColor: '#ff6b8b',
+      summary: '신혼 가계부 화면 내 2개 서브 탭(가계부 / 구독관리) 분리, 가계부 상단 표준양식 다운로드 버튼 제거, 안티그래비티·WAVVE·지니뮤직 등 정기 구독 서비스 통합 관리 시스템 구축',
+      details: [
+        '📑 신혼 가계부 2-Way 서브 탭 바 신설: 💍 신혼 가계부(엑셀 결산/통계)와 🔄 구독관리(정기 결제/고정지출) 탭 분리로 화면 편의성 대폭 향상',
+        '📥 가계부 뷰 클린업: 요청에 따라 상단 2026 표준 양식 다운로드 버튼을 제거하고 핵심 지표 및 12개월 엑셀 분석 화면에 집중',
+        '🔄 스마트 구독관리 대시보드 신설: 이번 달 총 구독료, 연간 예상 지출액, 다가오는 결제일 D-Day 카운트다운 뱃지, 이용 중인 활성 구독 수 실시간 계산',
+        '💳 감성 구독 카드 그리드 & 모달: 안티그래비티(23,000원), WAVVE(10,900원), 지니뮤직(8,800원), 쿠팡와우(7,890원) 등 24종 이모지 피커, 매월/매년 결제주기, 원클릭 구독 중/일시중지 토글 지원',
+        '🛡️ E2EE AES-256 클라우드 동기화 & 톰스톤(Tombstone) 영구 삭제 보존 완비'
+      ]
+    },
+    {
+      version: 'v1.3.0',
+      date: '2026-09-06',
+      dateFormatted: '2026년 9월 6일',
+      title: '🏗️ 1단계 안전 모듈화 (상수/유틸/E2EE 보안 엔진 분리) & 📖 AI 스터디 지식 노트 상세 뷰어 완비 (v1.3.0)',
+      badge: '안정화 버전 💎',
+      badgeColor: '#7048e8',
       summary: '10,000줄 이상의 app.js를 안전하게 경량화하는 1단계 모듈화(상수/유틸/암호화 분리), AI 스터디 노트 상세 모달 뷰어 탑재, 모바일 5-Emoji 매핑 고도화',
       details: [
         '🏗️ 1단계 안전 모듈화 완료: constants.js(상수), helpers.js(유틸/사운드/폭죽), crypto.js(E2EE 보안 엔진) 분리로 app.js 경량화 및 AI 협업 개발 속도 향상',
@@ -309,6 +325,82 @@
     }
   ];
 
+  // Subscription Manager Categories, Emojis & Default Seed Data
+  const DEFAULT_SUBSCRIPTION_CATEGORIES = [
+    { id: 'all', name: '전체 보기', icon: '🌟', color: '#ff6b8b' },
+    { id: 'ai', name: 'AI & 개발', icon: '🤖', color: '#7048e8' },
+    { id: 'ott', name: 'OTT & 미디어', icon: '🎬', color: '#e03131' },
+    { id: 'music', name: '음악 & 스트리밍', icon: '🎵', color: '#10b981' },
+    { id: 'shopping', name: '쇼핑 & 생활', icon: '🛍️', color: '#f59f00' },
+    { id: 'work', name: '업무 & 생산성', icon: '💼', color: '#339af0' },
+    { id: 'etc', name: '기타 구독', icon: '✨', color: '#845ef7' }
+  ];
+
+  const SUBSCRIPTION_EMOJI_LIST = [
+    '🤖', '🎬', '🎵', '🛍️', '💼', '💻', '📱', '📺',
+    '🍿', '🎧', '📚', '☁️', '🔑', '🎮', '🎨', '📦',
+    '☕', '🏋️', '🚗', '🏠', '💳', '💡', '⭐', '✨'
+  ];
+
+  const DEFAULT_SUBSCRIPTIONS = [
+    {
+      id: 'sub-antigravity',
+      name: '안티그래비티 (Antigravity)',
+      amount: 23000,
+      billingCycle: 'monthly',
+      payDay: 9,
+      category: 'ai',
+      icon: '🤖',
+      isActive: true,
+      memo: '바이브 코딩 & AI 페어 프로그래밍 Pro 플랜 🤖✨',
+      url: 'https://antigravity.google',
+      createdAt: 1788693600000,
+      updatedAt: 1788693600000
+    },
+    {
+      id: 'sub-wavve',
+      name: 'WAVVE (웨이브)',
+      amount: 10900,
+      billingCycle: 'monthly',
+      payDay: 15,
+      category: 'ott',
+      icon: '🎬',
+      isActive: true,
+      memo: '웨이브 스탠다드 요금제 (드라마/예능/영화 무제한) 🍿',
+      url: 'https://www.wavve.com',
+      createdAt: 1788693600000,
+      updatedAt: 1788693600000
+    },
+    {
+      id: 'sub-genie',
+      name: '지니뮤직 (Genie)',
+      amount: 8800,
+      billingCycle: 'monthly',
+      payDay: 22,
+      category: 'music',
+      icon: '🎵',
+      isActive: true,
+      memo: '스마트 음악감상 & 모바일 무제한 스트리밍 🎧',
+      url: 'https://www.genie.co.kr',
+      createdAt: 1788693600000,
+      updatedAt: 1788693600000
+    },
+    {
+      id: 'sub-coupang-wow',
+      name: '쿠팡 와우 멤버십',
+      amount: 7890,
+      billingCycle: 'monthly',
+      payDay: 1,
+      category: 'shopping',
+      icon: '🛍️',
+      isActive: true,
+      memo: '로켓배송 무료 배송/반품 & 쿠팡플레이 무료 시청 📦',
+      url: 'https://www.coupang.com',
+      createdAt: 1788693600000,
+      updatedAt: 1788693600000
+    }
+  ];
+
   const INITIAL_DEMO_TASKS = [];
   const INITIAL_DEMO_WISHLIST = [];
   const INITIAL_DEMO_NOTES = [];
@@ -339,6 +431,9 @@
   window.DEFAULT_CATEGORIES = DEFAULT_CATEGORIES;
   window.DEFAULT_AI_STUDY_CATEGORIES = DEFAULT_AI_STUDY_CATEGORIES;
   window.DEFAULT_AI_STUDY_NOTES = DEFAULT_AI_STUDY_NOTES;
+  window.DEFAULT_SUBSCRIPTION_CATEGORIES = DEFAULT_SUBSCRIPTION_CATEGORIES;
+  window.SUBSCRIPTION_EMOJI_LIST = SUBSCRIPTION_EMOJI_LIST;
+  window.DEFAULT_SUBSCRIPTIONS = DEFAULT_SUBSCRIPTIONS;
   window.INITIAL_DEMO_TASKS = INITIAL_DEMO_TASKS;
   window.INITIAL_DEMO_WISHLIST = INITIAL_DEMO_WISHLIST;
   window.INITIAL_DEMO_NOTES = INITIAL_DEMO_NOTES;

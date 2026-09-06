@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Todolist JY - Daily Diary & Planner Application Script (v3.8)
  * Features:
  * - 2026.08.25 Today-based Fixed-width Monthly Calendar (Forsythia-colored '반차' & '휴가' chips)
@@ -97,6 +97,9 @@
   const DEFAULT_CATEGORIES = window.DEFAULT_CATEGORIES || [];
   const DEFAULT_AI_STUDY_CATEGORIES = window.DEFAULT_AI_STUDY_CATEGORIES || [];
   const DEFAULT_AI_STUDY_NOTES = window.DEFAULT_AI_STUDY_NOTES || [];
+  const DEFAULT_SUBSCRIPTION_CATEGORIES = window.DEFAULT_SUBSCRIPTION_CATEGORIES || [];
+  const SUBSCRIPTION_EMOJI_LIST = window.SUBSCRIPTION_EMOJI_LIST || [];
+  const DEFAULT_SUBSCRIPTIONS = window.DEFAULT_SUBSCRIPTIONS || [];
   const INITIAL_DEMO_TASKS = window.INITIAL_DEMO_TASKS || [];
   const INITIAL_DEMO_WISHLIST = window.INITIAL_DEMO_WISHLIST || [];
   const INITIAL_DEMO_NOTES = window.INITIAL_DEMO_NOTES || [];
@@ -465,6 +468,10 @@
 
                   store.aiStudyNotes = cloudAiStudyNotes;
                 }
+                if (data.subscriptions !== undefined) {
+                  const cloudSubs = normalizeArray(data.subscriptions).filter(s => s && s.id && !deletedIds.has(s.id));
+                  store.subscriptions = cloudSubs;
+                }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
                   const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'aistudy', 'devlog', 'vault'];
                   let order = data.sidebarMenuOrder.slice();
@@ -665,6 +672,7 @@
         hobbyNotes: (store.hobbyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
         hobbyFolders: store.hobbyFolders,
         aiStudyNotes: (store.aiStudyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
+        subscriptions: (store.subscriptions || []).filter(s => s && s.id && !deletedIds.has(s.id)),
         projects: (store.projects || []).filter(p => p && p.id && !deletedIds.has(p.id)),
         customMenuNames: store.customMenuNames,
         customTheme: store.customTheme,
@@ -1064,6 +1072,9 @@
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.ledgerFiles = [];
       this.selectedLedgerMonth = new Date().getMonth() + 1;
+      this.activeLedgerSubtab = 'budget'; // 'budget' | 'subscriptions'
+      this.activeSubscriptionCategory = 'all';
+      this.subscriptions = [];
       this.activeFilter = localStorage.getItem('todolist_jy_active_filter') || 'all';
       this.activePriority = 'all';
       this.activeWishCat = 'all';
@@ -1350,7 +1361,21 @@
       if (collaborationNote && !this.deletedItemIds.has(collaborationNote.id) && !cleanAiStudy.some(note => note.id === collaborationNote.id)) {
         cleanAiStudy.unshift(JSON.parse(JSON.stringify(collaborationNote)));
       }
-      this.aiStudyNotes = cleanAiStudy;
+      // 3. Initial 1-time Subscription migration / seeding flag
+      const SUB_SEED_KEY = 'todolist_jy_subscriptions_seeded_v1';
+      const isSubSeeded = localStorage.getItem(SUB_SEED_KEY) === 'true';
+      const userSubscriptions = (savedData && Array.isArray(savedData.subscriptions)) ? savedData.subscriptions : [];
+      let cleanSubs = userSubscriptions.filter(s => s && s.id && !this.deletedItemIds.has(s.id));
+
+      if (!isSubSeeded) {
+        localStorage.setItem(SUB_SEED_KEY, 'true');
+        DEFAULT_SUBSCRIPTIONS.forEach(defSub => {
+          if (!this.deletedItemIds.has(defSub.id) && !cleanSubs.some(s => s.id === defSub.id)) {
+            cleanSubs.push(JSON.parse(JSON.stringify(defSub)));
+          }
+        });
+      }
+      this.subscriptions = cleanSubs;
 
       this.lastUpdatedAt = (savedData && savedData.updatedAt) ? Number(savedData.updatedAt) : 0;
 
@@ -1390,6 +1415,7 @@
           vaultFolders: this.vaultFolders,
           projects: this.projects,
           aiStudyNotes: this.aiStudyNotes,
+          subscriptions: this.subscriptions,
           customMenuNames: this.customMenuNames,
           customTheme: this.customTheme,
           syncRevision: rev,
@@ -2072,6 +2098,120 @@
         if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
         return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
       });
+    }
+
+    // --- Subscription Manager Methods ---
+    addSubscription(data) {
+      const newSub = {
+        id: 'sub-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        name: (data.name || '').trim(),
+        amount: Number(data.amount) || 0,
+        billingCycle: data.billingCycle || 'monthly',
+        payDay: Math.min(31, Math.max(1, Number(data.payDay) || 1)),
+        category: data.category || 'etc',
+        icon: data.icon || '💳',
+        isActive: data.isActive !== false,
+        memo: (data.memo || '').trim(),
+        url: (data.url || '').trim(),
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      this.subscriptions.unshift(newSub);
+      this.save(true);
+      return newSub;
+    }
+
+    updateSubscription(id, data) {
+      const idx = this.subscriptions.findIndex(s => s.id === id);
+      if (idx !== -1) {
+        this.subscriptions[idx] = {
+          ...this.subscriptions[idx],
+          name: data.name !== undefined ? data.name.trim() : this.subscriptions[idx].name,
+          amount: data.amount !== undefined ? (Number(data.amount) || 0) : this.subscriptions[idx].amount,
+          billingCycle: data.billingCycle || this.subscriptions[idx].billingCycle,
+          payDay: data.payDay !== undefined ? Math.min(31, Math.max(1, Number(data.payDay) || 1)) : this.subscriptions[idx].payDay,
+          category: data.category || this.subscriptions[idx].category,
+          icon: data.icon || this.subscriptions[idx].icon,
+          isActive: data.isActive !== undefined ? data.isActive : this.subscriptions[idx].isActive,
+          memo: data.memo !== undefined ? data.memo.trim() : this.subscriptions[idx].memo,
+          url: data.url !== undefined ? data.url.trim() : this.subscriptions[idx].url,
+          updatedAt: Date.now()
+        };
+        this.save(true);
+        return this.subscriptions[idx];
+      }
+      return null;
+    }
+
+    deleteSubscription(id) {
+      if (!id) return false;
+      const targetId = String(id).trim();
+      if (!this.deletedItemIds) this.deletedItemIds = new Set();
+      this.deletedItemIds.add(targetId);
+      const idx = this.subscriptions.findIndex(s => s && String(s.id).trim() === targetId);
+      if (idx !== -1) this.subscriptions.splice(idx, 1);
+      this.save(true);
+      return true;
+    }
+
+    toggleSubscriptionActive(id) {
+      const sub = this.subscriptions.find(s => s.id === id);
+      if (sub) {
+        sub.isActive = !sub.isActive;
+        sub.updatedAt = Date.now();
+        this.save(true);
+        return sub;
+      }
+      return null;
+    }
+
+    getSubscriptionStats() {
+      const activeSubs = (this.subscriptions || []).filter(s => s && s.isActive);
+      let monthlyTotal = 0;
+      let yearlyTotal = 0;
+
+      activeSubs.forEach(s => {
+        const amt = Number(s.amount) || 0;
+        if (s.billingCycle === 'yearly') {
+          monthlyTotal += Math.round(amt / 12);
+          yearlyTotal += amt;
+        } else {
+          monthlyTotal += amt;
+          yearlyTotal += (amt * 12);
+        }
+      });
+
+      // Calculate Next Payment & D-Day
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      let nextPayment = null;
+      let minDiffDays = Infinity;
+
+      activeSubs.forEach(s => {
+        const payDay = Math.min(31, Math.max(1, Number(s.payDay) || 1));
+        let targetDate = new Date(today.getFullYear(), today.getMonth(), payDay);
+        if (targetDate < today) {
+          targetDate = new Date(today.getFullYear(), today.getMonth() + 1, payDay);
+        }
+        const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+        if (diffDays < minDiffDays) {
+          minDiffDays = diffDays;
+          nextPayment = {
+            sub: s,
+            diffDays,
+            targetDate,
+            payDay
+          };
+        }
+      });
+
+      return {
+        totalCount: (this.subscriptions || []).length,
+        activeCount: activeSubs.length,
+        monthlyTotal,
+        yearlyTotal,
+        nextPayment
+      };
     }
 
     // --- Vault Folders Methods ---
@@ -3658,9 +3798,44 @@
     },
 
     // =======================================================================
-    // 💍 2026년 신혼 가계부 Engine (영호 & 진영 급여, 집세/공과금, I열 7월)
+    // 💍 2026년 신혼 가계부 & 🔄 구독관리 Engine
     // =======================================================================
     renderLedger() {
+      const activeSubtab = store.activeLedgerSubtab || 'budget';
+      const budgetTabPanel = document.getElementById('ledger-tab-budget');
+      const subsTabPanel = document.getElementById('ledger-tab-subscriptions');
+      const subBtns = document.querySelectorAll('.ledger-subtab-btn');
+      const openLedgerBtn = document.getElementById('btn-open-ledger-upload');
+      const openSubBtn = document.getElementById('btn-open-subscription-modal');
+      const subtabSubsBadge = document.getElementById('subtab-subs-count-badge');
+
+      if (subtabSubsBadge) {
+        const activeCount = (store.subscriptions || []).filter(s => s && s.isActive).length;
+        subtabSubsBadge.textContent = activeCount;
+      }
+
+      subBtns.forEach(btn => {
+        if (btn.dataset.ledgerSubtab === activeSubtab) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      if (activeSubtab === 'subscriptions') {
+        if (budgetTabPanel) budgetTabPanel.style.display = 'none';
+        if (subsTabPanel) subsTabPanel.style.display = 'flex';
+        if (openLedgerBtn) openLedgerBtn.style.display = 'none';
+        if (openSubBtn) openSubBtn.style.display = 'inline-flex';
+        this.renderSubscriptions();
+        return;
+      }
+
+      if (budgetTabPanel) budgetTabPanel.style.display = 'flex';
+      if (subsTabPanel) subsTabPanel.style.display = 'none';
+      if (openLedgerBtn) openLedgerBtn.style.display = 'inline-flex';
+      if (openSubBtn) openSubBtn.style.display = 'none';
+
       const data = store.honeymoonData || INITIAL_HONEYMOON_DATA;
       const targetMonth = store.selectedLedgerMonth || 7;
       const mData = data[targetMonth] || { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } };
@@ -3892,6 +4067,223 @@
           }).join('');
         }
       }
+    },
+
+    // =======================================================================
+    // 🔄 스마트 구독 관리 (Subscription Hub) Engine
+    // =======================================================================
+    renderSubscriptions() {
+      const stats = store.getSubscriptionStats();
+
+      // Update Subscription Summary Dashboard Banner
+      const monthlyTotalEl = document.getElementById('sub-stat-monthly-total');
+      const yearlyTotalEl = document.getElementById('sub-stat-yearly-total');
+      const activeCountEl = document.getElementById('sub-stat-active-count');
+      const nextPaymentEl = document.getElementById('sub-stat-next-payment');
+      const nextDdayEl = document.getElementById('sub-stat-next-dday');
+      const subtabBadge = document.getElementById('subtab-subs-count-badge');
+
+      if (monthlyTotalEl) monthlyTotalEl.textContent = formatKRW(stats.monthlyTotal);
+      if (yearlyTotalEl) yearlyTotalEl.textContent = formatKRW(stats.yearlyTotal);
+      if (activeCountEl) activeCountEl.textContent = `활성 ${stats.activeCount}개 (전체 ${stats.totalCount}개)`;
+      if (subtabBadge) subtabBadge.textContent = stats.activeCount;
+
+      if (stats.nextPayment) {
+        const { sub, diffDays, targetDate } = stats.nextPayment;
+        const ddayStr = diffDays === 0 ? 'D-Day (오늘 결제! 🎉)' : `D-${diffDays}`;
+        const targetMonth = targetDate.getMonth() + 1;
+        const targetDay = targetDate.getDate();
+
+        if (nextDdayEl) {
+          nextDdayEl.textContent = ddayStr;
+          nextDdayEl.className = `sub-stat-badge ${diffDays <= 3 ? 'urgent' : ''}`;
+        }
+        if (nextPaymentEl) {
+          nextPaymentEl.textContent = `${sub.icon || '💳'} ${escapeHTML(sub.name)} (${targetMonth}월 ${targetDay}일)`;
+        }
+      } else {
+        if (nextDdayEl) {
+          nextDdayEl.textContent = '결제 대기';
+          nextDdayEl.className = 'sub-stat-badge';
+        }
+        if (nextPaymentEl) nextPaymentEl.textContent = '이용 중인 구독이 없어요 🌱';
+      }
+
+      // Render Categories Filter Bar
+      const catBar = document.getElementById('sub-categories-bar');
+      if (catBar) {
+        const activeCat = store.activeSubscriptionCategory || 'all';
+        const cats = DEFAULT_SUBSCRIPTION_CATEGORIES;
+        catBar.innerHTML = cats.map(cat => {
+          const isActive = cat.id === activeCat;
+          const count = cat.id === 'all'
+            ? store.subscriptions.length
+            : store.subscriptions.filter(s => s && s.category === cat.id).length;
+          return `
+            <button type="button" class="sub-cat-chip ${isActive ? 'active' : ''}" data-sub-cat="${cat.id}">
+              <span class="sub-cat-icon">${cat.icon}</span>
+              <span class="sub-cat-label">${escapeHTML(cat.name)}</span>
+              <span class="sub-cat-count">${count}</span>
+            </button>
+          `;
+        }).join('');
+      }
+
+      // Render Subscriptions Grid
+      const grid = document.getElementById('subscriptions-grid');
+      const emptyState = document.getElementById('subscriptions-empty-state');
+      const activeCat = store.activeSubscriptionCategory || 'all';
+      let filtered = store.subscriptions || [];
+
+      if (activeCat !== 'all') {
+        filtered = filtered.filter(s => s && s.category === activeCat);
+      }
+
+      if (!grid) return;
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'flex';
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        grid.innerHTML = filtered.map(sub => {
+          const payDay = Math.min(31, Math.max(1, Number(sub.payDay) || 1));
+          let targetDate = new Date(today.getFullYear(), today.getMonth(), payDay);
+          if (targetDate < today) {
+            targetDate = new Date(today.getFullYear(), today.getMonth() + 1, payDay);
+          }
+          const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+          const ddayText = diffDays === 0 ? '오늘 결제! 🎉' : `D-${diffDays}`;
+          const isUrgent = diffDays <= 3 && sub.isActive;
+          const catObj = DEFAULT_SUBSCRIPTION_CATEGORIES.find(c => c.id === sub.category) || { name: '기타', icon: '✨' };
+          const cycleText = sub.billingCycle === 'yearly' ? '매년' : '매월';
+
+          return `
+            <div class="subscription-card ${!sub.isActive ? 'is-inactive' : ''}" data-sub-id="${sub.id}">
+              <div class="sub-card-header">
+                <div class="sub-card-icon-wrap">
+                  <span class="sub-card-icon">${sub.icon || '💳'}</span>
+                </div>
+                <div class="sub-card-titles">
+                  <div class="sub-card-name" title="${escapeHTML(sub.name)}">
+                    ${escapeHTML(sub.name)}
+                  </div>
+                  <div class="sub-card-tags">
+                    <span class="sub-cat-badge">${catObj.icon} ${escapeHTML(catObj.name)}</span>
+                    <span class="sub-cycle-badge">${cycleText}</span>
+                  </div>
+                </div>
+                <div class="sub-card-actions">
+                  <button type="button" class="sub-action-btn" data-action="edit-subscription" data-sub-id="${sub.id}" title="구독 정보 수정">
+                    ✏️
+                  </button>
+                  <button type="button" class="sub-action-btn delete-btn" data-action="delete-subscription" data-sub-id="${sub.id}" title="구독 삭제">
+                    🗑️
+                  </button>
+                </div>
+              </div>
+
+              <div class="sub-card-amount-box">
+                <div class="sub-card-amount">
+                  <span class="amount-num">${formatKRW(sub.amount)}</span>
+                  <span class="amount-cycle">/ ${sub.billingCycle === 'yearly' ? '년' : '월'}</span>
+                </div>
+                <div class="sub-card-dday-badge ${isUrgent ? 'urgent' : ''}">
+                  ${sub.isActive ? `⏰ 매월 ${sub.payDay}일 (${ddayText})` : '⏸️ 구독 일시중지'}
+                </div>
+              </div>
+
+              ${sub.memo ? `<div class="sub-card-memo">💬 ${escapeHTML(sub.memo)}</div>` : ''}
+
+              <div class="sub-card-footer">
+                <div class="sub-toggle-wrapper">
+                  <button type="button" class="sub-status-toggle-btn ${sub.isActive ? 'active' : ''}" data-action="toggle-subscription" data-sub-id="${sub.id}">
+                    <span class="toggle-dot"></span>
+                    <span class="toggle-text">${sub.isActive ? '구독 중 🟢' : '일시중지 ⏸️'}</span>
+                  </button>
+                </div>
+                ${sub.url ? `
+                  <a href="${escapeHTML(sub.url)}" target="_blank" rel="noopener noreferrer" class="sub-link-btn" title="공식 사이트 바로가기">
+                    <span>🔗 바로가기</span>
+                  </a>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    },
+
+    // Subscription Modal Handlers
+    renderSubscriptionEmojiPicker(selectedEmoji = '🤖') {
+      const pickerEl = document.getElementById('sub-emoji-picker-container');
+      if (!pickerEl) return;
+      const emojis = SUBSCRIPTION_EMOJI_LIST;
+      pickerEl.innerHTML = emojis.map(em => `
+        <button type="button" class="emoji-picker-btn ${em === selectedEmoji ? 'active' : ''}" data-sub-emoji="${em}">
+          ${em}
+        </button>
+      `).join('');
+    },
+
+    openSubscriptionModal(subId = null) {
+      const modal = document.getElementById('subscription-modal');
+      const form = document.getElementById('subscription-form');
+      const titleEl = document.getElementById('subscription-modal-title');
+      const deleteBtn = document.getElementById('btn-modal-delete-subscription');
+      if (!modal || !form) return;
+
+      const catSelect = document.getElementById('sub-modal-category');
+      if (catSelect) {
+        catSelect.innerHTML = DEFAULT_SUBSCRIPTION_CATEGORIES.filter(c => c.id !== 'all').map(c => `
+          <option value="${c.id}">${c.icon} ${c.name}</option>
+        `).join('');
+      }
+
+      let activeEmoji = '🤖';
+      if (subId) {
+        const sub = (store.subscriptions || []).find(s => s && s.id === subId);
+        if (sub) {
+          form.dataset.subId = sub.id;
+          if (titleEl) titleEl.textContent = '🔄 구독 서비스 수정';
+          document.getElementById('sub-modal-name').value = sub.name || '';
+          document.getElementById('sub-modal-amount').value = sub.amount || '';
+          document.getElementById('sub-modal-cycle').value = sub.billingCycle || 'monthly';
+          document.getElementById('sub-modal-payday').value = sub.payDay || 1;
+          if (catSelect) catSelect.value = sub.category || 'ai';
+          document.getElementById('sub-modal-memo').value = sub.memo || '';
+          document.getElementById('sub-modal-url').value = sub.url || '';
+          document.getElementById('sub-modal-active').checked = sub.isActive !== false;
+          activeEmoji = sub.icon || '🤖';
+          if (deleteBtn) deleteBtn.style.display = 'inline-block';
+        }
+      } else {
+        form.reset();
+        delete form.dataset.subId;
+        if (titleEl) titleEl.textContent = '🔄 새로운 구독 서비스 추가';
+        document.getElementById('sub-modal-active').checked = true;
+        document.getElementById('sub-modal-payday').value = new Date().getDate();
+        if (deleteBtn) deleteBtn.style.display = 'none';
+      }
+
+      document.getElementById('sub-modal-selected-icon').value = activeEmoji;
+      const previewIcon = document.getElementById('sub-modal-preview-icon');
+      if (previewIcon) previewIcon.textContent = activeEmoji;
+      this.renderSubscriptionEmojiPicker(activeEmoji);
+
+      modal.style.display = 'flex';
+      setTimeout(() => {
+        const nameInput = document.getElementById('sub-modal-name');
+        if (nameInput) nameInput.focus();
+      }, 50);
+    },
+
+    closeSubscriptionModal() {
+      const modal = document.getElementById('subscription-modal');
+      if (modal) modal.style.display = 'none';
     },
 
     // =======================================================================
@@ -7549,6 +7941,68 @@
         return;
       }
 
+      // Ledger Subtab Button Click
+      const lSubtabBtn = e.target.closest('.ledger-subtab-btn');
+      if (lSubtabBtn && lSubtabBtn.dataset.ledgerSubtab) {
+        store.activeLedgerSubtab = lSubtabBtn.dataset.ledgerSubtab;
+        UI.renderLedger();
+        return;
+      }
+
+      // Subscription Category Chip Click
+      const subCatChip = e.target.closest('.sub-cat-chip');
+      if (subCatChip && subCatChip.dataset.subCat) {
+        store.activeSubscriptionCategory = subCatChip.dataset.subCat;
+        UI.renderSubscriptions();
+        return;
+      }
+
+      // Subscription Status Toggle
+      const subToggleBtn = e.target.closest('[data-action="toggle-subscription"]');
+      if (subToggleBtn && subToggleBtn.dataset.subId) {
+        const updated = store.toggleSubscriptionActive(subToggleBtn.dataset.subId);
+        if (updated) {
+          sounds.playComplete();
+          UI.showToast(updated.isActive ? '구독이 활성화되었어요! 🟢' : '구독이 일시중지되었어요 ⏸️', 'info');
+          UI.renderSubscriptions();
+        }
+        return;
+      }
+
+      // Subscription Edit
+      const subEditBtn = e.target.closest('[data-action="edit-subscription"]');
+      if (subEditBtn && subEditBtn.dataset.subId) {
+        UI.openSubscriptionModal(subEditBtn.dataset.subId);
+        return;
+      }
+
+      // Subscription Delete
+      const subDelBtn = e.target.closest('[data-action="delete-subscription"]');
+      if (subDelBtn && subDelBtn.dataset.subId) {
+        const sub = (store.subscriptions || []).find(s => s && s.id === subDelBtn.dataset.subId);
+        const name = sub ? sub.name : '구독 서비스';
+        if (confirm(`'${name}' 구독을 목록에서 삭제하시겠습니까?`)) {
+          store.deleteSubscription(subDelBtn.dataset.subId);
+          sounds.playDelete();
+          UI.showToast('구독 서비스가 안전하게 삭제되었어요 🗑️', 'info');
+          UI.renderSubscriptions();
+        }
+        return;
+      }
+
+      // Subscription Modal Emoji Picker Click
+      const subEmojiBtn = e.target.closest('[data-sub-emoji]');
+      if (subEmojiBtn && subEmojiBtn.dataset.subEmoji) {
+        const emoji = subEmojiBtn.dataset.subEmoji;
+        document.getElementById('sub-modal-selected-icon').value = emoji;
+        const preview = document.getElementById('sub-modal-preview-icon');
+        if (preview) preview.textContent = emoji;
+        document.querySelectorAll('#sub-emoji-picker-container .emoji-picker-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.subEmoji === emoji);
+        });
+        return;
+      }
+
       // Ledger Month Tab Click
       const lMonthTab = e.target.closest('.l-m-tab');
       if (lMonthTab && lMonthTab.dataset.lMonth) {
@@ -7561,11 +8015,6 @@
       if (lBarCol && lBarCol.dataset.lMonth) {
         store.selectedLedgerMonth = Number(lBarCol.dataset.lMonth);
         UI.renderLedger();
-      }
-
-      // Standard Template Download Button Click
-      if (e.target.closest('#btn-download-ledger-template') || e.target.closest('[data-action="download-template"]')) {
-        downloadStandardHoneymoonExcelTemplate();
       }
 
       // Cloud Sync Button Click Delegation
@@ -7628,6 +8077,63 @@
     const openLedgerBtn = document.getElementById('btn-open-ledger-upload');
     if (openLedgerBtn) openLedgerBtn.addEventListener('click', () => UI.openLedgerModal());
 
+    const openSubBtn = document.getElementById('btn-open-subscription-modal');
+    if (openSubBtn) openSubBtn.addEventListener('click', () => UI.openSubscriptionModal());
+
+    const openSubEmptyBtn = document.getElementById('btn-open-subscription-empty');
+    if (openSubEmptyBtn) openSubEmptyBtn.addEventListener('click', () => UI.openSubscriptionModal());
+
+    // Subscription Form Submit
+    const subForm = document.getElementById('subscription-form');
+    if (subForm) {
+      subForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const subId = subForm.dataset.subId;
+        const name = document.getElementById('sub-modal-name').value.trim();
+        const amountStr = document.getElementById('sub-modal-amount').value.toString().replace(/[^0-9]/g, '');
+        const amount = parseInt(amountStr, 10) || 0;
+        const billingCycle = document.getElementById('sub-modal-cycle').value || 'monthly';
+        const payDay = parseInt(document.getElementById('sub-modal-payday').value, 10) || 1;
+        const category = document.getElementById('sub-modal-category').value || 'ai';
+        const icon = document.getElementById('sub-modal-selected-icon').value || '🤖';
+        const isActive = document.getElementById('sub-modal-active').checked;
+        const memo = document.getElementById('sub-modal-memo').value.trim();
+        const url = document.getElementById('sub-modal-url').value.trim();
+
+        if (!name) {
+          alert('구독 서비스명을 입력해주세요.');
+          return;
+        }
+
+        if (subId) {
+          store.updateSubscription(subId, { name, amount, billingCycle, payDay, category, icon, isActive, memo, url });
+          sounds.playComplete();
+          UI.showToast('구독 정보가 수정되었어요! ✨', 'success');
+        } else {
+          store.addSubscription({ name, amount, billingCycle, payDay, category, icon, isActive, memo, url });
+          sounds.playPop();
+          UI.showToast('새로운 구독 서비스가 등록되었어요! 🔄💖', 'success');
+        }
+
+        UI.closeSubscriptionModal();
+        UI.renderSubscriptions();
+      });
+    }
+
+    const modalDeleteSubBtn = document.getElementById('btn-modal-delete-subscription');
+    if (modalDeleteSubBtn) {
+      modalDeleteSubBtn.addEventListener('click', () => {
+        const subId = subForm?.dataset.subId;
+        if (subId && confirm('이 구독을 정말 삭제하시겠습니까?')) {
+          store.deleteSubscription(subId);
+          sounds.playDelete();
+          UI.closeSubscriptionModal();
+          UI.showToast('구독 서비스가 안전하게 삭제되었어요 🗑️', 'info');
+          UI.renderSubscriptions();
+        }
+      });
+    }
+
     document.querySelectorAll('[data-close-modal]').forEach(b => {
       b.addEventListener('click', () => {
         UI.closeTaskModal();
@@ -7646,6 +8152,10 @@
 
     document.querySelectorAll('[data-close-ledger-modal]').forEach(b => {
       b.addEventListener('click', () => UI.closeLedgerModal());
+    });
+
+    document.querySelectorAll('[data-close-subscription-modal]').forEach(b => {
+      b.addEventListener('click', () => UI.closeSubscriptionModal());
     });
 
     const addSubtaskBtn = document.getElementById('btn-add-subtask');

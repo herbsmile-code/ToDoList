@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260906_v129">
-  <link rel="stylesheet" href="css/animations.css?v=20260906_v129">
+  <link rel="stylesheet" href="css/style.css?v=20260906_v133">
+  <link rel="stylesheet" href="css/animations.css?v=20260906_v133">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -800,160 +800,230 @@
         </div>
 
         <!-- ===================================================================
-             SECTION 5: Household Ledger View (2026년 신혼 가계부 분석 & 비교)
+             SECTION 5: Household Ledger & Subscription Hub (2026년 신혼 가계부 & 구독관리)
              =================================================================== -->
         <div id="ledger-view-container" style="display: none; flex-direction: column; gap: 1.35rem;">
           <div class="dashboard-header">
             <div class="view-heading">
-              <h1>💍 2026년 신혼 가계부 (영호 & 진영)</h1>
-              <p>영호 & 진영 급여(수입), 집세/공과금(고정지출), 생활비(변동지출)를 한눈에 쏙 비교하세요 💖</p>
+              <h1>💍 2026년 신혼 가계부 & 구독 관리</h1>
+              <p>신혼 가계부 엑셀 결산과 매월 나가는 정기 구독을 한곳에서 똑똑하게 비교·관리하세요 💖</p>
             </div>
             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-              <button type="button" id="btn-download-ledger-template" class="btn" style="background: rgba(255, 107, 139, 0.08); color: var(--primary); border: 1px solid rgba(255, 107, 139, 0.25);" title="공식 2026 신혼 가계부 엑셀 서식 파일 다운로드">
-                <span>📥</span>
-                <span>2026 표준 양식 다운로드</span>
-              </button>
               <button type="button" id="btn-open-ledger-upload" class="btn btn-primary">
                 <span>+</span>
                 <span>신혼 가계부 엑셀 등록</span>
               </button>
+              <button type="button" id="btn-open-subscription-modal" class="btn btn-primary" style="display: none;">
+                <span>+</span>
+                <span>새 구독 추가</span>
+              </button>
             </div>
           </div>
 
-          <!-- Honeymoon 4 Core Stats Cards -->
-          <div class="ledger-stats-banner">
-            <div class="ledger-stat-card">
-              <span class="ledger-stat-title" id="ledger-stat-month-title">💌 7월 수입(급여) & 총 지출</span>
-              <div style="display: flex; align-items: baseline; gap: 0.4rem;">
-                <span class="ledger-stat-val" id="ledger-stat-cur-month">7,064,406원</span>
-                <span style="font-size: 0.76rem; color: var(--text-muted);" id="ledger-stat-income-sub">/ 급여 6,075,570원</span>
-              </div>
-              <span class="ledger-stat-badge" id="ledger-stat-diff-badge">7월 결산 완료 ✨</span>
-            </div>
-
-            <div class="ledger-stat-card">
-              <span class="ledger-stat-title">🔒 7월 고정지출 계 (집세/공과금)</span>
-              <span class="ledger-stat-val" id="ledger-stat-fixed" style="color: #7048e8;">649,070원</span>
-              <span class="ledger-stat-sub">전세이자, 관리비, 가스/전기/수도</span>
-            </div>
-
-            <div class="ledger-stat-card">
-              <span class="ledger-stat-title">🛍️ 7월 변동지출 계 (I35 생활비)</span>
-              <span class="ledger-stat-val" id="ledger-stat-variable" style="color: #ff6b8b;">6,415,336원</span>
-              <span class="ledger-stat-sub">식비, 외식, 여름휴가, 경조사, 쇼핑</span>
-            </div>
-
-            <div class="ledger-stat-card">
-              <span class="ledger-stat-title">🌱 7월 결산 수지 (초과분)</span>
-              <span class="ledger-stat-val" id="ledger-stat-savings" style="color: #ff6b6b;">-988,836원</span>
-              <span class="ledger-stat-sub" id="ledger-stat-savings-rate">비상금/전월저축분 활용 💡</span>
-            </div>
-          </div>
-
-          <!-- Monthly Expense Stacked Bar Chart Card -->
-          <div class="ledger-chart-card">
-            <div class="ledger-chart-header">
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 1.2rem;">📊</span>
-                <h3 style="font-size: 1.05rem; font-weight: 800; margin: 0;">2026년 월별 지출 비교 (고정지출 vs 변동지출 vs 월급)</h3>
-              </div>
-              <div class="ledger-legend">
-                <span class="legend-item"><span class="legend-dot dot-fixed"></span> 고정지출</span>
-                <span class="legend-item"><span class="legend-dot dot-variable"></span> 변동지출</span>
-                <span class="legend-item"><span class="legend-dot dot-income"></span> 월급(수입)</span>
-              </div>
-            </div>
-            
-            <div class="ledger-bar-chart" id="ledger-bar-chart-container">
-              <!-- Dynamically populated 12-month stacked expense bars -->
-            </div>
-          </div>
-
-          <!-- Monthly Detail Breakdown Section (A열 구분 & B열 항목 목록) -->
-          <div class="ledger-breakdown-card">
-            <div class="ledger-breakdown-header">
-              <div style="display: flex; align-items: center; gap: 0.6rem;">
-                <span>📖</span>
-                <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800;" id="breakdown-month-title">2026년 7월 신혼 가계부 상세 내역</h3>
-              </div>
-              
-              <!-- Month Selector Tabs -->
-              <div class="ledger-month-tabs" id="ledger-month-selector-tabs">
-                <button type="button" class="l-m-tab" data-l-month="1">1월</button>
-                <button type="button" class="l-m-tab" data-l-month="2">2월</button>
-                <button type="button" class="l-m-tab" data-l-month="3">3월</button>
-                <button type="button" class="l-m-tab" data-l-month="4">4월</button>
-                <button type="button" class="l-m-tab" data-l-month="5">5월</button>
-                <button type="button" class="l-m-tab" data-l-month="6">6월</button>
-                <button type="button" class="l-m-tab active" data-l-month="7">7월</button>
-                <button type="button" class="l-m-tab" data-l-month="8">8월</button>
-                <button type="button" class="l-m-tab" data-l-month="9">9월</button>
-                <button type="button" class="l-m-tab" data-l-month="10">10월</button>
-                <button type="button" class="l-m-tab" data-l-month="11">11월</button>
-                <button type="button" class="l-m-tab" data-l-month="12">12월</button>
-              </div>
-            </div>
-
-            <!-- 3-Column Breakdown Tables (수입 / 고정지출 / 변동지출) -->
-            <div class="ledger-columns-grid">
-              <!-- Column 1: Income (월급) -->
-              <div class="ledger-col-box col-income">
-                <div class="ledger-col-header">
-                  <span class="col-icon">💰</span>
-                  <span class="col-title">수입 (월급)</span>
-                  <span class="col-total" id="col-total-income">5,200,000원</span>
-                </div>
-                <div class="ledger-items-list" id="list-items-income"></div>
-              </div>
-
-              <!-- Column 2: Fixed Expenses (고정지출 계) -->
-              <div class="ledger-col-box col-fixed">
-                <div class="ledger-col-header">
-                  <span class="col-icon">🔒</span>
-                  <span class="col-title">고정지출 계</span>
-                  <span class="col-total" id="col-total-fixed">1,650,000원</span>
-                </div>
-                <div class="ledger-items-list" id="list-items-fixed"></div>
-              </div>
-
-              <!-- Column 3: Variable Expenses (변동지출 계) -->
-              <div class="ledger-col-box col-variable">
-                <div class="ledger-col-header">
-                  <span class="col-icon">🛍️</span>
-                  <span class="col-title">변동지출 계</span>
-                  <span class="col-total" id="col-total-variable">1,810,000원</span>
-                </div>
-                <div class="ledger-items-list" id="list-items-variable"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Upload Dropzone Card -->
-          <div class="file-upload-card" id="ledger-dropzone" style="background: rgba(255, 107, 139, 0.03); border: 2px dashed rgba(255, 107, 139, 0.35);">
-            <input type="file" id="ledger-file-hidden-input" accept=".xlsx, .xls, .csv" style="display: none;">
-            <div class="file-upload-icon">💍 📊</div>
-            <div class="file-upload-title">'2026년 신혼가계부' 엑셀 파일을 끌어다 놓거나 클릭하세요</div>
-            <div class="file-upload-desc">A열(구분), B열(항목) 및 1~12월 지출 데이터가 자동으로 분석되어 대시보드에 즉시 반영됩니다 ✨</div>
-            <button type="button" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.1rem;" onclick="event.stopPropagation(); document.getElementById('ledger-file-hidden-input').click()">
-              내 컴퓨터에서 신혼 가계부 엑셀 선택
+          <!-- Ledger Subtabs Bar (가계부 / 구독관리 2-Way) -->
+          <div class="ledger-subtabs-bar">
+            <button type="button" class="ledger-subtab-btn active" data-ledger-subtab="budget">
+              <span class="subtab-icon">💍</span>
+              <span class="subtab-label">2026 신혼 가계부</span>
+            </button>
+            <button type="button" class="ledger-subtab-btn" data-ledger-subtab="subscriptions">
+              <span class="subtab-icon">🔄</span>
+              <span class="subtab-label">구독 관리</span>
+              <span class="subtab-badge" id="subtab-subs-count-badge">4</span>
             </button>
           </div>
 
-          <!-- Stored Ledger Files Section -->
-          <div>
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-              <h3 style="font-size: 1rem; font-weight: 800; color: var(--text-main); margin: 0;">📁 보관된 신혼 가계부 파일 목록</h3>
-              <span style="font-size: 0.8rem; color: var(--text-muted);">총 <strong id="ledger-files-count" style="color: var(--primary);">0</strong>개 보관 중</span>
+          <!-- TAB 1: 💍 2026 신혼 가계부 (엑셀 분석 & 통계) -->
+          <div id="ledger-tab-budget" style="display: flex; flex-direction: column; gap: 1.35rem;">
+            <!-- Honeymoon 4 Core Stats Cards -->
+            <div class="ledger-stats-banner">
+              <div class="ledger-stat-card">
+                <span class="ledger-stat-title" id="ledger-stat-month-title">💌 7월 수입(급여) & 총 지출</span>
+                <div style="display: flex; align-items: baseline; gap: 0.4rem;">
+                  <span class="ledger-stat-val" id="ledger-stat-cur-month">7,064,406원</span>
+                  <span style="font-size: 0.76rem; color: var(--text-muted);" id="ledger-stat-income-sub">/ 급여 6,075,570원</span>
+                </div>
+                <span class="ledger-stat-badge" id="ledger-stat-diff-badge">7월 결산 완료 ✨</span>
+              </div>
+
+              <div class="ledger-stat-card">
+                <span class="ledger-stat-title">🔒 7월 고정지출 계 (집세/공과금)</span>
+                <span class="ledger-stat-val" id="ledger-stat-fixed" style="color: #7048e8;">649,070원</span>
+                <span class="ledger-stat-sub">전세이자, 관리비, 가스/전기/수도</span>
+              </div>
+
+              <div class="ledger-stat-card">
+                <span class="ledger-stat-title">🛍️ 7월 변동지출 계 (I35 생활비)</span>
+                <span class="ledger-stat-val" id="ledger-stat-variable" style="color: #ff6b8b;">6,415,336원</span>
+                <span class="ledger-stat-sub">식비, 외식, 여름휴가, 경조사, 쇼핑</span>
+              </div>
+
+              <div class="ledger-stat-card">
+                <span class="ledger-stat-title">🌱 7월 결산 수지 (초과분)</span>
+                <span class="ledger-stat-val" id="ledger-stat-savings" style="color: #ff6b6b;">-988,836원</span>
+                <span class="ledger-stat-sub" id="ledger-stat-savings-rate">비상금/전월저축분 활용 💡</span>
+              </div>
             </div>
 
-            <div class="files-grid" id="ledger-files-grid">
-              <!-- Dynamically populated stored ledger excel files -->
+            <!-- Monthly Expense Stacked Bar Chart Card -->
+            <div class="ledger-chart-card">
+              <div class="ledger-chart-header">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="font-size: 1.2rem;">📊</span>
+                  <h3 style="font-size: 1.05rem; font-weight: 800; margin: 0;">2026년 월별 지출 비교 (고정지출 vs 변동지출 vs 월급)</h3>
+                </div>
+                <div class="ledger-legend">
+                  <span class="legend-item"><span class="legend-dot dot-fixed"></span> 고정지출</span>
+                  <span class="legend-item"><span class="legend-dot dot-variable"></span> 변동지출</span>
+                  <span class="legend-item"><span class="legend-dot dot-income"></span> 월급(수입)</span>
+                </div>
+              </div>
+              
+              <div class="ledger-bar-chart" id="ledger-bar-chart-container">
+                <!-- Dynamically populated 12-month stacked expense bars -->
+              </div>
             </div>
 
-            <div id="ledger-empty-state" class="empty-state" style="display: none; padding: 2rem 1rem;">
-              <div class="empty-state-icon">💰</div>
-              <h3>보관된 가계부 엑셀 파일이 없어요</h3>
-              <p>매월 작성하시는 신혼 가계부 엑셀 파일을 업로드해 두면 언제든 다운로드하고 월별 지출을 비교할 수 있어요 ✨</p>
+            <!-- Monthly Detail Breakdown Section (A열 구분 & B열 항목 목록) -->
+            <div class="ledger-breakdown-card">
+              <div class="ledger-breakdown-header">
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                  <span>📖</span>
+                  <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800;" id="breakdown-month-title">2026년 7월 신혼 가계부 상세 내역</h3>
+                </div>
+                
+                <!-- Month Selector Tabs -->
+                <div class="ledger-month-tabs" id="ledger-month-selector-tabs">
+                  <button type="button" class="l-m-tab" data-l-month="1">1월</button>
+                  <button type="button" class="l-m-tab" data-l-month="2">2월</button>
+                  <button type="button" class="l-m-tab" data-l-month="3">3월</button>
+                  <button type="button" class="l-m-tab" data-l-month="4">4월</button>
+                  <button type="button" class="l-m-tab" data-l-month="5">5월</button>
+                  <button type="button" class="l-m-tab" data-l-month="6">6월</button>
+                  <button type="button" class="l-m-tab active" data-l-month="7">7월</button>
+                  <button type="button" class="l-m-tab" data-l-month="8">8월</button>
+                  <button type="button" class="l-m-tab" data-l-month="9">9월</button>
+                  <button type="button" class="l-m-tab" data-l-month="10">10월</button>
+                  <button type="button" class="l-m-tab" data-l-month="11">11월</button>
+                  <button type="button" class="l-m-tab" data-l-month="12">12월</button>
+                </div>
+              </div>
+
+              <!-- 3-Column Breakdown Tables (수입 / 고정지출 / 변동지출) -->
+              <div class="ledger-columns-grid">
+                <!-- Column 1: Income (월급) -->
+                <div class="ledger-col-box col-income">
+                  <div class="ledger-col-header">
+                    <span class="col-icon">💰</span>
+                    <span class="col-title">수입 (월급)</span>
+                    <span class="col-total" id="col-total-income">5,200,000원</span>
+                  </div>
+                  <div class="ledger-items-list" id="list-items-income"></div>
+                </div>
+
+                <!-- Column 2: Fixed Expenses (고정지출 계) -->
+                <div class="ledger-col-box col-fixed">
+                  <div class="ledger-col-header">
+                    <span class="col-icon">🔒</span>
+                    <span class="col-title">고정지출 계</span>
+                    <span class="col-total" id="col-total-fixed">1,650,000원</span>
+                  </div>
+                  <div class="ledger-items-list" id="list-items-fixed"></div>
+                </div>
+
+                <!-- Column 3: Variable Expenses (변동지출 계) -->
+                <div class="ledger-col-box col-variable">
+                  <div class="ledger-col-header">
+                    <span class="col-icon">🛍️</span>
+                    <span class="col-title">변동지출 계</span>
+                    <span class="col-total" id="col-total-variable">1,810,000원</span>
+                  </div>
+                  <div class="ledger-items-list" id="list-items-variable"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Upload Dropzone Card -->
+            <div class="file-upload-card" id="ledger-dropzone" style="background: rgba(255, 107, 139, 0.03); border: 2px dashed rgba(255, 107, 139, 0.35);">
+              <input type="file" id="ledger-file-hidden-input" accept=".xlsx, .xls, .csv" style="display: none;">
+              <div class="file-upload-icon">💍 📊</div>
+              <div class="file-upload-title">'2026년 신혼가계부' 엑셀 파일을 끌어다 놓거나 클릭하세요</div>
+              <div class="file-upload-desc">A열(구분), B열(항목) 및 1~12월 지출 데이터가 자동으로 분석되어 대시보드에 즉시 반영됩니다 ✨</div>
+              <button type="button" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.1rem;" onclick="event.stopPropagation(); document.getElementById('ledger-file-hidden-input').click()">
+                내 컴퓨터에서 신혼 가계부 엑셀 선택
+              </button>
+            </div>
+
+            <!-- Stored Ledger Files Section -->
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                <h3 style="font-size: 1rem; font-weight: 800; color: var(--text-main); margin: 0;">📁 보관된 신혼 가계부 파일 목록</h3>
+                <span style="font-size: 0.8rem; color: var(--text-muted);">총 <strong id="ledger-files-count" style="color: var(--primary);">0</strong>개 보관 중</span>
+              </div>
+
+              <div class="files-grid" id="ledger-files-grid">
+                <!-- Dynamically populated stored ledger excel files -->
+              </div>
+
+              <div id="ledger-empty-state" class="empty-state" style="display: none; padding: 2rem 1rem;">
+                <div class="empty-state-icon">💰</div>
+                <h3>보관된 가계부 엑셀 파일이 없어요</h3>
+                <p>매월 작성하시는 신혼 가계부 엑셀 파일을 업로드해 두면 언제든 다운로드하고 월별 지출을 비교할 수 있어요 ✨</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: 🔄 구독 관리 (Subscription Hub) -->
+          <div id="ledger-tab-subscriptions" style="display: none; flex-direction: column; gap: 1.35rem;">
+            <!-- Subscriptions Summary Banner (3대 핵심 지표) -->
+            <div class="sub-stats-grid">
+              <div class="sub-stat-card">
+                <div class="sub-stat-header">
+                  <span class="sub-stat-title">💳 이번 달 총 구독료</span>
+                  <span class="sub-stat-badge" id="sub-stat-active-count">4개 이용 중</span>
+                </div>
+                <div class="sub-stat-val" id="sub-stat-monthly-total">50,590원</div>
+                <div class="sub-stat-sub">정기 결제 나가는 월간 고정비용</div>
+              </div>
+
+              <div class="sub-stat-card">
+                <div class="sub-stat-header">
+                  <span class="sub-stat-title">📅 연간 예상 지출액</span>
+                  <span class="sub-stat-badge green">연간 환산 💡</span>
+                </div>
+                <div class="sub-stat-val" id="sub-stat-yearly-total" style="color: #7048e8;">607,080원</div>
+                <div class="sub-stat-sub">1년간 지출되는 총 구독 서비스 금액</div>
+              </div>
+
+              <div class="sub-stat-card">
+                <div class="sub-stat-header">
+                  <span class="sub-stat-title">⏰ 다음 결제 예정 알림</span>
+                  <span class="sub-stat-badge" id="sub-stat-next-dday">D-Day 계산 중</span>
+                </div>
+                <div class="sub-stat-val sub-stat-next-val" id="sub-stat-next-payment">🤖 안티그래비티</div>
+                <div class="sub-stat-sub">다가오는 가장 가까운 정기 결제일</div>
+              </div>
+            </div>
+
+            <!-- Categories Filter Bar -->
+            <div class="sub-categories-bar" id="sub-categories-bar">
+              <!-- Dynamically rendered category pills -->
+            </div>
+
+            <!-- Subscriptions Grid Container -->
+            <div class="subscriptions-grid" id="subscriptions-grid">
+              <!-- Dynamically populated subscription cards -->
+            </div>
+
+            <!-- Empty State for Subscriptions -->
+            <div id="subscriptions-empty-state" class="empty-state" style="display: none; padding: 2.5rem 1rem;">
+              <div class="empty-state-icon">🔄</div>
+              <h3>등록된 구독 서비스가 없어요</h3>
+              <p>안티그래비티, WAVVE, 지니뮤직 등 매월 이용 중인 구독 서비스를 등록하고 관리해보세요 ✨</p>
+              <button type="button" class="btn btn-primary" id="btn-open-subscription-empty" style="margin-top: 0.75rem;">
+                <span>+</span>
+                <span>첫 구독 서비스 등록하기</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1332,6 +1402,102 @@
         <div class="modal-actions">
           <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-ledger-modal>취소</button>
           <button type="submit" class="btn btn-primary">가계부에 저장 & 분석 📊</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       Modal: Subscription Create / Edit (스마트 구독 서비스 등록 및 수정 모달)
+       ========================================================================= -->
+  <div id="subscription-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="subscription-modal-title">🔄 새로운 구독 서비스 추가</h3>
+        <button class="modal-close-btn" data-close-subscription-modal title="닫기 (Esc)">✕</button>
+      </div>
+
+      <form id="subscription-form">
+        <!-- Service Name -->
+        <div class="form-group">
+          <label class="form-label" for="sub-modal-name">구독 서비스명 *</label>
+          <input type="text" id="sub-modal-name" class="form-input" placeholder="예: 안티그래비티, WAVVE, 지니뮤직, 쿠팡 와우" required>
+        </div>
+
+        <!-- Amount & Billing Cycle Row -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="sub-modal-amount">결제 금액 (원) *</label>
+            <input type="number" id="sub-modal-amount" class="form-input" placeholder="예: 23000" min="0" step="10" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="sub-modal-cycle">결제 주기</label>
+            <select id="sub-modal-cycle" class="form-select">
+              <option value="monthly" selected>매월 결제 (월간)</option>
+              <option value="yearly">매년 결제 (연간)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Payday & Category Row -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="sub-modal-payday">매월 결제일 (1~31일)</label>
+            <input type="number" id="sub-modal-payday" class="form-input" min="1" max="31" value="1" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="sub-modal-category">카테고리</label>
+            <select id="sub-modal-category" class="form-select">
+              <option value="ai">🤖 AI & 개발</option>
+              <option value="ott">🎬 OTT & 미디어</option>
+              <option value="music">🎵 음악 & 스트리밍</option>
+              <option value="shopping">🛍️ 쇼핑 & 생활</option>
+              <option value="work">💼 업무 & 생산성</option>
+              <option value="etc">✨ 기타 구독</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Emoji Icon Picker -->
+        <div class="form-group">
+          <label class="form-label">
+            대표 아이콘 선택 <span id="sub-modal-preview-icon" style="font-size: 1.1rem; margin-left: 4px;">🤖</span>
+          </label>
+          <input type="hidden" id="sub-modal-selected-icon" value="🤖">
+          <div class="emoji-picker-container" id="sub-emoji-picker-container" style="max-height: 110px; overflow-y: auto;">
+            <!-- Dynamically populated 24 emoji buttons -->
+          </div>
+        </div>
+
+        <!-- Memo -->
+        <div class="form-group">
+          <label class="form-label" for="sub-modal-memo">요금제 / 플랜 메모 (선택)</label>
+          <input type="text" id="sub-modal-memo" class="form-input" placeholder="예: Pro 플랜, 4인 파티 공유, 12개월 약정 할인 등">
+        </div>
+
+        <!-- Official Website URL -->
+        <div class="form-group">
+          <label class="form-label" for="sub-modal-url">공식 홈페이지 / 결제 관리 링크 (선택)</label>
+          <input type="url" id="sub-modal-url" class="form-input" placeholder="https://...">
+        </div>
+
+        <!-- Active Status Checkbox -->
+        <div class="form-group" style="margin-bottom: 0.5rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; font-weight: 600; color: var(--text-main); cursor: pointer;">
+            <input type="checkbox" id="sub-modal-active" checked style="width: 17px; height: 17px; accent-color: var(--primary);">
+            <span>현재 활성 구독 중 (체크 해제 시 일시중지)</span>
+          </label>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between;">
+          <button type="button" id="btn-modal-delete-subscription" class="btn" style="background: rgba(224, 49, 49, 0.1); color: #e03131; border: 1px solid rgba(224, 49, 49, 0.2); display: none;">
+            🗑️ 삭제
+          </button>
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto;">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-subscription-modal>취소</button>
+            <button type="submit" class="btn btn-primary">구독 저장 💾</button>
+          </div>
         </div>
       </form>
     </div>
@@ -2691,10 +2857,10 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts (Phase 1 Modularization) -->
-  <script src="js/utils/constants.js?v=20260906_v132"></script>
-  <script src="js/utils/helpers.js?v=20260906_v132"></script>
-  <script src="js/services/crypto.js?v=20260906_v132"></script>
-  <script src="js/app.js?v=20260906_v132"></script>
-  <script src="js/treasure.js?v=20260906_v132"></script>
+  <script src="js/utils/constants.js?v=20260906_v133"></script>
+  <script src="js/utils/helpers.js?v=20260906_v133"></script>
+  <script src="js/services/crypto.js?v=20260906_v133"></script>
+  <script src="js/app.js?v=20260906_v133"></script>
+  <script src="js/treasure.js?v=20260906_v133"></script>
 </body>
 </html>

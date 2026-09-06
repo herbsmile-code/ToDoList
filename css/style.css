@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    Todolist JY - iOS Pastel & Cute Design System
    Apple-inspired Aesthetic, Rounded Glassmorphism, Lovely Pastel Colors
    ========================================================================== */
@@ -7369,18 +7369,6 @@ body::after {
   line-height: 1.65;
 }
 
-.aistudy-detail-code {
-  margin: 0;
-  padding: 0.85rem;
-  max-height: 260px;
-  overflow: auto;
-  border-radius: 10px;
-  background: #1e1e2e;
-  color: #cdd6f4;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .aistudy-detail-link {
   color: var(--primary);
   font-weight: 700;
@@ -7392,166 +7380,80 @@ body::after {
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 .aistudy-snippet-header {
-  background: #181825;
-  padding: 0.45rem 0.85rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.aistudy-snippet-label {
-  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  padding: 0.5rem 0.85rem;
+  background: rgba(0, 0, 0, 0.25);
   font-size: 0.72rem;
-  font-weight: 700;
   color: #a6adc8;
-  letter-spacing: 0.04em;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .aistudy-copy-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  color: #cdd6f4;
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 3px 8px;
+  background: transparent;
+  border: none;
+  color: #89b4fa;
+  font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
 }
 
 .aistudy-copy-btn:hover {
-  background: var(--primary);
-  color: #ffffff;
-  border-color: var(--primary);
-  transform: translateY(-1px);
-}
-
-.aistudy-copy-btn.copied {
-  background: #10b981 !important;
-  color: #ffffff !important;
-  border-color: #10b981 !important;
+  background: rgba(137, 180, 250, 0.15);
 }
 
 .aistudy-snippet-content {
-  padding: 0.75rem 0.85rem;
   margin: 0;
-  font-family: 'Fira Code', Consolas, Monaco, 'Courier New', monospace;
-  font-size: 0.82rem;
-  line-height: 1.5;
+  padding: 0.85rem;
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  font-size: 0.8rem;
+  line-height: 1.55;
   color: #cdd6f4;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 220px;
   overflow-y: auto;
-  scrollbar-width: thin;
 }
 
-.aistudy-snippet-content::-webkit-scrollbar {
-  width: 5px;
-}
-.aistudy-snippet-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-}
 
-/* 태그 & 링크 바 */
-.aistudy-footer-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: auto;
-  padding-top: 0.4rem;
-}
-
-.aistudy-tags-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.aistudy-tag-chip {
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.aistudy-tag-chip:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-  background: rgba(255, 107, 139, 0.06);
-}
-
-.aistudy-link-btn {
-  font-size: 0.75rem;
-  color: var(--primary);
-  text-decoration: none;
-  font-weight: 700;
+/* AI Study 태그 */
+.aistudy-tag-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(255, 107, 139, 0.08);
-  transition: all 0.15s ease;
-}
-
-.aistudy-link-btn:hover {
-  background: var(--primary);
-  color: #ffffff;
-}
-
-/* AI Study Empty State */
-.aistudy-empty-card {
-  grid-column: 1 / -1;
-  padding: 3.5rem 1.5rem;
-  text-align: center;
-  background: var(--bg-card);
-  border: 2px dashed var(--border-color);
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-}
-
-.aistudy-empty-icon {
-  font-size: 3rem;
-  margin-bottom: 0.25rem;
-  animation: float 3s ease-in-out infinite;
-}
-
-.aistudy-empty-title {
-  font-size: 1.15rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: var(--text-main);
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 
-.aistudy-empty-desc {
-  font-size: 0.88rem;
-  color: var(--text-muted);
-  max-width: 380px;
-  line-height: 1.5;
+.aistudy-tag-pill.category-prompt { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
+.aistudy-tag-pill.category-code { background: rgba(16, 185, 129, 0.12); color: #10b981; }
+.aistudy-tag-pill.category-concept { background: rgba(139, 92, 246, 0.12); color: #8b5cf6; }
+.aistudy-tag-pill.category-reference { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+
+.aistudy-importance-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
 }
+
+.aistudy-importance-pill.high { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+.aistudy-importance-pill.medium { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+.aistudy-importance-pill.low { background: rgba(100, 116, 139, 0.12); color: #64748b; }
 
 @media (max-width: 768px) {
   .aistudy-grid {
@@ -7578,5 +7480,559 @@ body::after {
   }
 }
 
+/* ==========================================================================
+   💍 신혼 가계부 서브 탭 & 스마트 구독 관리 허브 (Subscription Hub) 스타일
+   ========================================================================== */
 
+/* 1. 서브 탭 바 (가계부 / 구독관리) */
+.ledger-subtabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
 
+.subtab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.subtab-btn:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.subtab-btn.active {
+  color: var(--primary);
+  background: var(--primary-bg, rgba(99, 102, 241, 0.12));
+  box-shadow: var(--shadow-sm);
+  font-weight: 800;
+}
+
+.subtab-btn .badge-pill {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.ledger-subtab-panel {
+  display: block;
+}
+
+.ledger-subtab-panel[hidden] {
+  display: none !important;
+}
+
+/* 2. 구독 관리 대시보드 통계 카드 */
+.sub-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.sub-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem 1.35rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sub-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.sub-stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  background: var(--bg-hover);
+  flex-shrink: 0;
+}
+
+.sub-stat-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sub-stat-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.sub-stat-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub-stat-card.primary .sub-stat-icon {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--primary);
+}
+
+.sub-stat-card.primary .sub-stat-value {
+  color: var(--primary);
+}
+
+.sub-stat-card.annual .sub-stat-icon {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.sub-stat-card.count .sub-stat-icon {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.sub-stat-card.alert .sub-stat-icon {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+/* 3. 구독 카테고리 필터 바 */
+.sub-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.25rem;
+  scrollbar-width: thin;
+}
+
+.sub-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.95rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.sub-pill-btn:hover {
+  border-color: var(--primary);
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.sub-pill-btn.active {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.sub-pill-btn .count {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.08);
+  font-weight: 700;
+}
+
+.sub-pill-btn.active .count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* 4. 구독 카드 그리드 */
+.subscriptions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.subscription-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.subscription-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary-light, rgba(99, 102, 241, 0.4));
+}
+
+.subscription-card.paused {
+  opacity: 0.6;
+  filter: grayscale(40%);
+  background: var(--bg-main);
+}
+
+.subscription-card.paused:hover {
+  opacity: 0.9;
+  filter: grayscale(0%);
+}
+
+.sub-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sub-card-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.sub-card-emoji {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  background: var(--bg-hover);
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.sub-card-titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sub-card-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 0 0.15rem;
+}
+
+.sub-card-cycle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* 결제 주기 뱃지 */
+.sub-cycle-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
+}
+
+.sub-cycle-badge.yearly {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+/* 카드 바디 (금액 및 결제일) */
+.sub-card-body {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-top: 1px dashed var(--border-color);
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.sub-card-amount {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.5px;
+}
+
+.sub-card-amount .sub-card-unit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+.sub-card-billing-day {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* D-Day 뱃지 */
+.sub-dday-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+.sub-dday-badge.imminent {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  animation: pulse-soft 2s infinite ease-in-out;
+}
+
+.sub-dday-badge.today {
+  background: #ef4444;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.sub-dday-badge.soon {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+/* 카드 푸터 (스위치, 액션) */
+.sub-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.sub-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.sub-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.4rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sub-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.sub-icon-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+/* 스위치 토글 (구독 활성/일시정지) */
+.sub-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sub-toggle-input {
+  display: none;
+}
+
+.sub-toggle-slider {
+  position: relative;
+  width: 38px;
+  height: 20px;
+  background-color: var(--border-color);
+  border-radius: 20px;
+  transition: 0.3s;
+}
+
+.sub-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.sub-toggle-input:checked + .sub-toggle-slider {
+  background-color: var(--primary);
+}
+
+.sub-toggle-input:checked + .sub-toggle-slider:before {
+  transform: translateX(18px);
+}
+
+.sub-toggle-text {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.sub-toggle-input:checked ~ .sub-toggle-text {
+  color: var(--primary);
+}
+
+/* 5. 구독 등록/수정 모달 */
+.sub-emoji-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+  padding: 0.4rem 0;
+  scrollbar-width: thin;
+}
+
+.sub-emoji-opt {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sub-emoji-opt:hover {
+  transform: scale(1.1);
+  border-color: var(--primary);
+}
+
+.sub-emoji-opt.selected {
+  background: var(--primary-bg, rgba(99, 102, 241, 0.15));
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+/* 모달 내 결제 주기 라디오/세그먼트 */
+.sub-cycle-selector {
+  display: flex;
+  gap: 0.5rem;
+  background: var(--bg-main);
+  padding: 0.25rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.sub-cycle-opt {
+  flex: 1;
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.sub-cycle-opt.active {
+  background: var(--bg-card);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 모바일 반응형 */
+@media (max-width: 900px) {
+  .sub-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .sub-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  
+  .subscriptions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-subtabs-bar {
+    margin-bottom: 1rem;
+  }
+
+  .subtab-btn {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.88rem;
+  }
+  }
+}
