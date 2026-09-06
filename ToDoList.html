@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260907_v134">
-  <link rel="stylesheet" href="css/animations.css?v=20260907_v134">
+  <link rel="stylesheet" href="css/style.css?v=20260907_v135">
+  <link rel="stylesheet" href="css/animations.css?v=20260907_v135">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -975,39 +975,16 @@
 
           <!-- TAB 2: 🔄 구독 관리 (Subscription Hub) -->
           <div id="ledger-tab-subscriptions" style="display: none; flex-direction: column; gap: 1.35rem;">
-            <!-- Subscriptions Summary Banner (3대 핵심 지표) -->
-            <div class="sub-stats-grid">
-              <div class="sub-stat-card">
-                <div class="sub-stat-header">
-                  <span class="sub-stat-title">💳 이번 달 총 구독료</span>
-                  <span class="sub-stat-badge" id="sub-stat-active-count">4개 이용 중</span>
-                </div>
-                <div class="sub-stat-val" id="sub-stat-monthly-total">50,590원</div>
-                <div class="sub-stat-sub">정기 결제 나가는 월간 고정비용</div>
+            <!-- Single Minimal Summary Banner (이번 달 총 구독료 한 줄 요약) -->
+            <div class="sub-simple-banner">
+              <div class="sub-banner-left">
+                <span class="sub-banner-icon">💳</span>
+                <span class="sub-banner-label">이번 달 총 구독료</span>
+                <span class="sub-banner-amount" id="sub-stat-monthly-total">0원</span>
               </div>
-
-              <div class="sub-stat-card">
-                <div class="sub-stat-header">
-                  <span class="sub-stat-title">📅 연간 예상 지출액</span>
-                  <span class="sub-stat-badge green">연간 환산 💡</span>
-                </div>
-                <div class="sub-stat-val" id="sub-stat-yearly-total" style="color: #7048e8;">607,080원</div>
-                <div class="sub-stat-sub">1년간 지출되는 총 구독 서비스 금액</div>
+              <div class="sub-banner-right">
+                <span class="sub-banner-count" id="sub-stat-active-count">활성 0개</span>
               </div>
-
-              <div class="sub-stat-card">
-                <div class="sub-stat-header">
-                  <span class="sub-stat-title">⏰ 다음 결제 예정 알림</span>
-                  <span class="sub-stat-badge" id="sub-stat-next-dday">D-Day 계산 중</span>
-                </div>
-                <div class="sub-stat-val sub-stat-next-val" id="sub-stat-next-payment">🤖 안티그래비티</div>
-                <div class="sub-stat-sub">다가오는 가장 가까운 정기 결제일</div>
-              </div>
-            </div>
-
-            <!-- Categories Filter Bar -->
-            <div class="sub-categories-bar" id="sub-categories-bar">
-              <!-- Dynamically rendered category pills -->
             </div>
 
             <!-- Subscriptions Grid Container -->
@@ -1439,33 +1416,29 @@
           </div>
         </div>
 
-        <!-- Payday & Category Row -->
+        <!-- Payday & 3 Simple Type Icons Row -->
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label" for="sub-modal-payday">매월 결제일 (1~31일)</label>
+            <label class="form-label" for="sub-modal-payday">매월 결제일 (1~31일) *</label>
             <input type="number" id="sub-modal-payday" class="form-input" min="1" max="31" value="1" required>
           </div>
           <div class="form-group">
-            <label class="form-label" for="sub-modal-category">카테고리</label>
-            <select id="sub-modal-category" class="form-select">
-              <option value="ai">🤖 AI & 개발</option>
-              <option value="ott">🎬 OTT & 미디어</option>
-              <option value="music">🎵 음악 & 스트리밍</option>
-              <option value="shopping">🛍️ 쇼핑 & 생활</option>
-              <option value="work">💼 업무 & 생산성</option>
-              <option value="etc">✨ 기타 구독</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Emoji Icon Picker -->
-        <div class="form-group">
-          <label class="form-label">
-            대표 아이콘 선택 <span id="sub-modal-preview-icon" style="font-size: 1.1rem; margin-left: 4px;">🤖</span>
-          </label>
-          <input type="hidden" id="sub-modal-selected-icon" value="🤖">
-          <div class="emoji-picker-container" id="sub-emoji-picker-container" style="max-height: 110px; overflow-y: auto;">
-            <!-- Dynamically populated 24 emoji buttons -->
+            <label class="form-label">대표 아이콘 *</label>
+            <input type="hidden" id="sub-modal-selected-icon" value="✨">
+            <div class="sub-type-chips-container" id="sub-type-chips-container">
+              <button type="button" class="sub-type-chip" data-sub-type-icon="🎮" title="오락 (게임/음악/엔터)">
+                <span class="chip-icon">🎮</span>
+                <span class="chip-label">오락</span>
+              </button>
+              <button type="button" class="sub-type-chip" data-sub-type-icon="📺" title="OTT (영상/스트리밍)">
+                <span class="chip-icon">📺</span>
+                <span class="chip-label">OTT</span>
+              </button>
+              <button type="button" class="sub-type-chip active" data-sub-type-icon="✨" title="그외 (도구/쇼핑/일반)">
+                <span class="chip-icon">✨</span>
+                <span class="chip-label">그외</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2858,10 +2831,10 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Application Logic Scripts (Phase 1 Modularization) -->
-  <script src="js/utils/constants.js?v=20260907_v134"></script>
-  <script src="js/utils/helpers.js?v=20260907_v134"></script>
-  <script src="js/services/crypto.js?v=20260907_v134"></script>
-  <script src="js/app.js?v=20260907_v134"></script>
-  <script src="js/treasure.js?v=20260907_v134"></script>
+  <script src="js/utils/constants.js?v=20260907_v135"></script>
+  <script src="js/utils/helpers.js?v=20260907_v135"></script>
+  <script src="js/services/crypto.js?v=20260907_v135"></script>
+  <script src="js/app.js?v=20260907_v135"></script>
+  <script src="js/treasure.js?v=20260907_v135"></script>
 </body>
 </html>

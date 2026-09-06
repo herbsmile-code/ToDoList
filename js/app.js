@@ -4075,73 +4075,23 @@
     renderSubscriptions() {
       const stats = store.getSubscriptionStats();
 
-      // Update Subscription Summary Dashboard Banner
+      // Update Single Minimal Summary Banner
       const monthlyTotalEl = document.getElementById('sub-stat-monthly-total');
-      const yearlyTotalEl = document.getElementById('sub-stat-yearly-total');
       const activeCountEl = document.getElementById('sub-stat-active-count');
-      const nextPaymentEl = document.getElementById('sub-stat-next-payment');
-      const nextDdayEl = document.getElementById('sub-stat-next-dday');
       const subtabBadge = document.getElementById('subtab-subs-count-badge');
 
       if (monthlyTotalEl) monthlyTotalEl.textContent = formatKRW(stats.monthlyTotal);
-      if (yearlyTotalEl) yearlyTotalEl.textContent = formatKRW(stats.yearlyTotal);
       if (activeCountEl) activeCountEl.textContent = `활성 ${stats.activeCount}개 (전체 ${stats.totalCount}개)`;
       if (subtabBadge) subtabBadge.textContent = stats.activeCount;
-
-      if (stats.nextPayment) {
-        const { sub, diffDays, targetDate } = stats.nextPayment;
-        const ddayStr = diffDays === 0 ? 'D-Day (오늘 결제! 🎉)' : `D-${diffDays}`;
-        const targetMonth = targetDate.getMonth() + 1;
-        const targetDay = targetDate.getDate();
-
-        if (nextDdayEl) {
-          nextDdayEl.textContent = ddayStr;
-          nextDdayEl.className = `sub-stat-badge ${diffDays <= 3 ? 'urgent' : ''}`;
-        }
-        if (nextPaymentEl) {
-          nextPaymentEl.textContent = `${sub.icon || '💳'} ${escapeHTML(sub.name)} (${targetMonth}월 ${targetDay}일)`;
-        }
-      } else {
-        if (nextDdayEl) {
-          nextDdayEl.textContent = '결제 대기';
-          nextDdayEl.className = 'sub-stat-badge';
-        }
-        if (nextPaymentEl) nextPaymentEl.textContent = '이용 중인 구독이 없어요 🌱';
-      }
-
-      // Render Categories Filter Bar
-      const catBar = document.getElementById('sub-categories-bar');
-      if (catBar) {
-        const activeCat = store.activeSubscriptionCategory || 'all';
-        const cats = DEFAULT_SUBSCRIPTION_CATEGORIES;
-        catBar.innerHTML = cats.map(cat => {
-          const isActive = cat.id === activeCat;
-          const count = cat.id === 'all'
-            ? store.subscriptions.length
-            : store.subscriptions.filter(s => s && s.category === cat.id).length;
-          return `
-            <button type="button" class="sub-cat-chip ${isActive ? 'active' : ''}" data-sub-cat="${cat.id}">
-              <span class="sub-cat-icon">${cat.icon}</span>
-              <span class="sub-cat-label">${escapeHTML(cat.name)}</span>
-              <span class="sub-cat-count">${count}</span>
-            </button>
-          `;
-        }).join('');
-      }
 
       // Render Subscriptions Grid
       const grid = document.getElementById('subscriptions-grid');
       const emptyState = document.getElementById('subscriptions-empty-state');
-      const activeCat = store.activeSubscriptionCategory || 'all';
-      let filtered = store.subscriptions || [];
-
-      if (activeCat !== 'all') {
-        filtered = filtered.filter(s => s && s.category === activeCat);
-      }
+      const subs = store.subscriptions || [];
 
       if (!grid) return;
 
-      if (filtered.length === 0) {
+      if (subs.length === 0) {
         grid.innerHTML = '';
         if (emptyState) emptyState.style.display = 'flex';
       } else {
@@ -4149,7 +4099,7 @@
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-        grid.innerHTML = filtered.map(sub => {
+        grid.innerHTML = subs.map(sub => {
           const payDay = Math.min(31, Math.max(1, Number(sub.payDay) || 1));
           let targetDate = new Date(today.getFullYear(), today.getMonth(), payDay);
           if (targetDate < today) {
@@ -4158,7 +4108,6 @@
           const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
           const ddayText = diffDays === 0 ? '오늘 결제! 🎉' : `D-${diffDays}`;
           const isUrgent = diffDays <= 3 && sub.isActive;
-          const catObj = DEFAULT_SUBSCRIPTION_CATEGORIES.find(c => c.id === sub.category) || { name: '기타', icon: '✨' };
           const cycleText = sub.billingCycle === 'yearly' ? '매년' : '매월';
 
           // 만료일 (약정 종료일) 계산
@@ -4186,14 +4135,13 @@
             <div class="subscription-card ${!sub.isActive ? 'is-inactive' : ''}" data-sub-id="${sub.id}">
               <div class="sub-card-header">
                 <div class="sub-card-icon-wrap">
-                  <span class="sub-card-icon">${sub.icon || '💳'}</span>
+                  <span class="sub-card-icon">${sub.icon || '✨'}</span>
                 </div>
                 <div class="sub-card-titles">
                   <div class="sub-card-name" title="${escapeHTML(sub.name)}">
                     ${escapeHTML(sub.name)}
                   </div>
                   <div class="sub-card-tags">
-                    <span class="sub-cat-badge">${catObj.icon} ${escapeHTML(catObj.name)}</span>
                     <span class="sub-cycle-badge">${cycleText}</span>
                   </div>
                 </div>
@@ -4213,7 +4161,7 @@
                   <span class="amount-cycle">/ ${sub.billingCycle === 'yearly' ? '년' : '월'}</span>
                 </div>
                 <div class="sub-card-dday-badge ${isUrgent ? 'urgent' : ''}">
-                  ${sub.isActive ? `⏰ 결제일: 매월 ${sub.payDay}일 (${ddayText})` : '⏸️ 구독 일시중지'}
+                  ${sub.isActive ? `⏰ 결제일: 매월 ${sub.payDay}일 (${ddayText})` : '⏸️ 일시중지'}
                 </div>
               </div>
 
@@ -4235,16 +4183,19 @@
       }
     },
 
-    // Subscription Modal Handlers
-    renderSubscriptionEmojiPicker(selectedEmoji = '🤖') {
-      const pickerEl = document.getElementById('sub-emoji-picker-container');
-      if (!pickerEl) return;
-      const emojis = SUBSCRIPTION_EMOJI_LIST;
-      pickerEl.innerHTML = emojis.map(em => `
-        <button type="button" class="emoji-picker-btn ${em === selectedEmoji ? 'active' : ''}" data-sub-emoji="${em}">
-          ${em}
-        </button>
-      `).join('');
+    // 3 Simple Type Chips Handler (오락 🎮 / OTT 📺 / 그외 ✨)
+    renderSubscriptionTypeChips(selectedIcon = '✨') {
+      const chips = document.querySelectorAll('#sub-type-chips-container .sub-type-chip');
+      chips.forEach(chip => {
+        const icon = chip.dataset.subTypeIcon;
+        if (icon === selectedIcon) {
+          chip.classList.add('active');
+        } else {
+          chip.classList.remove('active');
+        }
+      });
+      const iconInput = document.getElementById('sub-modal-selected-icon');
+      if (iconInput) iconInput.value = selectedIcon;
     },
 
     openSubscriptionModal(subId = null) {
@@ -4254,14 +4205,7 @@
       const deleteBtn = document.getElementById('btn-modal-delete-subscription');
       if (!modal || !form) return;
 
-      const catSelect = document.getElementById('sub-modal-category');
-      if (catSelect) {
-        catSelect.innerHTML = DEFAULT_SUBSCRIPTION_CATEGORIES.filter(c => c.id !== 'all').map(c => `
-          <option value="${c.id}">${c.icon} ${c.name}</option>
-        `).join('');
-      }
-
-      let activeEmoji = '🤖';
+      let activeIcon = '✨';
       if (subId) {
         const sub = (store.subscriptions || []).find(s => s && s.id === subId);
         if (sub) {
@@ -4271,11 +4215,10 @@
           document.getElementById('sub-modal-amount').value = sub.amount || '';
           document.getElementById('sub-modal-cycle').value = sub.billingCycle || 'monthly';
           document.getElementById('sub-modal-payday').value = sub.payDay || 1;
-          if (catSelect) catSelect.value = sub.category || 'ai';
           document.getElementById('sub-modal-memo').value = sub.memo || '';
           document.getElementById('sub-modal-expiry').value = sub.expiryDate || '';
           document.getElementById('sub-modal-active').checked = sub.isActive !== false;
-          activeEmoji = sub.icon || '🤖';
+          activeIcon = sub.icon || '✨';
           if (deleteBtn) deleteBtn.style.display = 'inline-block';
         }
       } else {
@@ -4288,10 +4231,7 @@
         if (deleteBtn) deleteBtn.style.display = 'none';
       }
 
-      document.getElementById('sub-modal-selected-icon').value = activeEmoji;
-      const previewIcon = document.getElementById('sub-modal-preview-icon');
-      if (previewIcon) previewIcon.textContent = activeEmoji;
-      this.renderSubscriptionEmojiPicker(activeEmoji);
+      this.renderSubscriptionTypeChips(activeIcon);
 
       modal.classList.add('active');
       modal.style.display = 'flex';
@@ -8013,16 +7953,11 @@
         return;
       }
 
-      // Subscription Modal Emoji Picker Click
-      const subEmojiBtn = e.target.closest('[data-sub-emoji]');
-      if (subEmojiBtn && subEmojiBtn.dataset.subEmoji) {
-        const emoji = subEmojiBtn.dataset.subEmoji;
-        document.getElementById('sub-modal-selected-icon').value = emoji;
-        const preview = document.getElementById('sub-modal-preview-icon');
-        if (preview) preview.textContent = emoji;
-        document.querySelectorAll('#sub-emoji-picker-container .emoji-picker-btn').forEach(btn => {
-          btn.classList.toggle('active', btn.dataset.subEmoji === emoji);
-        });
+      // Subscription Modal 3 Simple Type Chip Click (오락 / OTT / 그외)
+      const subTypeChip = e.target.closest('[data-sub-type-icon]');
+      if (subTypeChip && subTypeChip.dataset.subTypeIcon) {
+        const icon = subTypeChip.dataset.subTypeIcon;
+        UI.renderSubscriptionTypeChips(icon);
         return;
       }
 
@@ -8117,8 +8052,7 @@
         const amount = parseInt(amountStr, 10) || 0;
         const billingCycle = document.getElementById('sub-modal-cycle').value || 'monthly';
         const payDay = parseInt(document.getElementById('sub-modal-payday').value, 10) || 1;
-        const category = document.getElementById('sub-modal-category').value || 'ai';
-        const icon = document.getElementById('sub-modal-selected-icon').value || '🤖';
+        const icon = (document.getElementById('sub-modal-selected-icon')?.value || '✨').trim();
         const isActive = document.getElementById('sub-modal-active').checked;
         const memo = document.getElementById('sub-modal-memo').value.trim();
         const expiryDate = (document.getElementById('sub-modal-expiry')?.value || '').trim();
@@ -8129,11 +8063,11 @@
         }
 
         if (subId) {
-          store.updateSubscription(subId, { name, amount, billingCycle, payDay, category, icon, isActive, memo, expiryDate });
+          store.updateSubscription(subId, { name, amount, billingCycle, payDay, icon, isActive, memo, expiryDate });
           sounds.playComplete();
           UI.showToast('구독 정보가 수정되었어요! ✨', 'success');
         } else {
-          store.addSubscription({ name, amount, billingCycle, payDay, category, icon, isActive, memo, expiryDate });
+          store.addSubscription({ name, amount, billingCycle, payDay, icon, isActive, memo, expiryDate });
           sounds.playPop();
           UI.showToast('새로운 구독 서비스가 등록되었어요! 🔄💖', 'success');
         }

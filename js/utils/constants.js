@@ -26,12 +26,27 @@
   // =========================================================================
   const DEVLOG_DATA = [
     {
-      version: 'v1.3.4',
+      version: 'v1.3.5',
       date: '2026-09-07',
       dateFormatted: '2026년 9월 7일 (오늘)',
-      title: '✨ 구독 관리 CSS 스타일 완비 & 편집 반응 복구 & 구독 만료일 기능 탑재 (v1.3.4)',
+      title: '💎 신혼 가계부 ↔ 구독관리 레이아웃 너비 100% 일치화 & 한 줄 요약 배너 및 3종 아이콘(오락/OTT/그외) 간소화 (v1.3.5)',
       badge: '최신 배포 🌟',
       badgeColor: '#ff6b8b',
+      summary: '가계부와 구독관리 탭 가로폭 완벽 일치화, 이번 달 총 구독료 한 줄 요약 배너 개편, 복잡한 카테고리 제거 및 3종 대표 아이콘(오락/OTT/그외) 미니멀 관리 시스템 구축',
+      details: [
+        '📐 가계부 ↔ 구독관리 레이아웃 100% 일치: 탭 전환 시 화면이 넓어지거나 좁아지지 않고 가계부와 완전히 동일한 안정적 너비 유지',
+        '💳 이번 달 총 구독료 한 줄 요약 배너: 글자가 쪼개지던 복잡한 4개 통계 카드를 제거하고 단 하나의 시원하고 깔끔한 미니멀 한 줄 배너로 직관적 개편',
+        '🎮 대표 아이콘 3종 단순화: 복잡한 24종 피커 대신 🎮 오락, 📺 OTT, ✨ 그외 3가지 직관적인 원클릭 칩으로 선택',
+        '✨ 카테고리 제거 & 미니멀 구독 카드: 불필요한 카테고리 필터 바 및 모달 드롭다운을 제거하여 가장 간결하고 빠른 구독 관리 환경 제공'
+      ]
+    },
+    {
+      version: 'v1.3.4',
+      date: '2026-09-07',
+      dateFormatted: '2026년 9월 7일',
+      title: '✨ 구독 관리 CSS 스타일 완비 & 편집 반응 복구 & 구독 만료일 기능 탑재 (v1.3.4)',
+      badge: '안정화 버전 💎',
+      badgeColor: '#7048e8',
       summary: '카테고리 칩 및 카드 CSS 100% 매칭, 구독 편집 모달 즉시 반응 복구, 바로가기 버튼 제거, 구독 만료일/약정 종료일 D-Day 계산 기능 추가',
       details: [
         '🎨 구독 관리 CSS 정상화: 카테고리 필터 칩(.sub-cat-chip) 및 구독 카드 그리드 스타일을 100% 매칭하여 감성 캡슐 디자인으로 완벽 복구',
@@ -340,22 +355,18 @@
     }
   ];
 
-  // Subscription Manager Categories, Emojis & Default Seed Data
-  const DEFAULT_SUBSCRIPTION_CATEGORIES = [
-    { id: 'all', name: '전체 보기', icon: '🌟', color: '#ff6b8b' },
-    { id: 'ai', name: 'AI & 개발', icon: '🤖', color: '#7048e8' },
-    { id: 'ott', name: 'OTT & 미디어', icon: '🎬', color: '#e03131' },
-    { id: 'music', name: '음악 & 스트리밍', icon: '🎵', color: '#10b981' },
-    { id: 'shopping', name: '쇼핑 & 생활', icon: '🛍️', color: '#f59f00' },
-    { id: 'work', name: '업무 & 생산성', icon: '💼', color: '#339af0' },
-    { id: 'etc', name: '기타 구독', icon: '✨', color: '#845ef7' }
+  // Subscription Manager Simple Types & Default Seed Data
+  const SUBSCRIPTION_SIMPLE_TYPES = [
+    { id: 'entertainment', name: '오락', icon: '🎮' },
+    { id: 'ott', name: 'OTT', icon: '📺' },
+    { id: 'etc', name: '그외', icon: '✨' }
   ];
 
-  const SUBSCRIPTION_EMOJI_LIST = [
-    '🤖', '🎬', '🎵', '🛍️', '💼', '💻', '📱', '📺',
-    '🍿', '🎧', '📚', '☁️', '🔑', '🎮', '🎨', '📦',
-    '☕', '🏋️', '🚗', '🏠', '💳', '💡', '⭐', '✨'
+  const DEFAULT_SUBSCRIPTION_CATEGORIES = [
+    { id: 'all', name: '전체 보기', icon: '🌟', color: '#ff6b8b' }
   ];
+
+  const SUBSCRIPTION_EMOJI_LIST = ['🎮', '📺', '✨'];
 
   const DEFAULT_SUBSCRIPTIONS = [
     {
@@ -364,11 +375,10 @@
       amount: 23000,
       billingCycle: 'monthly',
       payDay: 9,
-      category: 'ai',
-      icon: '🤖',
+      category: 'etc',
+      icon: '✨',
       isActive: true,
-      memo: '바이브 코딩 & AI 페어 프로그래밍 Pro 플랜 🤖✨',
-      url: 'https://antigravity.google',
+      memo: '바이브 코딩 & AI 페어 프로그래밍 Pro 플랜 ✨',
       createdAt: 1788693600000,
       updatedAt: 1788693600000
     },
@@ -379,10 +389,9 @@
       billingCycle: 'monthly',
       payDay: 15,
       category: 'ott',
-      icon: '🎬',
+      icon: '📺',
       isActive: true,
-      memo: '웨이브 스탠다드 요금제 (드라마/예능/영화 무제한) 🍿',
-      url: 'https://www.wavve.com',
+      memo: '웨이브 스탠다드 요금제 🍿',
       createdAt: 1788693600000,
       updatedAt: 1788693600000
     },
@@ -392,11 +401,10 @@
       amount: 8800,
       billingCycle: 'monthly',
       payDay: 22,
-      category: 'music',
-      icon: '🎵',
+      category: 'entertainment',
+      icon: '🎮',
       isActive: true,
-      memo: '스마트 음악감상 & 모바일 무제한 스트리밍 🎧',
-      url: 'https://www.genie.co.kr',
+      memo: '스마트 음악감상 🎧',
       createdAt: 1788693600000,
       updatedAt: 1788693600000
     },
@@ -406,11 +414,10 @@
       amount: 7890,
       billingCycle: 'monthly',
       payDay: 1,
-      category: 'shopping',
-      icon: '🛍️',
+      category: 'etc',
+      icon: '✨',
       isActive: true,
-      memo: '로켓배송 무료 배송/반품 & 쿠팡플레이 무료 시청 📦',
-      url: 'https://www.coupang.com',
+      memo: '로켓배송 & 쿠팡플레이 📦',
       createdAt: 1788693600000,
       updatedAt: 1788693600000
     }
@@ -446,6 +453,7 @@
   window.DEFAULT_CATEGORIES = DEFAULT_CATEGORIES;
   window.DEFAULT_AI_STUDY_CATEGORIES = DEFAULT_AI_STUDY_CATEGORIES;
   window.DEFAULT_AI_STUDY_NOTES = DEFAULT_AI_STUDY_NOTES;
+  window.SUBSCRIPTION_SIMPLE_TYPES = SUBSCRIPTION_SIMPLE_TYPES;
   window.DEFAULT_SUBSCRIPTION_CATEGORIES = DEFAULT_SUBSCRIPTION_CATEGORIES;
   window.SUBSCRIPTION_EMOJI_LIST = SUBSCRIPTION_EMOJI_LIST;
   window.DEFAULT_SUBSCRIPTIONS = DEFAULT_SUBSCRIPTIONS;
@@ -456,3 +464,4 @@
   window.MOCK_DEMO_IDS = MOCK_DEMO_IDS;
 
 })(window);
+
