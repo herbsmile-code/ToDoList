@@ -7203,21 +7203,22 @@ body::after {
 /* AI Study Cards Grid */
 .aistudy-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.9rem;
 }
 
 .aistudy-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  padding: 1.25rem;
+  padding: 0.9rem;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.55rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
   transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  cursor: pointer;
 }
 
 .aistudy-card:hover {
@@ -7310,15 +7311,79 @@ body::after {
 
 /* 요약 / 설명 영역 */
 .aistudy-summary-box {
-  font-size: 0.88rem;
-  line-height: 1.55;
+  font-size: 0.82rem;
+  line-height: 1.45;
   color: var(--text-main);
   background: var(--bg-main);
-  padding: 0.75rem 0.9rem;
+  padding: 0.5rem 0.65rem;
   border-radius: 10px;
   border-left: 3.5px solid var(--primary);
+  word-break: break-word;
+}
+
+.aistudy-summary-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.aistudy-detail-hint {
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.aistudy-detail-modal-card {
+  max-width: 680px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.aistudy-detail-modal-content {
+  overflow-y: auto;
+  padding: 1rem 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.aistudy-detail-meta,
+.aistudy-detail-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.aistudy-detail-section h4 {
+  margin: 0 0 0.45rem;
+  font-size: 0.9rem;
+}
+
+.aistudy-detail-section p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.aistudy-detail-code {
+  margin: 0;
+  padding: 0.85rem;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #1e1e2e;
+  color: #cdd6f4;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.aistudy-detail-link {
+  color: var(--primary);
+  font-weight: 700;
 }
 
 /* 프롬프트 & 코드 스니펫 박스 */
