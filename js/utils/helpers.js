@@ -94,6 +94,10 @@
       } catch (e) {}
     }
 
+    playPop() {
+      this.playAdd();
+    }
+
     playComplete() {
       if (!this.enabled) return;
       this.init();

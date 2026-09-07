@@ -8064,11 +8064,14 @@
 
         if (subId) {
           store.updateSubscription(subId, { name, amount, billingCycle, payDay, icon, isActive, memo, expiryDate });
-          sounds.playComplete();
+          if (typeof sounds !== 'undefined' && sounds.playComplete) sounds.playComplete();
           UI.showToast('구독 정보가 수정되었어요! ✨', 'success');
         } else {
           store.addSubscription({ name, amount, billingCycle, payDay, icon, isActive, memo, expiryDate });
-          sounds.playPop();
+          if (typeof sounds !== 'undefined' && (sounds.playAdd || sounds.playPop)) {
+            if (sounds.playAdd) sounds.playAdd();
+            else if (sounds.playPop) sounds.playPop();
+          }
           UI.showToast('새로운 구독 서비스가 등록되었어요! 🔄💖', 'success');
         }
 
