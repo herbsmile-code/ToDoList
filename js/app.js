@@ -295,6 +295,7 @@
       try { UI.renderNotes(); } catch (e) {}
       try { UI.renderWishlist(); } catch (e) {}
       try { UI.renderLedger(); } catch (e) {}
+      try { UI.renderSubscriptions(); } catch (e) {}
       try { UI.renderCalendarMonth(); } catch (e) {}
       try { UI.renderCalendarWeek(); } catch (e) {}
       try { UI.renderVacation(); } catch (e) {}
@@ -470,7 +471,18 @@
                 }
                 if (data.subscriptions !== undefined) {
                   const cloudSubs = normalizeArray(data.subscriptions).filter(s => s && s.id && !deletedIds.has(s.id));
-                  store.subscriptions = cloudSubs;
+                  if (cloudSubs.length > 0) {
+                    const sMap = new Map();
+                    cloudSubs.forEach(s => { if (s && s.id) sMap.set(s.id, s); });
+                    (store.subscriptions || []).forEach(ls => {
+                      if (ls && ls.id && !sMap.has(ls.id) && !deletedIds.has(ls.id)) {
+                        sMap.set(ls.id, ls);
+                      }
+                    });
+                    store.subscriptions = Array.from(sMap.values());
+                  } else {
+                    store.subscriptions = (store.subscriptions || []).filter(s => s && s.id && !deletedIds.has(s.id));
+                  }
                 }
                 if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
                   const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'aistudy', 'devlog', 'vault'];
@@ -1072,7 +1084,7 @@
       this.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
       this.ledgerFiles = [];
       this.selectedLedgerMonth = new Date().getMonth() + 1;
-      this.activeLedgerSubtab = 'budget'; // 'budget' | 'subscriptions'
+      this.activeLedgerSubtab = localStorage.getItem('todolist_jy_ledger_subtab') || 'budget'; // 'budget' | 'subscriptions'
       this.activeSubscriptionCategory = 'all';
       this.subscriptions = [];
       this.activeFilter = localStorage.getItem('todolist_jy_active_filter') || 'all';
@@ -7908,6 +7920,7 @@
       const lSubtabBtn = e.target.closest('.ledger-subtab-btn');
       if (lSubtabBtn && lSubtabBtn.dataset.ledgerSubtab) {
         store.activeLedgerSubtab = lSubtabBtn.dataset.ledgerSubtab;
+        try { localStorage.setItem('todolist_jy_ledger_subtab', store.activeLedgerSubtab); } catch (e) {}
         UI.renderLedger();
         return;
       }
