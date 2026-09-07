@@ -7652,7 +7652,7 @@ body::after {
 .subscriptions-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 1rem;
+  gap: 1.15rem;
   width: 100%;
   box-sizing: border-box;
 }
@@ -7662,220 +7662,293 @@ body::after {
   flex-direction: column;
   justify-content: space-between;
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 1.15rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: 18px;
+  padding: 1.25rem;
   box-shadow: var(--shadow-sm);
-  transition: all 0.22s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
 }
 
 .subscription-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow-md);
-  border-color: rgba(255, 107, 139, 0.35);
+  border-color: rgba(255, 107, 139, 0.38);
 }
 
+.subscription-card.is-inactive,
 .subscription-card.paused {
-  opacity: 0.62;
-  filter: grayscale(0.65);
+  opacity: 0.65;
+  filter: grayscale(0.5);
 }
 
+.subscription-card.is-inactive:hover,
 .subscription-card.paused:hover {
-  opacity: 0.9;
-  filter: grayscale(0.2);
+  opacity: 0.92;
+  filter: grayscale(0.15);
 }
 
+/* 카드 상단: 아이콘 + 서비스명 + 결제주기 + 액션 버튼 */
 .sub-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.85rem;
   margin-bottom: 0.9rem;
+}
+
+.sub-card-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .sub-card-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  background: var(--bg-hover);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 107, 139, 0.12) 0%, rgba(177, 151, 252, 0.1) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  flex-shrink: 0;
-  border: 1px solid var(--border-color);
+  font-size: 1.55rem;
+  border: 1px solid rgba(255, 107, 139, 0.2);
+  box-shadow: 0 2px 6px rgba(255, 107, 139, 0.08);
 }
 
-.sub-card-info {
+.sub-card-titles {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
-.sub-card-title {
-  font-size: 1.02rem;
-  font-weight: 700;
+.sub-card-name {
+  font-size: 1.05rem;
+  font-weight: 800;
   color: var(--text-main);
-  margin-bottom: 0.25rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
-.sub-card-cost {
-  font-size: 1.18rem;
-  font-weight: 800;
-  color: var(--primary);
-  display: flex;
-  align-items: baseline;
-  gap: 0.25rem;
-}
-
-.sub-card-cost .sub-cycle-text {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.sub-card-details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.65rem 0.75rem;
-  background: var(--bg-hover);
-  border-radius: 10px;
-  font-size: 0.82rem;
-  margin-bottom: 0.85rem;
-}
-
-.sub-card-date {
+.sub-card-tags {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  color: var(--text-muted);
+  gap: 0.35rem;
 }
 
-.sub-card-date strong {
-  color: var(--text-main);
-}
-
-.sub-card-expiry-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.76rem;
+.sub-cycle-badge {
+  font-size: 0.72rem;
   font-weight: 700;
-}
-
-.sub-card-expiry-badge.warning {
-  background: rgba(245, 158, 11, 0.15);
-  color: #d97706;
-  border: 1px solid rgba(245, 158, 11, 0.3);
-}
-
-.sub-card-expiry-badge.normal {
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
   background: rgba(99, 102, 241, 0.1);
   color: #6366f1;
   border: 1px solid rgba(99, 102, 241, 0.2);
-}
-
-.sub-card-memo {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  background: var(--bg-main);
-  padding: 0.45rem 0.65rem;
-  border-radius: 8px;
-  border: 1px dashed var(--border-color);
-  margin-bottom: 0.85rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-block;
 }
 
 .sub-card-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  border-top: 1px solid var(--border-color);
-  padding-top: 0.75rem;
-  margin-top: auto;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
-.sub-card-btns-right {
+.sub-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-main);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-}
-
-.sub-card-btn {
-  padding: 0.35rem 0.65rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-card);
-  color: var(--text-muted);
+  justify-content: center;
+  font-size: 0.88rem;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.sub-card-btn:hover {
+.sub-action-btn:hover {
   background: var(--bg-hover);
   color: var(--text-main);
   border-color: var(--primary);
+  transform: translateY(-1px);
 }
 
-.sub-card-btn.delete:hover {
+.sub-action-btn.delete-btn:hover {
   background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
-  border-color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* 카드 중앙: 금액 박스 + D-Day 결제일 배지 */
+.sub-card-amount-box {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.75rem 0.95rem;
+  background: linear-gradient(135deg, rgba(255, 107, 139, 0.05) 0%, rgba(255, 240, 243, 0.45) 100%);
+  border-radius: 13px;
+  border: 1px solid rgba(255, 107, 139, 0.15);
+  margin-bottom: 0.75rem;
+  box-sizing: border-box;
+}
+
+.sub-card-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.sub-card-amount .amount-num {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+}
+
+.sub-card-amount .amount-cycle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sub-card-dday-badge {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.sub-card-dday-badge.urgent {
+  color: #e03131;
+  background: rgba(224, 49, 49, 0.1);
+  border-color: rgba(224, 49, 49, 0.28);
+  font-weight: 800;
+}
+
+/* 만료일 / 약정 종료일 배지 */
+.sub-card-expiry-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  border-radius: 9px;
+  margin-bottom: 0.65rem;
+  box-sizing: border-box;
+}
+
+.sub-card-expiry-badge.auto {
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.sub-card-expiry-badge.urgent {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-weight: 700;
+}
+
+.sub-card-expiry-badge.expired {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  font-weight: 700;
+}
+
+/* 카드 메모 */
+.sub-card-memo {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  padding: 0.45rem 0.7rem;
+  border-radius: 9px;
+  border: 1px dashed var(--border-color);
+  margin-bottom: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 카드 하단: 원클릭 구독 중 / 일시중지 토글 */
+.sub-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.sub-toggle-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .sub-status-toggle-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.7rem;
-  font-size: 0.78rem;
+  gap: 0.45rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
   font-weight: 700;
   border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-card);
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-main);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sub-status-toggle-btn:hover {
   background: var(--bg-hover);
   border-color: var(--primary);
+  transform: translateY(-1px);
 }
 
 .sub-status-toggle-btn.active {
   background: rgba(16, 185, 129, 0.12);
   color: #059669;
-  border-color: rgba(16, 185, 129, 0.3);
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.12);
 }
 
 .sub-status-toggle-btn .toggle-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #9ca3af;
+  transition: all 0.2s ease;
 }
 
 .sub-status-toggle-btn.active .toggle-dot {
   background: #10b981;
+  box-shadow: 0 0 6px #10b981;
 }
 
 /* 5. 3종 대표 아이콘 선택기 (모달) */
 .sub-type-chips-container {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.45rem;
   width: 100%;
   box-sizing: border-box;
 }
@@ -7885,9 +7958,9 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.7rem 0.5rem;
-  font-size: 0.92rem;
+  gap: 0.35rem;
+  padding: 0.65rem 0.4rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: var(--text-muted);
   background: var(--bg-main);
@@ -7901,13 +7974,64 @@ body::after {
   border-color: var(--primary);
   color: var(--text-main);
   background: var(--bg-hover);
+  transform: translateY(-1px);
 }
 
 .sub-type-chip.active {
-  background: rgba(255, 107, 139, 0.12);
+  background: rgba(255, 107, 139, 0.14);
   border-color: var(--primary);
   color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(255, 107, 139, 0.2);
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(255, 107, 139, 0.2);
+}
+
+.sub-type-chip .chip-icon {
+  font-size: 1.1rem;
+}
+
+.sub-type-chip .chip-label {
+  font-size: 0.86rem;
+}
+
+/* 6. 구독 모달 상세 스타일 */
+#subscription-modal .modal-card {
+  max-width: 500px;
+  width: 92%;
+  border-radius: 20px;
+  padding: 1.6rem;
+  box-sizing: border-box;
+}
+
+#subscription-modal .form-group {
+  margin-bottom: 0.95rem;
+}
+
+#subscription-modal .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+  margin-bottom: 0.95rem;
+}
+
+#subscription-modal .form-input,
+#subscription-modal .form-select {
+  width: 100%;
+  padding: 0.72rem 0.9rem;
+  font-size: 0.92rem;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-main);
+  color: var(--text-main);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+#subscription-modal .form-input:focus,
+#subscription-modal .form-select:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 107, 139, 0.18);
+  background: var(--bg-card);
 }
 
 /* 모바일 반응형 */
@@ -7915,7 +8039,7 @@ body::after {
   .sub-simple-banner {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.5rem;
+    gap: 0.65rem;
     padding: 1rem;
   }
 
@@ -7927,12 +8051,8 @@ body::after {
     grid-template-columns: 1fr;
   }
 
-  .ledger-subtabs-bar {
-    margin-bottom: 1rem;
-  }
-
-  .ledger-subtab-btn {
-    padding: 0.6rem 0.8rem;
-    font-size: 0.88rem;
+  #subscription-modal .form-row {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 }
