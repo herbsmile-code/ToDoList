@@ -26,6 +26,21 @@
   // =========================================================================
   const DEVLOG_DATA = [
     {
+      version: 'v1.3.9',
+      date: '2026-09-08',
+      dateFormatted: '2026년 9월 8일 (화)',
+      title: '🧠 [AI 스터디] MCP 도구 vs 전역 규칙 상충 분석 및 아키텍처 가이드 반영 (v1.3.9)',
+      badge: '최신 버전 ✨',
+      badgeColor: '#8b5cf6',
+      summary: 'MCP 도구 도입 시 4대 규칙 상충 분석, 시니어 아키텍트 거버넌스 수칙 수립, 스터디 보물창고(Study & Knowledge Hub) 등록',
+      details: [
+        '🧠 4대 상충 분석: UI/스타일링(Vanilla CSS vs Tailwind), 실행 권한(사전 승인 vs 자동 실행), 파일 편집(Diff vs 덮어쓰기), OS 환경(PowerShell vs Linux)',
+        '💡 시니어 개발자 원칙: "MCP는 도구일 뿐, 거버넌스를 침범할 수 없다", System Rules > MCP Instructions 우선순위 확립',
+        '🔒 권한 분리 원칙: 조회(Read)는 자동화 허용, 쓰기(Write)는 사용자 승인 및 IDE 내장 부분 수정(Diff) 도구로 단일화',
+        '💎 보물창고(Study & Knowledge Hub) AI 스터디 노트 및 AI_STUDY.md 개발문서 신규 등록'
+      ]
+    },
+    {
       version: 'v1.3.8',
       date: '2026-09-07',
       dateFormatted: '2026년 9월 7일 (오늘)',

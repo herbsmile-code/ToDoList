@@ -7,6 +7,29 @@ const TREASURE_STORAGE_KEY = 'zentask_treasures';
 
 const DEFAULT_TREASURES = [
   {
+    id: 'treasure-mcp-rules',
+    title: '[AI 스터디] MCP 도입 시 룰 상충 분석 및 시니어 아키텍처 가이드 🧠',
+    category: 'study',
+    desc: `전역 규칙/프로젝트 룰 vs 외부 MCP 도구 상충 분석 및 해결 원칙!
+
+1. 4대 주요 상충 영역
+• UI/스타일링: Vanilla CSS 규칙 vs 외부 MCP의 TailwindCSS 강제 지침
+• 실행 권한: 계획서 승인 절차 vs MCP의 자율적 즉각 실행/배포 지침
+• 파일 편집: 부분 수정(Diff) 및 주석 보존 vs 단순 파일 전체 덮어쓰기
+• OS 환경: Windows PowerShell vs Linux/Bash 명령어 기준
+
+2. 시니어 개발자의 핵심 원칙
+"MCP는 도구(API)일 뿐, 프로젝트의 규칙과 거버넌스를 침범할 수 없다."
+• 상위 권한 명시: 시스템 프롬프트(전역 룰) > MCP 도구 지침
+• 권한 분리: 조회(Read)는 자동화, 수정/파괴(Write)는 승인 후 실행
+• 파일 I/O 단일화: 파일 수정은 신뢰할 수 있는 IDE 내장 Diff 도구에만 위임`,
+    code: `# MCP 연동 시 권장 메타 룰 선언
+1. System Rules > Tool Description (시스템 규칙 우선)
+2. Read-Only Auto / Write Approval (쓰기 권한 제어)
+3. Windows PowerShell Syntax Adaptation (OS 환경 적응)`,
+    createdAt: Date.now()
+  },
+  {
     id: 'treasure-scenario',
     title: '[실전 가이드] 1~5번 셋업 황금 사이클 & 단계별 실전 시나리오 🚀',
     category: 'setup',
