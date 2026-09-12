@@ -7839,7 +7839,37 @@
     return fileName;
   }
 
-  // 분류된 엑셀 읽어서 룰 학습 (F, G, H열 3단 계층 학습)
+  // 날짜 정규화 헬퍼 (2026.07.15, 2026/07/15, 20260715, 엑셀 날짜 숫자 등 -> YYYY-MM-DD 완벽 통일)
+  function bankNormalizeDate(val) {
+    if (!val) return '';
+    // 1. 엑셀 날짜 일련번호 (숫자) 처리
+    if (typeof val === 'number' || (!isNaN(val) && Number(val) > 30000 && Number(val) < 65000)) {
+      const d = new Date(Math.round((Number(val) - 25569) * 86400 * 1000));
+      if (!isNaN(d.getTime())) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+    }
+    const str = String(val).trim().replace(/[\.\/\s]/g, '-');
+    // 2. 20260715 형태 (8자리 연속 숫자)
+    const numMatch = str.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (numMatch) return `${numMatch[1]}-${numMatch[2]}-${numMatch[3]}`;
+    // 3. 2026-7-5 또는 2026-07-15 형태
+    const pMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (pMatch) {
+      return `${pMatch[1]}-${pMatch[2].padStart(2, '0')}-${pMatch[3].padStart(2, '0')}`;
+    }
+    // 4. 2026-07 형태
+    const mMatch = str.match(/^(\d{4})-(\d{1,2})$/);
+    if (mMatch) {
+      return `${mMatch[1]}-${mMatch[2].padStart(2, '0')}-01`;
+    }
+    return str;
+  }
+
+  // 분류된 엑셀 읽어서 룰 학습 및 거래내역 스마트 업데이트 (미입력 항목 자동완성 탑재)
   async function bankLearnFromExcel(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -7851,33 +7881,70 @@
           const rules = bankLoadRules();
           const ruleMap = {};
           rules.forEach(r => {
-            ruleMap[r.keyword] = {
-              category: r.category || '',
-              subCategory: r.subCategory || '',
-              mainCategory: r.mainCategory || ''
-            };
+            if (r.keyword) {
+              ruleMap[r.keyword] = {
+                category: r.category || '',
+                subCategory: r.subCategory || '',
+                mainCategory: r.mainCategory || ''
+              };
+            }
           });
+
           let newTxns = [], learnedCount = 0;
+
+          // 1단계: 사용자가 직접 입력한 새 규칙 먼저 수집 & 학습
           rows.forEach((row, idx) => {
             if (idx === 0) return;
-            const date = String(row[0] || '').trim();
             const desc = String(row[1] || '').trim();
-            const out  = Number(String(row[2] || '').replace(/[^0-9]/g, '')) || 0;
-            const inn  = Number(String(row[3] || '').replace(/[^0-9]/g, '')) || 0;
-            const bal  = Number(String(row[4] || '').replace(/[^0-9]/g, '')) || 0;
             const category     = String(row[5] || '').trim();
             const subCategory  = String(row[6] || '').trim();
             const mainCategory = String(row[7] || '').trim();
             if (!desc) return;
+
             if (category && category !== '확인필요') {
               const keyword = desc.length > 8 ? desc.substring(0, 8) : desc;
               if (!ruleMap[keyword]) {
                 ruleMap[keyword] = { category, subCategory, mainCategory };
                 learnedCount++;
-              } else if (subCategory || mainCategory) {
-                ruleMap[keyword] = { category, subCategory, mainCategory };
+              } else {
+                ruleMap[keyword] = {
+                  category: category || ruleMap[keyword].category,
+                  subCategory: subCategory || ruleMap[keyword].subCategory,
+                  mainCategory: mainCategory || ruleMap[keyword].mainCategory
+                };
               }
             }
+          });
+
+          // 2단계: 거래내역 생성 및 항목 미입력 건에 대해 학습된 룰 자동 적용
+          rows.forEach((row, idx) => {
+            if (idx === 0) return;
+            const date = bankNormalizeDate(row[0]);
+            const desc = String(row[1] || '').trim();
+            const out  = Number(String(row[2] || '').replace(/[^0-9]/g, '')) || 0;
+            const inn  = Number(String(row[3] || '').replace(/[^0-9]/g, '')) || 0;
+            const bal  = Number(String(row[4] || '').replace(/[^0-9]/g, '')) || 0;
+            let category     = String(row[5] || '').trim();
+            let subCategory  = String(row[6] || '').trim();
+            let mainCategory = String(row[7] || '').trim();
+            if (!desc) return;
+
+            // 항목을 안 적었거나 '확인필요'인 경우 -> 학습된 룰에서 키워드 매칭하여 자동 채움!
+            if (!category || category === '확인필요') {
+              let matched = null;
+              for (const [kw, info] of Object.entries(ruleMap)) {
+                if (kw && desc.includes(kw) && info.category && info.category !== '확인필요') {
+                  matched = info;
+                  break;
+                }
+              }
+              if (matched) {
+                category = matched.category;
+                if (!subCategory) subCategory = matched.subCategory || '';
+                if (!mainCategory) mainCategory = matched.mainCategory || '';
+              }
+            }
+
             newTxns.push({
               date,
               desc,
@@ -7889,13 +7956,25 @@
               mainCategory: mainCategory || ''
             });
           });
+
+          // 새 룰 영구 저장
           bankSaveRules(Object.entries(ruleMap).map(([keyword, info]) => ({
             keyword,
             category: info.category,
             subCategory: info.subCategory,
             mainCategory: info.mainCategory
           })));
-          if (newTxns.length > 0) bankMergeAndSaveStatements(newTxns);
+
+          // 기존 내역에 새 분류 스마트 덮어쓰기 & 병합
+          if (newTxns.length > 0) {
+            bankMergeAndSaveStatements(newTxns);
+          }
+
+          // 화면 대시보드 즉시 재계산 및 갱신
+          if (typeof window.bankRenderMonthlyDashboard === 'function') {
+            window.bankRenderMonthlyDashboard();
+          }
+
           resolve({ transactions: newTxns, learnedCount });
         } catch (err) { reject(err); }
       };
@@ -7904,12 +7983,46 @@
     });
   }
 
-  // 거래내역 병합 저장
+  // 거래내역 스마트 병합 & 덮어쓰기 저장 (기존 확인필요 내역을 새 분류로 업데이트)
   function bankMergeAndSaveStatements(newTxns) {
     const existing = bankLoadStatements();
-    const existingSet = new Set(existing.map(t => `${t.date}|${t.desc}|${t.out}`));
-    const toAdd = newTxns.filter(t => !existingSet.has(`${t.date}|${t.desc}|${t.out}`));
-    const merged = [...existing, ...toAdd];
+    const map = new Map();
+
+    // 1. 기존 데이터 적재 (날짜 정규화)
+    existing.forEach(t => {
+      const normDate = bankNormalizeDate(t.date);
+      const key = `${normDate}|${t.desc}|${t.out}`;
+      map.set(key, { ...t, date: normDate });
+    });
+
+    // 2. 새 거래내역 덮어쓰기 및 추가
+    newTxns.forEach(t => {
+      const normDate = bankNormalizeDate(t.date);
+      const key = `${normDate}|${t.desc}|${t.out}`;
+      if (map.has(key)) {
+        const prev = map.get(key);
+        // 새 분류 정보가 입력되었거나 확인필요가 채워졌으면 업데이트
+        const updatedCat = (t.category && t.category !== '확인필요')
+          ? t.category
+          : (prev.category || t.category || '확인필요');
+        const updatedSub = t.subCategory || prev.subCategory || '';
+        const updatedMain = t.mainCategory || prev.mainCategory || '';
+
+        map.set(key, {
+          ...prev,
+          date: normDate,
+          category: updatedCat,
+          subCategory: updatedSub,
+          mainCategory: updatedMain,
+          in: (t.in !== undefined && t.in > 0) ? t.in : prev.in,
+          balance: (t.balance !== undefined && t.balance > 0) ? t.balance : prev.balance
+        });
+      } else {
+        map.set(key, { ...t, date: normDate });
+      }
+    });
+
+    const merged = Array.from(map.values());
     if (merged.length > 5000) merged.splice(0, merged.length - 5000);
     bankSaveStatements(merged);
     return merged;
@@ -7935,11 +8048,12 @@
 
     const byMonth = {};
     statements.forEach(tx => {
-      const mm = String(tx.date || '').match(/(\d{4})-(\d{2})/);
+      const normDate = bankNormalizeDate(tx.date);
+      const mm = normDate.match(/(\d{4})-(\d{2})/);
       if (!mm) return;
       const key = `${mm[1]}-${mm[2]}`;
       if (!byMonth[key]) byMonth[key] = [];
-      byMonth[key].push(tx);
+      byMonth[key].push({ ...tx, date: normDate });
     });
 
     const sortedMonths = Object.keys(byMonth).sort().reverse();
@@ -8205,7 +8319,8 @@
     if (!window.XLSX) return;
     const statements = bankLoadStatements();
     const txns = statements.filter(tx => {
-      const mm = String(tx.date || '').match(/(\d{4})-(\d{2})/);
+      const normDate = bankNormalizeDate(tx.date);
+      const mm = normDate.match(/(\d{4})-(\d{2})/);
       return mm && `${mm[1]}-${mm[2]}` === monthKey;
     });
     if (!txns.length) { UI.showToast('해당 월 내역이 없습니다.', 'info'); return; }
@@ -8218,7 +8333,8 @@
     if (!window.XLSX) return;
     const statements = bankLoadStatements();
     const txns = statements.filter(tx => {
-      const mm = String(tx.date || '').match(/(\d{4})-(\d{2})/);
+      const normDate = bankNormalizeDate(tx.date);
+      const mm = normDate.match(/(\d{4})-(\d{2})/);
       return mm && `${mm[1]}-${mm[2]}` === monthKey && tx.category === '확인필요';
     });
     if (!txns.length) { UI.showToast('확인필요 항목이 없어요 ✅', 'success'); return; }
