@@ -3896,21 +3896,30 @@
         let barsHTML = '';
         for (let m = 1; m <= 12; m++) {
           const mObj = data[m] || { income: { total: 0 }, fixed: { total: 0 }, variable: { total: 0 } };
-          const f = mObj.fixed.total || 0;
-          const v = mObj.variable.total || 0;
+          const inc = mObj.income?.total || 0;
+          const f = mObj.fixed?.total || 0;
+          const v = mObj.variable?.total || 0;
           const total = f + v;
           const isCurrent = (m === targetMonth);
 
+          const incomeHeightPct = maxVal > 0 ? (inc / maxVal) * 100 : 0;
           const fixedHeightPct = maxVal > 0 ? (f / maxVal) * 100 : 0;
           const varHeightPct = maxVal > 0 ? (v / maxVal) * 100 : 0;
           const totalFormatted = total > 0 ? (total >= 10000 ? `${Math.round(total / 10000)}만` : `${total}원`) : '';
 
           barsHTML += `
-            <div class="ledger-bar-col ${isCurrent ? 'is-current' : ''}" data-l-month="${m}" title="${m}월 총지출: ${formatKRW(total)} (고정 ${formatKRW(f)} + 변동 ${formatKRW(v)})">
+            <div class="ledger-bar-col ${isCurrent ? 'is-current' : ''}" data-l-month="${m}" title="${m}월 수입: ${formatKRW(inc)} / 총지출: ${formatKRW(total)} (고정 ${formatKRW(f)} + 변동 ${formatKRW(v)})">
               ${totalFormatted ? `<span class="ledger-bar-amount">${totalFormatted}</span>` : ''}
-              <div class="ledger-bar-track">
-                <div class="ledger-bar-segment-variable" style="height: ${varHeightPct}%;"></div>
-                <div class="ledger-bar-segment-fixed" style="height: ${fixedHeightPct}%;"></div>
+              <div class="ledger-bar-dual-tracks">
+                <!-- 🟢 월급(수입) 막대 -->
+                <div class="ledger-bar-track track-income" title="수입: ${formatKRW(inc)}">
+                  <div class="ledger-bar-segment-income" style="height: ${incomeHeightPct}%;"></div>
+                </div>
+                <!-- 🟣 고정 + 🌸 변동 지출 막대 -->
+                <div class="ledger-bar-track track-expense" title="지출: ${formatKRW(total)}">
+                  <div class="ledger-bar-segment-variable" style="height: ${varHeightPct}%;"></div>
+                  <div class="ledger-bar-segment-fixed" style="height: ${fixedHeightPct}%;"></div>
+                </div>
               </div>
               <span class="ledger-bar-label">${m}월</span>
             </div>
@@ -8150,6 +8159,11 @@
         const subCategory = tx.subCategory || '';
         const mainCategory = tx.mainCategory || '';
 
+        // [사용자 요청 2]: 통장이동금액은 지출(고정/변동/기타) 및 수입에서 완전 제외!
+        if (mainCategory === '통장이동' || mainCategory === '통장이동금액' || /통장이동/i.test(catStr) || /통장이동/i.test(desc) || (category && /통장이동/i.test(category))) {
+          return; // 단순 계좌 간 이동이므로 집계에서 완전 통과
+        }
+
         // [수입] 입금액(inAmt > 0)
         if (inAmt > 0) {
           bucket.incomeTotal += inAmt;
@@ -8689,7 +8703,7 @@
     }
     if (empty) empty.style.display = 'none';
 
-    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)'];
+    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장이동'];
 
     list.innerHTML = rules.map((r, idx) => {
       const mainOptHtml = mainOptions.map(opt => {
@@ -8726,6 +8740,25 @@
     }).join('');
   }
 
+  // 규칙 실시간 검색 함수 (1번 요구사항: 검색기능)
+  window.bankFilterRules = function(keyword) {
+    const list = document.getElementById('bank-rules-list');
+    if (!list) return;
+    const rows = list.querySelectorAll('.bank-rule-edit-row');
+    const kw = (keyword || '').trim().toLowerCase();
+    rows.forEach(row => {
+      const kwVal = (row.querySelector('.rule-edit-kw')?.value || '').toLowerCase();
+      const catVal = (row.querySelector('.rule-edit-cat')?.value || '').toLowerCase();
+      const subVal = (row.querySelector('.rule-edit-sub')?.value || '').toLowerCase();
+      const mainVal = (row.querySelector('.rule-edit-main')?.value || '').toLowerCase();
+      if (!kw || kwVal.includes(kw) || catVal.includes(kw) || subVal.includes(kw) || mainVal.includes(kw)) {
+        row.style.display = 'flex';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  };
+
   // 새 규칙 행 추가 함수
   window.bankAddNewRuleRow = function() {
     const list  = document.getElementById('bank-rules-list');
@@ -8733,7 +8766,7 @@
     if (!list) return;
     if (empty) empty.style.display = 'none';
 
-    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)'];
+    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장이동'];
     const mainOptHtml = mainOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
 
     const newRow = document.createElement('div');
