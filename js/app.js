@@ -7602,6 +7602,100 @@
     return null;
   }
 
+  // 공통 및 국민/우리은행 유연한 토큰 파서 (tryParseBankTokens)
+  function tryParseBankTokens(tokens, defaultDate = '', bankType = 'kookmin') {
+    if (!Array.isArray(tokens) || tokens.length < 2) return null;
+    const isMoneyStr = (s) => /^[\d,]+$/.test(String(s).trim()) || s === '-' || s === '--';
+
+    let list = tokens.map(t => String(t).trim()).filter(Boolean);
+
+    // 1. 앞쪽의 순번 숫자 제거 (예: "1", "2" 등)
+    if (list.length > 0 && /^\d{1,4}$/.test(list[0]) && list.length > 3) {
+      if (list.length > 1 && (/\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/.test(list[1]) || /^\d{8}$/.test(list[1]))) {
+        list.shift();
+      }
+    }
+
+    // 2. 거래일자 탐색 및 추출
+    let txnDate = defaultDate;
+    if (list.length > 0) {
+      const dMatch = list[0].match(/(20\d{2})[.\-/]?([01]\d)[.\-/]?([0-3]\d)/);
+      if (dMatch) {
+        txnDate = `${dMatch[1]}-${dMatch[2]}-${dMatch[3]}`;
+        list.shift();
+      }
+    }
+
+    // 3. 시간 토큰 제거 (예: "14:20:05", "14:20")
+    if (list.length > 0 && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(list[0])) {
+      list.shift();
+    }
+
+    if (list.length < 2) return null;
+
+    // 4. 금액 위치 찾기: 연속된 2개 이상의 숫자(출금, 입금, 잔액) 탐색
+    for (let i = 0; i < list.length - 1; i++) {
+      if (isMoneyStr(list[i]) && isMoneyStr(list[i + 1])) {
+        const out = cleanBankMoney(list[i]);
+        const inn = cleanBankMoney(list[i + 1]);
+
+        if (out > 0 || inn > 0) {
+          let bal = 0;
+          if (i + 2 < list.length && isMoneyStr(list[i + 2])) {
+            bal = cleanBankMoney(list[i + 2]);
+          }
+
+          // 금액 앞쪽 토큰들을 거래내용으로 취합
+          const beforeTokens = list.slice(0, i).filter(t => !isMoneyStr(t));
+          let desc = beforeTokens.join(' ').replace(/\s+/g, ' ').trim();
+
+          if (!desc) {
+            // 금액 뒤쪽에서 거래내용 탐색
+            const afterTokens = list.slice(i + (bal > 0 ? 3 : 2)).filter(t => !isMoneyStr(t));
+            desc = afterTokens.join(' ').replace(/\s+/g, ' ').trim();
+          }
+
+          return {
+            date: txnDate || defaultDate,
+            desc: desc || (inn > 0 ? '입금' : '출금'),
+            out,
+            in: inn,
+            balance: bal,
+            category: ''
+          };
+        }
+      }
+    }
+
+    // 5. 전체 금액 토큰 인덱스 기반 분석
+    const moneyIndices = [];
+    list.forEach((t, idx) => {
+      if (isMoneyStr(t)) moneyIndices.push(idx);
+    });
+
+    if (moneyIndices.length >= 2) {
+      const i1 = moneyIndices[moneyIndices.length - 2];
+      const i2 = moneyIndices[moneyIndices.length - 1];
+      if (i2 === i1 + 1) {
+        const out = cleanBankMoney(list[i1]);
+        const inn = cleanBankMoney(list[i2]);
+        if (out > 0 || inn > 0) {
+          const desc = list.slice(0, i1).filter(t => !isMoneyStr(t)).join(' ').trim();
+          return {
+            date: txnDate || defaultDate,
+            desc: desc || (inn > 0 ? '입금' : '출금'),
+            out,
+            in: inn,
+            balance: 0,
+            category: ''
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
   // 은행별 거래내역 파싱
   function parseBankText(text, bankType) {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -7680,46 +7774,82 @@
     return txns.length ? txns : parseGeneric(lines, fullText);
   }
 
+  // KB국민은행 전용 완벽 파서
   function parseKookmin(lines, fullText) {
     const txns = [];
-    const datePat = /^(\d{4}[.\-/]\d{2}[.\-/]\d{2})/;
-    const regPat  = /(\d{4}[.\-]\d{2}[.\-]\d{2})\s+(.+?)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/;
 
-    for (const line of lines) {
-      const dMatch = line.match(datePat);
-      if (dMatch) {
-        const date = dMatch[1].replace(/[.\-/]/g, '-');
-        const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(Boolean);
-        const parsed = tryParseBankTokens(tokens, date);
+    // 국민은행 패턴 1: [거래일자] [적요/내용] [출금액] [입금액] [잔액]
+    const pKookmin1 = /(20\d{2}[.\-/][01]\d[.\-/][0-3]\d)\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+    // 국민은행 패턴 2: 날짜가 8자리 연속 숫자인 경우 (20260912)
+    const pKookmin2 = /(20\d{2}[01]\d[0-3]\d)\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+
+    for (let rawLine of lines) {
+      if (!rawLine || !rawLine.trim()) continue;
+      let line = rawLine.trim();
+
+      // 1. 자간 쪼개짐 복원 (국민은행 PDF 특유의 공백 쪼개짐 완벽 복원)
+      line = line.replace(/(2\s*0\s*\d\s*\d)\s*([01]\s*\d)\s*([0-3]\s*\d)/g, (m, y, mo, d) => {
+        return y.replace(/\s+/g, '') + mo.replace(/\s+/g, '') + d.replace(/\s+/g, '');
+      });
+      line = line.replace(/([0-2]\s*\d)\s*:\s*([0-5]\s*\d)(?:\s*:\s*([0-5]\s*\d))?/g, (m, h, min, s) => {
+        return h.replace(/\s+/g, '') + ':' + min.replace(/\s+/g, '') + (s ? ':' + s.replace(/\s+/g, '') : '');
+      });
+      line = line.replace(/(\d)\s*,\s*(\d)/g, '$1,$2').replace(/(\d)\s*,\s*(\d)/g, '$1,$2');
+
+      // 2. 정규식 매칭 시도
+      let m = line.match(pKookmin1);
+      if (!m) m = line.match(pKookmin2);
+
+      if (m) {
+        const rawD = m[1].replace(/[^\d]/g, '');
+        const date = `${rawD.slice(0, 4)}-${rawD.slice(4, 6)}-${rawD.slice(6, 8)}`;
+        const desc = m[2].replace(/\s+/g, ' ').trim();
+        const out  = cleanBankMoney(m[3]);
+        const inn  = cleanBankMoney(m[4]);
+        const bal  = cleanBankMoney(m[5]);
+
+        if (desc && (out > 0 || inn > 0)) {
+          txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
+          continue;
+        }
+      }
+
+      // 3. 토큰 파서 폴백 (공백 2칸 이상 또는 탭으로 구분된 컬럼 분석)
+      const dateMatch = line.match(/(?:^|\s)(20\d{2}[.\-/]?[01]\d[.\-/]?[0-3]\d)(?:\s|$)/);
+      if (dateMatch) {
+        const dDigits = dateMatch[1].replace(/[^\d]/g, '');
+        const date = dDigits.length === 8 ? `${dDigits.slice(0, 4)}-${dDigits.slice(4, 6)}-${dDigits.slice(6, 8)}` : '';
+        const tokens = line.split(/\s{2,}|\t/).map(t => t.trim()).filter(Boolean);
+        const parsed = tryParseBankTokens(tokens, date, 'kookmin');
         if (parsed) {
           txns.push(parsed);
           continue;
         }
       }
-      const m = regPat.exec(line);
-      if (m) {
-        const date = m[1].replace(/[.\-]/g, '-');
-        const desc = m[2].trim();
-        const out  = cleanBankMoney(m[3]);
-        const inn  = cleanBankMoney(m[4]);
-        const bal  = cleanBankMoney(m[5]);
-        if (desc && (out > 0 || inn > 0)) {
-          txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
-        }
-      }
     }
+
     return txns.length ? txns : parseGeneric(lines, fullText);
   }
 
+  // 우리은행 전용 완벽 파서
   function parseWoori(lines, fullText) {
     const txns = [];
-    const datePat = /^(\d{4}[.\-/]\d{2}[.\-/]\d{2})/;
-    for (const line of lines) {
-      const dMatch = line.match(datePat);
-      if (dMatch) {
-        const date = dMatch[1].replace(/[.\-/]/g, '-');
-        const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(Boolean);
-        const parsed = tryParseBankTokens(tokens, date);
+    for (let rawLine of lines) {
+      if (!rawLine || !rawLine.trim()) continue;
+      let line = rawLine.trim();
+
+      // 자간 쪼개짐 복원
+      line = line.replace(/(2\s*0\s*\d\s*\d)\s*([01]\s*\d)\s*([0-3]\s*\d)/g, (m, y, mo, d) => {
+        return y.replace(/\s+/g, '') + mo.replace(/\s+/g, '') + d.replace(/\s+/g, '');
+      });
+      line = line.replace(/(\d)\s*,\s*(\d)/g, '$1,$2').replace(/(\d)\s*,\s*(\d)/g, '$1,$2');
+
+      const dateMatch = line.match(/(?:^|\s)(20\d{2}[.\-/]?[01]\d[.\-/]?[0-3]\d)(?:\s|$)/);
+      if (dateMatch) {
+        const dDigits = dateMatch[1].replace(/[^\d]/g, '');
+        const date = dDigits.length === 8 ? `${dDigits.slice(0, 4)}-${dDigits.slice(4, 6)}-${dDigits.slice(6, 8)}` : '';
+        const tokens = line.split(/\s{2,}|\t/).map(t => t.trim()).filter(Boolean);
+        const parsed = tryParseBankTokens(tokens, date, 'woori');
         if (parsed) {
           txns.push(parsed);
         }
