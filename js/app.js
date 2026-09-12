@@ -8184,7 +8184,7 @@
           const startIdx = headerRowIdx >= 0 ? headerRowIdx + 1 : 1;
           let newTxns = [], learnedCount = 0;
 
-          // 1단계: 사용자가 직접 입력한 새 규칙 먼저 수집 & 스마트 접두사 학습 (사용자 직접 편집 규칙은 100% 최우선 보존)
+          // 1단계: 최신 엑셀에 기재된 분류를 최우선 기준으로 규칙 학습 & 스마트 접두사 등록
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
@@ -8194,40 +8194,32 @@
             const mainCategory = String(row[colMain] || '').trim();
             if (!desc) continue;
 
+            // 엑셀에 유효한 항목이 기재되어 있다면 항상 최신 엑셀 기준으로 규칙 갱신/학습
             if (category && category !== '확인필요') {
               // 1-1) 전체 거래내용 등록 (앞 12자리)
               const keyword = desc.length > 12 ? desc.substring(0, 12) : desc;
-              if (!ruleMap[keyword]) {
-                ruleMap[keyword] = { category, subCategory, mainCategory, isUserEdited: false };
-                learnedCount++;
-              } else if (!ruleMap[keyword].isUserEdited) {
-                ruleMap[keyword] = {
-                  category: category || ruleMap[keyword].category,
-                  subCategory: subCategory || ruleMap[keyword].subCategory,
-                  mainCategory: mainCategory || ruleMap[keyword].mainCategory,
-                  isUserEdited: false
-                };
-              }
+              ruleMap[keyword] = {
+                category,
+                subCategory: subCategory || (ruleMap[keyword]?.subCategory || ''),
+                mainCategory: mainCategory || (ruleMap[keyword]?.mainCategory || ''),
+                isUserEdited: true // 최신 엑셀에 사용자가 직접 기재했으므로 최우선 규칙으로 승격
+              };
+              learnedCount++;
 
               // 1-2) 핵심 접두사(시작 단어) 등록 (예: LH202608 -> LH, 수도 2608가정 -> 수도)
               const prefix = bankExtractPrefix(desc);
               if (prefix && prefix.length >= 2) {
-                if (!ruleMap[prefix]) {
-                  ruleMap[prefix] = { category, subCategory, mainCategory, isUserEdited: false };
-                  learnedCount++;
-                } else if (!ruleMap[prefix].isUserEdited) {
-                  ruleMap[prefix] = {
-                    category: category || ruleMap[prefix].category,
-                    subCategory: subCategory || ruleMap[prefix].subCategory,
-                    mainCategory: mainCategory || ruleMap[prefix].mainCategory,
-                    isUserEdited: false
-                  };
-                }
+                ruleMap[prefix] = {
+                  category,
+                  subCategory: subCategory || (ruleMap[prefix]?.subCategory || ''),
+                  mainCategory: mainCategory || (ruleMap[prefix]?.mainCategory || ''),
+                  isUserEdited: true
+                };
               }
             }
           }
 
-          // 2단계: 거래내역 생성 및 룰 적용 (사용자 편집 규칙 최우선 강제 적용 + 진영-용돈 단일화)
+          // 2단계: 거래내역 생성 (엑셀에 직접 기재된 값 최우선 유지, 비어있거나 '확인필요'인 항목만 규칙으로 자동완성)
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
@@ -8243,13 +8235,16 @@
             // 유효한 거래 행 판단 (날짜가 있고 출금이나 입금 금액이 0보다 큰 경우)
             if (!date && out === 0 && inn === 0) continue;
 
-            // [규칙 우선순위]: 사용자 편집 규칙(isUserEdited)이 매칭되면 엑셀에 적힌 값보다 최우선 덮어쓰기!
-            // 항목이 비어있거나 '확인필요'인 경우에도 스마트 매칭 적용!
-            const matched = bankFindMatchingRule(desc, ruleMap);
-            if (matched && (matched.isUserEdited || !category || category === '확인필요')) {
-              category = matched.category || category;
-              if (matched.subCategory) subCategory = matched.subCategory;
-              if (matched.mainCategory) mainCategory = matched.mainCategory;
+            // [우선순위 원칙]:
+            // 엑셀에 사용자가 직접 기재한 분류는 100% 최우선 유지!
+            // 항목이 비어있거나 '확인필요'인 경우에만 기존/새로 학습된 규칙으로 자동완성!
+            if (!category || category === '확인필요') {
+              const matched = bankFindMatchingRule(desc, ruleMap);
+              if (matched) {
+                category = matched.category || '확인필요';
+                if (matched.subCategory) subCategory = matched.subCategory;
+                if (matched.mainCategory) mainCategory = matched.mainCategory;
+              }
             }
 
             // '진영-현대카드' 및 '진영-용돈' 단일화 처리
