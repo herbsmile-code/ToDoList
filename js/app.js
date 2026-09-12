@@ -8082,6 +8082,41 @@
     return fileName;
   }
 
+  // 은행 판별 헬퍼 (파일명, 텍스트 내용 기반 스마트 감지)
+  function detectBankFromContentOrFile(fileName = '', textContent = '', specifiedBank = '') {
+    const fn = (fileName || '').toLowerCase();
+    const txt = (textContent || '').toLowerCase().replace(/\s+/g, '');
+
+    // 1. 우리은행 강력 감지 키워드
+    if (
+      fn.includes('우리') || fn.includes('woori') || fn.includes('attach') ||
+      txt.includes('우리은행') || txt.includes('우리won') || txt.includes('wooribank') ||
+      txt.includes('1002-') || txt.includes('체크우리') || txt.includes('우리카드') ||
+      txt.includes('리테일영업총괄부') || txt.includes('우리won뱅킹')
+    ) {
+      return 'woori';
+    }
+
+    // 2. 신한은행 감지
+    if (
+      fn.includes('신한') || fn.includes('shinhan') || fn.includes('sol') ||
+      txt.includes('신한은행') || txt.includes('신한카드') || txt.includes('신한sol')
+    ) {
+      return 'shinhan';
+    }
+
+    // 3. 국민은행 감지
+    if (
+      fn.includes('국민') || fn.includes('kookmin') || fn.includes('kb') || fn.includes('스타뱅킹') ||
+      txt.includes('국민은행') || txt.includes('kb국민') || txt.includes('kb스타뱅킹') || txt.includes('kb카드')
+    ) {
+      return 'kookmin';
+    }
+
+    // 4. 명시된 은행이나 기본값 반환
+    return specifiedBank || 'kookmin';
+  }
+
   // HTML 거래내역서(우리은행 attach.html 등) 파싱 & 원본 표 100% 보존 + 우측 [항목, 소분류, 대분류] 자동 완성 엑셀 내보내기
   async function processBankHTML(file, bankType = 'woori', password = '') {
     if (!window.XLSX) {
@@ -8100,26 +8135,43 @@
       } catch(e) {}
     }
 
-    // 2. DOM 파싱 & 스타일/스크립트 태그 원천 제거
+    // 은행 스마트 자동 감지 (우리은행 attach.html 등)
+    const detectedBank = detectBankFromContentOrFile(file?.name || '', text, bankType);
+    bankType = detectedBank;
+
+    // 2. DOM 파싱 & 불필요 태그 원천 제거
     const parser = new DOMParser();
     const doc = parser.parseFromString(text, 'text/html');
     doc.querySelectorAll('style, script, noscript, link, meta, head').forEach(el => el.remove());
 
-    // 3. 거래내역 테이블 검색 (상위 15개 테이블 검사)
+    // 3. 거래내역 테이블 정밀 탐색 (메타데이터/계좌요약 테이블 오인식 차단)
     const allTables = Array.from(doc.querySelectorAll('table'));
     let targetTable = null;
     let headerCells = [];
     let headerRowIdx = -1;
 
+    // 헤더 판별 헬퍼: 메타데이터 행 제외하고 실제 거래내역 컬럼인지 확인
+    function isRealTxnHeader(cells) {
+      if (!cells || cells.length < 4) return false;
+      const rowText = cells.join(' ');
+      // 메타데이터 키워드가 다수 포함된 요약 헤더는 제외
+      if (/발급\s*기준일|계좌거래내역\s*조회|현재잔액|예금주|조회기간|조회계좌/.test(rowText)) {
+        return false;
+      }
+      const hasDate = cells.some(c => /거래일시|거래일자|거래일|일자|날짜/.test(c));
+      const hasOut  = cells.some(c => /출금/.test(c));
+      const hasIn   = cells.some(c => /입금/.test(c));
+      const hasDescOrType = cells.some(c => /기재내용|내용|적요|거래구분|구분|적요\/내용/.test(c));
+      return (hasDate && hasOut && hasIn) || (hasDate && hasDescOrType && (hasOut || hasIn));
+    }
+
+    // 전체 테이블 순회하며 가장 적합한 거래내역 테이블 및 헤더 탐색
     for (const tbl of allTables) {
       const rows = Array.from(tbl.querySelectorAll('tr'));
       for (let rIdx = 0; rIdx < rows.length; rIdx++) {
         const tr = rows[rIdx];
         const cells = Array.from(tr.querySelectorAll('th, td')).map(c => c.textContent.trim().replace(/\s+/g, ' '));
-        const hasDate = cells.some(c => /거래일시|거래일자|거래일|일자|날짜/.test(c));
-        const hasOut  = cells.some(c => /출금/.test(c));
-        const hasIn   = cells.some(c => /입금/.test(c));
-        if (hasDate && hasOut && hasIn && cells.length >= 4) {
+        if (isRealTxnHeader(cells)) {
           targetTable = tbl;
           headerCells = cells;
           headerRowIdx = rIdx;
@@ -8145,7 +8197,7 @@
     headerCells.forEach((cText, idx) => {
       const clean = cText.replace(/\s+/g, '');
       if (colDate < 0 && /거래일시|거래일자|거래일|일자|날짜/.test(clean)) colDate = idx;
-      else if (colType < 0 && /거래구분|구분|적요/.test(clean)) colType = idx;
+      else if (colType < 0 && /거래구분|구분|적요$/.test(clean)) colType = idx;
       else if (colDesc < 0 && /기재내용|거래내용|내용|의뢰인|수취인|보낸분|받는분|가맹점/.test(clean)) colDesc = idx;
       else if (colOut < 0 && /출금/.test(clean)) colOut = idx;
       else if (colIn < 0 && /입금/.test(clean)) colIn = idx;
@@ -8156,6 +8208,17 @@
     if (colDesc < 0 && colType >= 0) {
       colDesc = colType;
       colType = -1;
+    }
+
+    // 우리은행 7열 표준 테이블 보정: [0:거래일시, 1:거래구분, 2:기재내용, 3:출금, 4:입금, 5:잔액, 6:거래점]
+    if (headerCells.length >= 6 && (colOut < 0 || colIn < 0 || colDate < 0)) {
+      if (colDate < 0) colDate = 0;
+      if (colType < 0 && headerCells.length >= 7) colType = 1;
+      if (colDesc < 0) colDesc = (headerCells.length >= 7) ? 2 : 1;
+      if (colOut < 0) colOut = (headerCells.length >= 7) ? 3 : 2;
+      if (colIn < 0) colIn = (headerCells.length >= 7) ? 4 : 3;
+      if (colBal < 0) colBal = (headerCells.length >= 7) ? 5 : 4;
+      if (colBranch < 0 && headerCells.length >= 7) colBranch = 6;
     }
 
     // 딱 필요한 유효 컬럼 정의
@@ -8182,11 +8245,16 @@
       const cells = Array.from(tr.querySelectorAll('th, td')).map(c => c.textContent.trim().replace(/[\r\n\t]+/g, ' ').trim());
       if (cells.length === 0 || cells.every(c => !c)) continue;
 
-      // 거래일자 파싱 (예: 2026.09.10 21:50:34)
+      const rowJoined = cells.join(' ');
+      // 메타데이터 요약 행(계좌정보, 발급기준일, 합계, 예금주 등) 원천 필터링
+      if (/발급\s*기준일|계좌거래내역|현재잔액|예금주|조회기간|계좌번호|소계|합계/.test(rowJoined)) {
+        continue;
+      }
+
+      // 거래일자 파싱 (예: 2026.09.10 21:50:34 또는 2026-09-10)
       const rawDate = colDate >= 0 ? (cells[colDate] || '') : '';
       const dateMatch = rawDate.match(/(20\d{2}[.\-/]?[01]\d[.\-/]?[0-3]\d)/);
       if (!dateMatch) {
-        // 날짜 형식이 없는 행(합계 행, 계좌정보 요약 행 등)은 깔끔하게 스킵!
         continue;
       }
 
@@ -8277,11 +8345,21 @@
       throw new Error('⚠️ 엑셀 파일에 데이터가 없습니다.');
     }
 
-    // 헤더 행 탐색
+    // 시트 상단 텍스트 샘플 수집으로 은행 스마트 자동 감지
+    const sampleText = rows.slice(0, 20).map(r => (r || []).join(' ')).join(' ');
+    bankType = detectBankFromContentOrFile(file?.name || '', sampleText, bankType);
+
+    // 헤더 행 정밀 탐색 (메타데이터 요약 행 제외)
     let headerRowIdx = -1;
-    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    for (let i = 0; i < Math.min(rows.length, 25); i++) {
       const rowStr = (rows[i] || []).map(c => String(c || '').replace(/\s+/g, '')).join(' ');
-      if (/날짜|거래일|일자|거래일시/.test(rowStr) && (/출금|입금|지급/.test(rowStr) || /적요|거래내용|내용|기재내용|보낸분|받는분/.test(rowStr))) {
+      if (/발급기준일|계좌거래내역조회|현재잔액|예금주|조회기간|조회계좌/.test(rowStr)) {
+        continue;
+      }
+      const hasDate = /날짜|거래일|일자|거래일시/.test(rowStr);
+      const hasMoney = /출금|입금|지급/.test(rowStr);
+      const hasDesc = /적요|거래내용|내용|기재내용|보낸분|받는분|거래구분/.test(rowStr);
+      if (hasDate && (hasMoney || hasDesc)) {
         headerRowIdx = i;
         break;
       }
@@ -8292,19 +8370,36 @@
     }
 
     const headerCells = rows[headerRowIdx].map(c => String(c || '').trim());
-    let colDate = -1, colDesc = -1, colSummary = -1, colOut = -1, colIn = -1, colBal = -1, colMemo = -1;
+    let colDate = -1, colType = -1, colDesc = -1, colSummary = -1, colOut = -1, colIn = -1, colBal = -1, colMemo = -1, colBranch = -1;
     headerCells.forEach((cText, idx) => {
       const clean = cText.replace(/\s+/g, '');
       if (colDate < 0 && /날짜|거래일|일시|일자/.test(clean)) colDate = idx;
+      else if (colType < 0 && /거래구분|구분/.test(clean)) colType = idx;
       else if (/적요/.test(clean)) colSummary = idx;
       else if (/거래내용|기재내용|내용|의뢰인|수취인|가맹점|보낸분|받는분/.test(clean)) colDesc = idx;
       else if (/출금|지급/.test(clean)) colOut = idx;
       else if (/입금/.test(clean)) colIn = idx;
       else if (/잔액|잔고|거래후잔액/.test(clean)) colBal = idx;
       else if (/송금메모|메모/.test(clean)) colMemo = idx;
+      else if (/거래점|취급점|지점/.test(clean)) colBranch = idx;
     });
 
     if (colDesc < 0 && colSummary >= 0) colDesc = colSummary;
+    if (colDesc < 0 && colType >= 0) {
+      colDesc = colType;
+      colType = -1;
+    }
+
+    // 우리은행 7열 구조 보정
+    if (bankType === 'woori' && headerCells.length >= 6 && (colOut < 0 || colIn < 0 || colDate < 0)) {
+      if (colDate < 0) colDate = 0;
+      if (colType < 0 && headerCells.length >= 7) colType = 1;
+      if (colDesc < 0) colDesc = (headerCells.length >= 7) ? 2 : 1;
+      if (colOut < 0) colOut = (headerCells.length >= 7) ? 3 : 2;
+      if (colIn < 0) colIn = (headerCells.length >= 7) ? 4 : 3;
+      if (colBal < 0) colBal = (headerCells.length >= 7) ? 5 : 4;
+      if (colBranch < 0 && headerCells.length >= 7) colBranch = 6;
+    }
 
     const neededCols = [];
     if (colDate >= 0)   neededCols.push({ key: 'date', label: '거래일시', idx: colDate });
@@ -8314,6 +8409,7 @@
     if (colIn >= 0)     neededCols.push({ key: 'in', label: '입금금액(원)', idx: colIn });
     if (colBal >= 0)    neededCols.push({ key: 'bal', label: '잔액(원)', idx: colBal });
     if (colMemo >= 0)   neededCols.push({ key: 'memo', label: '송금메모', idx: colMemo });
+    if (colBranch >= 0) neededCols.push({ key: 'branch', label: '거래점', idx: colBranch });
 
     const finalHeaders = neededCols.map(c => c.label);
     finalHeaders.push('항목', '소분류', '대분류');
@@ -8326,6 +8422,11 @@
       const row = rows[i];
       if (!row || row.length === 0 || row.every(c => !c)) continue;
       const cells = row.map(c => String(c !== undefined && c !== null ? c : '').trim());
+
+      const rowJoined = cells.join(' ');
+      if (/발급\s*기준일|계좌거래내역|현재잔액|예금주|조회기간|계좌번호|소계|합계/.test(rowJoined)) {
+        continue;
+      }
 
       const rawDate = colDate >= 0 ? (cells[colDate] || '') : '';
       const dateMatch = rawDate.match(/(20\d{2}[.\-/]?[01]\d[.\-/]?[0-3]\d)/);
@@ -8347,7 +8448,7 @@
         out: outAmount,
         in: inAmount,
         balance: balAmount,
-        memo: memoText,
+        memo: memoText || (rawType && rawType !== fullDesc ? rawType : ''),
         bank: bankType,
         owner
       };
@@ -8572,20 +8673,11 @@
           }
 
           // 2. 대상 은행 및 소유자 스마트 식별 (신한은 진영 사용 💖, 국민과 우리은행은 영호 사용 💙)
-          let detectedBank = specifiedBank;
+          const sampleText = rows.slice(0, 25).map(r => (r || []).join(' ')).join(' ');
+          let detectedBank = detectBankFromContentOrFile(file?.name || '', sampleText, specifiedBank);
           if (!detectedBank || detectedBank === 'auto') {
-            const fName = String(file.name || '').toLowerCase();
-            if (/신한|shinhan/.test(fName)) {
-              detectedBank = 'shinhan';
-            } else if (/국민|kb|kookmin/.test(fName)) {
-              detectedBank = 'kookmin';
-            } else if (/우리|woori/.test(fName)) {
-              detectedBank = 'woori';
-            } else if (colMemo >= 0) {
-              detectedBank = 'kookmin';
-            } else {
-              detectedBank = 'shinhan';
-            }
+            if (colMemo >= 0) detectedBank = 'kookmin';
+            else detectedBank = 'shinhan';
           }
 
           const owner = (detectedBank === 'shinhan') ? '진영' : '영호';
@@ -8741,13 +8833,26 @@
     });
   }
 
+  // 거래 항목의 은행 식별 헬퍼 (신한, 국민, 우리 은행 정확 구분)
+  function resolveTxBank(tx) {
+    if (!tx) return 'shinhan';
+    if (tx.bank && (tx.bank === 'woori' || tx.bank === 'kookmin' || tx.bank === 'shinhan')) return tx.bank;
+    const desc = String(tx.desc || '').toLowerCase();
+    const memo = String(tx.memo || '').toLowerCase();
+    if (/우리|woori|1002-|체크우리|리테일영업총괄부/i.test(desc) || /우리|woori/i.test(memo)) return 'woori';
+    if (/국민|kb|kookmin|fbs|스타뱅킹/i.test(desc) || /국민|kb/i.test(memo) || (tx.memo !== undefined && tx.memo !== '')) return 'kookmin';
+    if (/신한|sol|shinhan/i.test(desc) || /신한|sol/i.test(memo)) return 'shinhan';
+    if (tx.owner === '영호') return tx.bank === 'woori' ? 'woori' : 'kookmin';
+    return 'shinhan';
+  }
+
   // 거래내역 안전 교체 & 병합 (은행별 격리: 다른 은행 내역은 100% 영구 누적 보존, 동일 은행의 중복 날짜 구간만 최신 파일로 덮어쓰기 + 유니크 중복 제거)
   function bankMergeAndSaveStatements(newTxns) {
     if (!Array.isArray(newTxns) || newTxns.length === 0) return bankLoadStatements();
     const existing = bankLoadStatements();
 
     // 새로 유입된 거래내역의 은행 식별
-    const incomingBank = newTxns[0]?.bank || (newTxns[0]?.owner === '영호' ? 'kookmin' : 'shinhan');
+    const incomingBank = resolveTxBank(newTxns[0]);
 
     // 1. 새 거래내역에서 유효한 날짜 목록 추출 및 정렬
     const validDates = newTxns.map(t => bankNormalizeDate(t.date)).filter(Boolean).sort();
@@ -8758,19 +8863,12 @@
       const maxDate = validDates[validDates.length - 1];
 
       // 2. 기존 데이터 중:
-      //    - [다른 은행의 데이터]: 날짜 무관 100% 무조건 보존! (신한, 국민, 우리 은행 내역 누적 합산)
+      //    - [다른 은행의 데이터]: 날짜 무관 100% 영구 보존! (신한, 국민, 우리 은행 내역 누적 합산)
       //    - [동일 은행의 데이터]: 새로 올린 파일의 날짜 구간 [minDate, maxDate] 밖의 내역만 보존 (중복 날짜 구간만 최신 파일로 덮어쓰기)
       preservedExisting = existing.filter(t => {
-        let tBank = t.bank || '';
-        if (!tBank) {
-          if (t.owner === '영호' || (t.memo !== undefined && t.memo !== '') || /국민|kb|kookmin|fbs/i.test(t.desc)) {
-            tBank = 'kookmin';
-          } else {
-            tBank = 'shinhan';
-          }
-        }
+        const tBank = resolveTxBank(t);
         if (tBank !== incomingBank) {
-          return true; // 다른 은행 데이터는 무조건 보존!
+          return true; // 다른 은행 데이터는 100% 무조건 보존!
         }
         const d = bankNormalizeDate(t.date);
         if (!d) return false;
@@ -8778,22 +8876,24 @@
       });
     } else {
       preservedExisting = existing.filter(t => {
-        const tBank = t.bank || (t.owner === '영호' ? 'kookmin' : 'shinhan');
+        const tBank = resolveTxBank(t);
         return tBank !== incomingBank;
       });
     }
 
-    // 3. 고유 키(날짜+내용+출금+입금+잔액) 기반 완전 중복 제거 병합
+    // 3. 고유 키(은행+날짜+내용+출금+입금+잔액) 기반 완전 중복 제거 병합
     const merged = [];
     const seen = new Set();
     [...preservedExisting, ...newTxns].forEach(tx => {
       if (!tx) return;
+      const b = resolveTxBank(tx);
+      if (!tx.bank) tx.bank = b;
       const d = (typeof bankNormalizeDate === 'function') ? bankNormalizeDate(tx.date) : (tx.date || '');
       const out = tx.out || 0;
       const inn = tx.in || 0;
       const bal = tx.balance || 0;
       const desc = String(tx.desc || '').trim();
-      const key = `${d}_${desc}_${out}_${inn}_${bal}`;
+      const key = `${b}_${d}_${desc}_${out}_${inn}_${bal}`;
       if (!seen.has(key)) {
         seen.add(key);
         merged.push(tx);
@@ -8870,20 +8970,8 @@
         const bucket = monthlyBuckets[m];
         bucket.hasData = true;
 
-        let curBank = tx.bank || '';
-        let curOwner = tx.owner || '';
-        if (!curBank || !curOwner) {
-          if (curOwner === '영호' || (tx.memo !== undefined && tx.memo !== '') || /국민|kb|kookmin|fbs/i.test(tx.desc)) {
-            curBank = 'kookmin';
-            curOwner = '영호';
-          } else if (curOwner === '진영' || /신한|shinhan/i.test(tx.desc)) {
-            curBank = 'shinhan';
-            curOwner = '진영';
-          } else {
-            curBank = 'kookmin';
-            curOwner = '영호';
-          }
-        }
+        let curBank = resolveTxBank(tx);
+        let curOwner = tx.owner || (curBank === 'shinhan' ? '진영' : '영호');
         let category = (tx.category && tx.category !== '확인필요') ? tx.category : '';
         let subCategory = tx.subCategory || '';
         let mainCategory = (tx.mainCategory || '').trim();
