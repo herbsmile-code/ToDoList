@@ -8462,6 +8462,7 @@
     if (!window.store) return;
     const statements = (typeof bankLoadStatements === 'function') ? bankLoadStatements() : [];
     if (!statements || statements.length === 0) return;
+    const rules = (typeof bankLoadRules === 'function') ? bankLoadRules() : [];
 
     if (!store.honeymoonData || typeof store.honeymoonData !== 'object') {
       store.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
@@ -8510,15 +8511,30 @@
         const bucket = monthlyBuckets[m];
         bucket.hasData = true;
 
-        const catStr = `${tx.category || ''} ${tx.subCategory || ''} ${tx.mainCategory || ''}`.trim();
-        const desc   = tx.desc || '';
-        const category = (tx.category && tx.category !== '확인필요') ? tx.category : '';
-        const subCategory = tx.subCategory || '';
-        const mainCategory = tx.mainCategory || '';
+        const curBank = tx.bank || 'shinhan';
+        let category = (tx.category && tx.category !== '확인필요') ? tx.category : '';
+        let subCategory = tx.subCategory || '';
+        let mainCategory = (tx.mainCategory || '').trim();
+        const desc = tx.desc || '';
+
+        // 만약 대분류나 항목이 비어있다면, 저장된 규칙에서 실시간 100% 매칭 보충
+        if (!mainCategory || !category) {
+          const matchedRule = (typeof bankFindMatchingRule === 'function')
+            ? bankFindMatchingRule(desc, rules, curBank)
+            : null;
+          if (matchedRule) {
+            if (!category) category = matchedRule.category || '';
+            if (!subCategory) subCategory = matchedRule.subCategory || '';
+            if (!mainCategory) mainCategory = (matchedRule.mainCategory || '').trim();
+          }
+        }
+
+        const catStr = `${category || ''} ${subCategory || ''} ${mainCategory || ''}`.trim();
+        const cleanMainCat = mainCategory.replace(/\s+/g, '');
 
         // [사용자 요청]: 대분류 '통장금액이동' 및 통장이동 관련 내역은 지출/수입에서 100% 완전 제외!
         const isTransfer = (
-          mainCategory === '통장금액이동' || mainCategory === '통장이동' || mainCategory === '통장이동금액' ||
+          cleanMainCat.includes('통장금액이동') || cleanMainCat.includes('통장이동') ||
           /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(mainCategory) ||
           /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(catStr) ||
           /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(desc) ||
@@ -8571,16 +8587,12 @@
         if (outAmt > 0) {
           let itemName = category || subCategory || (desc ? desc.substring(0, 16) : '기타지출');
 
-          // [사용자 요청]: 진영-용돈 및 진영-현대카드는 오직 '진영-용돈'으로 단일화 (변동지출)
-          if (itemName === '진영-현대카드' || /진영[\s\-_]?현대카드/i.test(catStr) || /진영[\s\-_]?현대카드/i.test(desc)) {
-            itemName = '진영-용돈';
-          }
+          // =============================================================
+          // 🏆 1순위: [대분류 100% 절대 우선 판별]
+          // =============================================================
 
-          // -------------------------------------------------------------
-          // [대분류(mainCategory) 100% 최우선 기준]:
-          // 사용자가 엑셀(H열 대분류) 또는 [규칙 관리]에서 지정한 대분류를 절대 기준으로 적용
-          // -------------------------------------------------------------
-          if (mainCategory === '고정지출') {
+          // A. 고정지출 ('고정지출', '고정 지출', '고정' 포함)
+          if (cleanMainCat.includes('고정')) {
             bucket.fixedTotal += outAmt;
             if (!bucket.fixedMap[itemName]) bucket.fixedMap[itemName] = { total: 0, count: 0 };
             bucket.fixedMap[itemName].total += outAmt;
@@ -8588,16 +8600,9 @@
             return;
           }
 
-          if (mainCategory === '변동지출' || mainCategory === '부부용돈' || itemName === '진영-용돈' || itemName === '영호-용돈') {
-            bucket.variableTotal += outAmt;
-            if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
-            bucket.variableMap[itemName].total += outAmt;
-            bucket.variableMap[itemName].count++;
-            return;
-          }
-
-          if (mainCategory === '저축/투자') {
-            const isCheongyak = /(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc);
+          // B. 저축/투자 ('저축', '투자', '적금', '예금', '청약' 포함) - 적금은 절대 변동지출로 가지 않음!
+          if (cleanMainCat.includes('저축') || cleanMainCat.includes('투자') || cleanMainCat.includes('적금') || cleanMainCat.includes('예금') || cleanMainCat.includes('청약')) {
+            const isCheongyak = /(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc) || cleanMainCat.includes('청약');
             if (isCheongyak) {
               bucket.cheongyakTotal += outAmt;
             } else {
@@ -8608,6 +8613,25 @@
             if (!bucket.savingsMap[savItemName]) bucket.savingsMap[savItemName] = { total: 0, count: 0 };
             bucket.savingsMap[savItemName].total += outAmt;
             bucket.savingsMap[savItemName].count++;
+            return;
+          }
+
+          // C. 부부용돈 ('부부용돈', '용돈' 포함)
+          if (cleanMainCat.includes('용돈')) {
+            const pocketName = (curBank === 'shinhan' || /진영/.test(catStr) || /진영/.test(desc)) ? '진영-용돈' : '영호-용돈';
+            bucket.variableTotal += outAmt;
+            if (!bucket.variableMap[pocketName]) bucket.variableMap[pocketName] = { total: 0, count: 0 };
+            bucket.variableMap[pocketName].total += outAmt;
+            bucket.variableMap[pocketName].count++;
+            return;
+          }
+
+          // D. 변동지출 ('변동지출', '변동', '생활비' 포함)
+          if (cleanMainCat.includes('변동') || cleanMainCat.includes('생활')) {
+            bucket.variableTotal += outAmt;
+            if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
+            bucket.variableMap[itemName].total += outAmt;
+            bucket.variableMap[itemName].count++;
             return;
           }
 
@@ -8652,7 +8676,17 @@
             return;
           }
 
-          // 3) 기본값: 변동지출
+          // 3) 부부용돈/현대카드 추론 (오직 '용돈' 또는 '현대카드' 단어만 매칭, 적금 제외)
+          if (/용돈|현대카드/.test(catStr) || /용돈|현대카드/.test(desc) || itemName === '진영-현대카드') {
+            const pocketName = (curBank === 'shinhan' || /진영/.test(catStr) || /진영/.test(desc)) ? '진영-용돈' : '영호-용돈';
+            bucket.variableTotal += outAmt;
+            if (!bucket.variableMap[pocketName]) bucket.variableMap[pocketName] = { total: 0, count: 0 };
+            bucket.variableMap[pocketName].total += outAmt;
+            bucket.variableMap[pocketName].count++;
+            return;
+          }
+
+          // 4) 기본값: 변동지출
           bucket.variableTotal += outAmt;
           if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
           bucket.variableMap[itemName].total += outAmt;
@@ -8823,18 +8857,35 @@
       const tree = {};
 
       txns.forEach(tx => {
-        const catStr = `${tx.category || ''} ${tx.subCategory || ''} ${tx.mainCategory || ''}`.trim();
-        const desc   = tx.desc || '';
-        const mainCatRaw = tx.mainCategory || '';
-        const catRaw = tx.category || '';
+        const curBank = tx.bank || 'shinhan';
+        const curOwner = tx.owner || (curBank === 'shinhan' ? '진영' : '영호');
+        let cat = (tx.category && tx.category !== '확인필요') ? tx.category : '';
+        let subCat = tx.subCategory || '';
+        let mainCat = (tx.mainCategory || '').trim();
+        const desc = tx.desc || '';
+
+        // 만약 대분류나 항목이 비어있다면, 저장된 규칙에서 실시간 100% 매칭 보충
+        if (!mainCat || !cat) {
+          const matchedRule = (typeof bankFindMatchingRule === 'function')
+            ? bankFindMatchingRule(desc, rules, curBank)
+            : null;
+          if (matchedRule) {
+            if (!cat) cat = matchedRule.category || '';
+            if (!subCat) subCat = matchedRule.subCategory || '';
+            if (!mainCat) mainCat = (matchedRule.mainCategory || '').trim();
+          }
+        }
+
+        const catStr = `${cat || ''} ${subCat || ''} ${mainCat || ''}`.trim();
+        const cleanMCat = mainCat.replace(/\s+/g, '');
 
         // [사용자 요청]: 통장금액이동은 순수 소비/지출이 아니므로 월별 통계에서도 완전 제외!
         const isTransfer = (
-          mainCatRaw === '통장금액이동' || mainCatRaw === '통장이동' || mainCatRaw === '통장이동금액' ||
-          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(mainCatRaw) ||
+          cleanMCat.includes('통장금액이동') || cleanMCat.includes('통장이동') ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(mainCat) ||
           /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(catStr) ||
           /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(desc) ||
-          (catRaw && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/i.test(catRaw))
+          (cat && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/i.test(cat))
         );
         if (isTransfer) return;
 
@@ -8843,51 +8894,48 @@
         totalOut += outAmt;
         totalIn  += inAmt;
 
-        const isShinhan = tx.bank === 'shinhan' || tx.owner === '진영';
-        const isKookminOrWoori = tx.bank === 'kookmin' || tx.bank === 'woori' || tx.owner === '영호';
-
-        const isJyPocket = isShinhan
-          ? (/(용돈|현대카드)/i.test(catStr) || /(용돈|현대카드)/i.test(desc) || mainCatRaw === '부부용돈')
-          : (/(진영[\s\-_]?(용돈|현대카드))/i.test(catStr) || /(진영[\s\-_]?(용돈|현대카드))/i.test(desc));
-
-        const isYhPocket = isKookminOrWoori
-          ? (/(용돈)/i.test(catStr) || /(용돈)/i.test(desc) || mainCatRaw === '부부용돈')
-          : (/(영호[\s\-_]?용돈)/i.test(catStr) || /(영호[\s\-_]?용돈)/i.test(desc));
-
-        if (outAmt > 0) {
-          if (isJyPocket) { jyAmount += outAmt; jyCount++; }
-          if (isYhPocket) { yhAmount += outAmt; yhCount++; }
-        }
-
-        let mainCat = tx.mainCategory || '';
-        let subCat  = tx.subCategory  || '';
-        let cat     = tx.category     || '확인필요';
-
-        // 진영-현대카드 및 진영-용돈 / 영호-용돈 단일화 처리
-        if (cat === '진영-현대카드' || isJyPocket) {
-          cat = '진영-용돈';
-          subCat = '진영';
-          mainCat = '부부용돈';
-        } else if (isYhPocket) {
-          cat = '영호-용돈';
-          subCat = '영호';
-          mainCat = '부부용돈';
-        }
-
-        // 입금(부수입/급여) 건일 경우
+        // 입금 건일 경우
         if (inAmt > 0 && outAmt === 0) {
           mainCat = '💵 수입(부수입)';
           subCat  = subCat || '입금내역';
-          cat     = (cat !== '확인필요') ? cat : (tx.desc || '부수입/입금');
-        } else if (cat === '확인필요') {
+          cat     = cat || (desc ? desc.substring(0, 16) : '부수입/입금');
+        } else if (!cat || cat === '확인필요') {
           unmatchedCount++;
           mainCat = '⚠️ 확인필요';
           subCat  = '미분류';
-        } else if (!mainCat) {
-          // 대분류 미입력 시 스마트 추론
-          if (/진영|영호|용돈/.test(catStr)) mainCat = '부부용돈';
-          else if (/집세|월세|관리비|전기|수도|통신|인터넷|보험|대출|정기|구독/.test(catStr)) mainCat = '고정지출';
-          else mainCat = '변동지출';
+          cat     = '확인필요';
+        } else {
+          // 출금 건 대분류 확정:
+          // 🏆 1순위: 지정된 대분류 100% 절대 적용
+          if (cleanMCat.includes('고정')) {
+            mainCat = '고정지출';
+          } else if (cleanMCat.includes('저축') || cleanMCat.includes('투자') || cleanMCat.includes('적금') || cleanMCat.includes('예금') || cleanMCat.includes('청약')) {
+            mainCat = '저축/투자';
+          } else if (cleanMCat.includes('용돈')) {
+            mainCat = '부부용돈';
+            cat = (curBank === 'shinhan' || /진영/.test(catStr) || /진영/.test(desc)) ? '진영-용돈' : '영호-용돈';
+            subCat = (cat === '진영-용돈') ? '진영' : '영호';
+          } else if (cleanMCat.includes('변동') || cleanMCat.includes('생활')) {
+            mainCat = '변동지출';
+          } else {
+            // 🔍 2순위: 대분류 미지정 시 키워드 스마트 추론
+            if (/(적금|예금|저축|투자|ISA|연금|펀드|청약)/.test(catStr) || /(적금|예금|저축|투자|ISA|연금|펀드|청약)/.test(desc)) {
+              mainCat = '저축/투자'; // 적금은 진영/영호 키워드가 있어도 절대 용돈으로 빠지지 않음!
+            } else if (/집세|월세|관리비|공과금|전기|수도|통신|인터넷|보험|대출|정기|구독/.test(catStr) || /집세|관리비|전기세|수도세|가스비|통신요금/.test(desc)) {
+              mainCat = '고정지출';
+            } else if (/용돈|현대카드/.test(catStr) || /용돈|현대카드/.test(desc) || cat === '진영-현대카드') {
+              mainCat = '부부용돈';
+              cat = (curBank === 'shinhan' || /진영/.test(catStr) || /진영/.test(desc)) ? '진영-용돈' : '영호-용돈';
+              subCat = (cat === '진영-용돈') ? '진영' : '영호';
+            } else {
+              mainCat = '변동지출';
+            }
+          }
+        }
+
+        if (outAmt > 0 && mainCat === '부부용돈') {
+          if (cat === '진영-용돈') { jyAmount += outAmt; jyCount++; }
+          else if (cat === '영호-용돈') { yhAmount += outAmt; yhCount++; }
         }
         if (!subCat) subCat = '기타';
 
