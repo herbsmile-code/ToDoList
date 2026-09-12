@@ -8051,20 +8051,18 @@
       store.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
     }
 
-    // 1월 ~ 12월 월별 집계 버킷
+    // 1단계: 월별(1~12월) 집계 버킷 준비
     const monthlyBuckets = {};
     for (let m = 1; m <= 12; m++) {
       monthlyBuckets[m] = {
         hasData: false,
-        incomeTotal: 0,
-        incomeItems: [],
-        fixedTotal: 0,
-        fixedItems: [],
-        variableTotal: 0,
-        variableItems: []
+        incomeMap: {},    // 항목별 합산 (key: 항목명, val: { total, count })
+        fixedMap: {},     // 고정지출 항목별 합산
+        variableMap: {}   // 변동지출 항목별 합산
       };
     }
 
+    // 2단계: 거래내역 순회 - 입금/출금 엄격 구분 및 대분류/항목별 그룹화
     statements.forEach(tx => {
       const normDate = (typeof bankNormalizeDate === 'function') ? bankNormalizeDate(tx.date) : String(tx.date || '');
       const mm = normDate.match(/(\d{4})-(\d{2})/);
@@ -8072,72 +8070,103 @@
       const m = parseInt(mm[2], 10);
       if (m < 1 || m > 12) return;
 
+      const inAmt  = Number(tx.in) || 0;
+      const outAmt = Number(tx.out) || 0;
+      if (inAmt === 0 && outAmt === 0) return;
+
       const bucket = monthlyBuckets[m];
       bucket.hasData = true;
 
-      const inAmt  = Number(tx.in) || 0;
-      const outAmt = Number(tx.out) || 0;
       const catStr = `${tx.category || ''} ${tx.subCategory || ''} ${tx.mainCategory || ''}`.trim();
-      const desc = tx.desc || '';
-      const category = tx.category || '기타';
+      const desc   = tx.desc || '';
+      const category = (tx.category && tx.category !== '확인필요') ? tx.category : '';
+      const subCategory = tx.subCategory || '';
+      const mainCategory = tx.mainCategory || '';
 
-      // 1. 입금(급여/부수입) 건 처리
-      if (inAmt > 0 || /수입|급여|월급|상여|부수입|이자|환급|캐시백/.test(catStr)) {
+      // [규칙 2]: 입금액(원)과 출금액(원)의 엄격한 구분
+      // 입금 건: inAmt > 0 (또는 mainCategory === '수입' 또는 수입 키워드)
+      const isIncome = inAmt > 0 || mainCategory === '수입' || /수입|급여|월급|상여|부수입|이자|환급|캐시백/.test(catStr);
+
+      if (isIncome) {
         const amt = inAmt > 0 ? inAmt : outAmt;
         if (amt > 0) {
-          bucket.incomeTotal += amt;
-          const label = category !== '확인필요' ? category : (desc || '부수입/입금');
-          bucket.incomeItems.push({
-            name: `${label} (${desc})`,
-            amount: amt
-          });
+          // 입금액 항목명 결정 (사용자 입력 항목 > 소분류 > 적요)
+          let itemName = category || subCategory || (desc ? desc.substring(0, 16) : '부수입/입금');
+          if (!bucket.incomeMap[itemName]) bucket.incomeMap[itemName] = { total: 0, count: 0 };
+          bucket.incomeMap[itemName].total += amt;
+          bucket.incomeMap[itemName].count++;
         }
-      }
-
-      // 2. 출금(지출) 건 처리
-      if (outAmt > 0 && !/수입|급여|월급|상여|부수입/.test(catStr)) {
+      } else if (outAmt > 0) {
+        // [규칙 3]: 출금액의 대분류 및 항목별 분류
+        // 대분류 판별 (엑셀 H열 최우선)
         let isFixed = false;
-        if (tx.mainCategory === '고정지출') {
+        if (mainCategory === '고정지출') {
           isFixed = true;
-        } else if (/집세|월세|관리비|공과금|전기|수도|가스|통신|인터넷|보험|대출|정기|구독/.test(catStr) || /집세|관리비|전기세|수도세|가스비|통신요금/.test(desc)) {
-          isFixed = true;
+        } else if (mainCategory === '변동지출' || mainCategory === '부부용돈') {
+          isFixed = false;
+        } else {
+          // 대분류 미입력 시 스마트 추론
+          if (/집세|월세|관리비|공과금|전기|수도|가스|통신|인터넷|보험|대출|정기|구독/.test(catStr) || /집세|관리비|전기세|수도세|가스비|통신요금/.test(desc)) {
+            isFixed = true;
+          }
         }
+
+        // 지출 항목명 결정 (사용자 입력 항목 > 소분류 > 적요 요약)
+        let itemName = category || subCategory || (desc ? desc.substring(0, 16) : '기타지출');
 
         if (isFixed) {
-          bucket.fixedTotal += outAmt;
-          const label = category !== '확인필요' ? category : (desc || '고정지출');
-          bucket.fixedItems.push({
-            name: `${label} (${desc})`,
-            amount: outAmt
-          });
+          if (!bucket.fixedMap[itemName]) bucket.fixedMap[itemName] = { total: 0, count: 0 };
+          bucket.fixedMap[itemName].total += outAmt;
+          bucket.fixedMap[itemName].count++;
         } else {
-          bucket.variableTotal += outAmt;
-          const label = category !== '확인필요' ? category : (desc || '변동지출');
-          bucket.variableItems.push({
-            name: `${label} (${desc})`,
-            amount: outAmt
-          });
+          if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
+          bucket.variableMap[itemName].total += outAmt;
+          bucket.variableMap[itemName].count++;
         }
       }
     });
 
-    // 실제 데이터가 있는 월에 대해 store.honeymoonData 완벽 업데이트
+    // 3단계: store.honeymoonData에 항목별 집계 깔끔하게 정리 대입
     let updated = false;
     for (let m = 1; m <= 12; m++) {
       const b = monthlyBuckets[m];
       if (b.hasData) {
+        // 수입 항목 변환 (금액 큰 순 정렬)
+        const incomeEntries = Object.entries(b.incomeMap).sort((a, b) => b[1].total - a[1].total);
+        const incomeTotal = incomeEntries.reduce((sum, [, data]) => sum + data.total, 0);
+        const incomeItems = incomeEntries.map(([name, data]) => ({
+          name: data.count > 1 ? `${name} (${data.count}건)` : name,
+          amount: data.total
+        }));
+
+        // 고정지출 항목 변환 (금액 큰 순 정렬)
+        const fixedEntries = Object.entries(b.fixedMap).sort((a, b) => b[1].total - a[1].total);
+        const fixedTotal = fixedEntries.reduce((sum, [, data]) => sum + data.total, 0);
+        const fixedItems = fixedEntries.map(([name, data]) => ({
+          name: data.count > 1 ? `${name} (${data.count}건)` : name,
+          amount: data.total
+        }));
+
+        // 변동지출 항목 변환 (금액 큰 순 정렬)
+        const variableEntries = Object.entries(b.variableMap).sort((a, b) => b[1].total - a[1].total);
+        const variableTotal = variableEntries.reduce((sum, [, data]) => sum + data.total, 0);
+        const variableItems = variableEntries.map(([name, data]) => ({
+          name: data.count > 1 ? `${name} (${data.count}건)` : name,
+          amount: data.total
+        }));
+
         store.honeymoonData[m] = {
           income: {
-            total: b.incomeTotal,
-            items: b.incomeItems.length > 0 ? b.incomeItems : [{ name: `${m}월 수입 대기`, amount: 0 }]
+            total: incomeTotal,
+            items: incomeItems.length > 0 ? incomeItems : [{ name: `${m}월 수입 대기`, amount: 0 }]
           },
           fixed: {
-            total: b.fixedTotal,
-            items: b.fixedItems.length > 0 ? b.fixedItems : [{ name: `${m}월 고정지출 대기`, amount: 0 }]
+            total: fixedTotal,
+            items: fixedItems.length > 0 ? fixedItems : [{ name: `${m}월 고정지출 대기`, amount: 0 }]
           },
           variable: {
-            total: b.variableTotal,
-            items: b.variableItems.length > 0 ? b.variableItems : [{ name: `${m}월 생활비 대기`, amount: 0 }]
+            total: variableTotal,
+            items: variableItems.length > 0 ? variableItems : [{ name: `${m}월 생활비 대기`, amount: 0 }]
           }
         };
         updated = true;

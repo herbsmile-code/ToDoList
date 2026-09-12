@@ -3613,6 +3613,25 @@ body::after {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  max-height: 215px; /* 5줄 기준 높이 고정 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.ledger-items-list::-webkit-scrollbar {
+  width: 5px;
+}
+.ledger-items-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 99px;
+}
+.ledger-items-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 99px;
+}
+.ledger-items-list::-webkit-scrollbar-thumb:hover {
+  background: var(--primary, #ff6b8b);
 }
 
 .ledger-item-row {
