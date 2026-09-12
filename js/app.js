@@ -7504,7 +7504,7 @@
     localStorage.setItem(BANK_DATA_KEY, JSON.stringify(data));
   }
 
-  // PDF 텍스트 추출 (PDF.js) - 보안 비밀번호 해제 지원 (절대 저장하지 않음)
+  // PDF 텍스트 추출 (PDF.js) - Y좌표 행 그룹화 및 X좌표 좌->우 정렬 알고리즘
   async function extractTextFromPDF(file, password = '') {
     if (!window.pdfjsLib) throw new Error('PDF.js 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
     const arrayBuffer = await file.arrayBuffer();
@@ -7533,10 +7533,101 @@
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const pageText = content.items.map(it => it.str).join(' ');
-      fullText += pageText + '\n';
+      const items = content.items || [];
+      if (!items.length) continue;
+
+      // 1. 유효 텍스트 및 X/Y 좌표 수집
+      const textItems = [];
+      for (const it of items) {
+        const str = (it.str || '').trim();
+        if (!str) continue;
+        const x = it.transform ? it.transform[4] : 0;
+        const y = it.transform ? it.transform[5] : 0;
+        textItems.push({ str, x, y });
+      }
+
+      // 2. Y좌표 기준으로 내림차순 정렬 후 행(Row) 그룹화 (±4.5px 범위)
+      textItems.sort((a, b) => b.y - a.y);
+      const rowGroups = [];
+      for (const item of textItems) {
+        let matchedRow = null;
+        for (const row of rowGroups) {
+          if (Math.abs(row.avgY - item.y) <= 4.5) {
+            matchedRow = row;
+            break;
+          }
+        }
+        if (matchedRow) {
+          matchedRow.items.push(item);
+          matchedRow.avgY = (matchedRow.avgY * (matchedRow.items.length - 1) + item.y) / matchedRow.items.length;
+        } else {
+          rowGroups.push({ avgY: item.y, items: [item] });
+        }
+      }
+
+      // 3. 행 내부 아이템 X좌표 오름차순(좌->우) 정렬 및 조합
+      for (const row of rowGroups) {
+        row.items.sort((a, b) => a.x - b.x);
+        const rowText = row.items.map(it => it.str).join('   ');
+        fullText += rowText + '\n';
+      }
+      fullText += '\n';
     }
+
+    console.log('[BankAnalyzer] PDF 추출 텍스트 미리보기 (최초 10줄):\n', fullText.split('\n').slice(0, 10).join('\n'));
     return fullText;
+  }
+
+  // 공통 금액 변환 유틸
+  function cleanBankMoney(val) {
+    if (!val || val === '-' || val === '--') return 0;
+    const num = Number(String(val).replace(/,/g, '').trim());
+    return isNaN(num) ? 0 : num;
+  }
+
+  // 스마트 토큰 파서 (공통)
+  function tryParseBankTokens(tokens, date) {
+    if (!tokens || tokens.length < 3) return null;
+    const isMoneyToken = (s) => /^[\d,]+$/.test(s) || s === '-' || s === '--';
+
+    let endIdx = tokens.length - 1;
+    // 마지막 토큰이 지점명인 경우 한 칸 앞으로
+    if (!isMoneyToken(tokens[endIdx]) && endIdx > 0 && isMoneyToken(tokens[endIdx - 1])) {
+      endIdx--;
+    }
+
+    // 뒤에서부터 3개의 숫자(출금, 입금, 잔액)
+    if (endIdx >= 3 && isMoneyToken(tokens[endIdx]) && isMoneyToken(tokens[endIdx - 1]) && isMoneyToken(tokens[endIdx - 2])) {
+      const bal = cleanBankMoney(tokens[endIdx]);
+      const inn = cleanBankMoney(tokens[endIdx - 1]);
+      const out = cleanBankMoney(tokens[endIdx - 2]);
+
+      let descTokens = tokens.slice(1, endIdx - 2);
+      descTokens = descTokens.filter(t => !/^\d{2}:\d{2}(:\d{2})?$/.test(t) && !/^\d{4}[.\-/]\d{2}[.\-/]\d{2}$/.test(t));
+      const desc = descTokens.join(' ').trim() || '거래내역';
+
+      if (out > 0 || inn > 0) {
+        return { date, desc, out, in: inn, balance: bal, category: '' };
+      }
+    }
+
+    // 뒤에서부터 2개의 숫자(금액, 잔액)
+    if (endIdx >= 2 && isMoneyToken(tokens[endIdx]) && isMoneyToken(tokens[endIdx - 1])) {
+      const bal = cleanBankMoney(tokens[endIdx]);
+      const amt = cleanBankMoney(tokens[endIdx - 1]);
+      let descTokens = tokens.slice(1, endIdx - 1);
+      descTokens = descTokens.filter(t => !/^\d{2}:\d{2}(:\d{2})?$/.test(t));
+      const fullDesc = descTokens.join(' ').trim();
+      const isDeposit = fullDesc.includes('입금') || fullDesc.includes('수신');
+      const out = isDeposit ? 0 : amt;
+      const inn = isDeposit ? amt : 0;
+      const desc = fullDesc.replace(/(출금|입금|체크카드|전자금융|타행이체)/g, '').trim() || fullDesc || '거래내역';
+      if (out > 0 || inn > 0) {
+        return { date, desc, out, in: inn, balance: bal, category: '' };
+      }
+    }
+
+    return null;
   }
 
   // 은행별 거래내역 파싱
@@ -7548,70 +7639,114 @@
     return parseGeneric(lines, text);
   }
 
-  function parseKookmin(lines, fullText) {
+  function parseShinhan(lines, fullText) {
     const txns = [];
-    // 국민은행: 2026.02.05 거래내용 출금 입금 잔액
-    const rowPat  = /(\d{4}[.\-]\d{2}[.\-]\d{2})\s+(.+?)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/;
-    const rowPat2 = /(\d{2}[.\-]\d{2})\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+    const datePat = /^(\d{4}[.\-/]\d{2}[.\-/]\d{2})/;
+    const regPat  = /(\d{4}[.\-/]\d{2}[.\-/]\d{2})\s+(?:[\d:]{5,8}\s+)?(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+
     for (const line of lines) {
-      const m = rowPat.exec(line) || rowPat2.exec(line);
-      if (!m) continue;
-      const date = m[1].replace(/[.\-]/g, '-');
-      const desc = m[2].trim();
-      const out  = Number(m[3].replace(/,/g, '')) || 0;
-      const inn  = Number(m[4].replace(/,/g, '')) || 0;
-      const bal  = Number(m[5].replace(/,/g, '')) || 0;
-      if (!desc || (out === 0 && inn === 0)) continue;
-      txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
+      const dMatch = line.match(datePat);
+      if (dMatch) {
+        const date = dMatch[1].replace(/[.\-/]/g, '-');
+        const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(Boolean);
+        const parsed = tryParseBankTokens(tokens, date);
+        if (parsed) {
+          txns.push(parsed);
+          continue;
+        }
+      }
+
+      // 정규식 폴백
+      const m = regPat.exec(line);
+      if (m) {
+        const date = m[1].replace(/[.\-/]/g, '-');
+        const desc = m[2].replace(/\s+/g, ' ').trim();
+        const out  = cleanBankMoney(m[3]);
+        const inn  = cleanBankMoney(m[4]);
+        const bal  = cleanBankMoney(m[5]);
+        if (desc && (out > 0 || inn > 0)) {
+          txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
+        }
+      }
     }
+
+    // 전역 텍스트 정규식 검색 폴백
+    if (txns.length === 0) {
+      const globalPat = /(\d{4}[.\-/]\d{2}[.\-/]\d{2})(?:\s+[\d:]{5,8})?\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/g;
+      let gm;
+      while ((gm = globalPat.exec(fullText)) !== null) {
+        const date = gm[1].replace(/[.\-/]/g, '-');
+        const desc = gm[2].replace(/\s+/g, ' ').trim();
+        const out  = cleanBankMoney(gm[3]);
+        const inn  = cleanBankMoney(gm[4]);
+        const bal  = cleanBankMoney(gm[5]);
+        if (desc && (out > 0 || inn > 0) && desc.length < 60) {
+          txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
+        }
+      }
+    }
+
     return txns.length ? txns : parseGeneric(lines, fullText);
   }
 
-  function parseShinhan(lines, fullText) {
+  function parseKookmin(lines, fullText) {
     const txns = [];
-    const rowPat = /(\d{4}[.\-/]\d{2}[.\-/]\d{2})\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+    const datePat = /^(\d{4}[.\-/]\d{2}[.\-/]\d{2})/;
+    const regPat  = /(\d{4}[.\-]\d{2}[.\-]\d{2})\s+(.+?)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/;
+
     for (const line of lines) {
-      const m = rowPat.exec(line);
-      if (!m) continue;
-      const date = m[1].replace(/[.\-/]/g, '-');
-      const desc = m[2].trim();
-      const out  = m[3] === '-' ? 0 : Number(m[3].replace(/,/g, '')) || 0;
-      const inn  = m[4] === '-' ? 0 : Number(m[4].replace(/,/g, '')) || 0;
-      const bal  = Number(m[5].replace(/,/g, '')) || 0;
-      if (!desc || (out === 0 && inn === 0)) continue;
-      txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
+      const dMatch = line.match(datePat);
+      if (dMatch) {
+        const date = dMatch[1].replace(/[.\-/]/g, '-');
+        const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(Boolean);
+        const parsed = tryParseBankTokens(tokens, date);
+        if (parsed) {
+          txns.push(parsed);
+          continue;
+        }
+      }
+      const m = regPat.exec(line);
+      if (m) {
+        const date = m[1].replace(/[.\-]/g, '-');
+        const desc = m[2].trim();
+        const out  = cleanBankMoney(m[3]);
+        const inn  = cleanBankMoney(m[4]);
+        const bal  = cleanBankMoney(m[5]);
+        if (desc && (out > 0 || inn > 0)) {
+          txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
+        }
+      }
     }
     return txns.length ? txns : parseGeneric(lines, fullText);
   }
 
   function parseWoori(lines, fullText) {
     const txns = [];
-    const rowPat  = /(\d{4}[.\-]\d{2}[.\-]\d{2})\s+\d{2}:\d{2}:\d{2}\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
-    const rowPat2 = /(\d{4}[.\-]\d{2}[.\-]\d{2})\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+    const datePat = /^(\d{4}[.\-/]\d{2}[.\-/]\d{2})/;
     for (const line of lines) {
-      const m = rowPat.exec(line) || rowPat2.exec(line);
-      if (!m) continue;
-      const date = m[1].replace(/[.\-]/g, '-');
-      const desc = m[2].trim();
-      const out  = m[3] === '-' ? 0 : Number(m[3].replace(/,/g, '')) || 0;
-      const inn  = m[4] === '-' ? 0 : Number(m[4].replace(/,/g, '')) || 0;
-      const bal  = Number(m[5].replace(/,/g, '')) || 0;
-      if (!desc || (out === 0 && inn === 0)) continue;
-      txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
+      const dMatch = line.match(datePat);
+      if (dMatch) {
+        const date = dMatch[1].replace(/[.\-/]/g, '-');
+        const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(Boolean);
+        const parsed = tryParseBankTokens(tokens, date);
+        if (parsed) {
+          txns.push(parsed);
+        }
+      }
     }
     return txns.length ? txns : parseGeneric(lines, fullText);
   }
 
   function parseGeneric(lines, fullText) {
     const txns = [];
-    const rowPat = /(\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2})\s+(.{2,30}?)\s+([\d,]{3,})\s*([\d,]*)\s*([\d,]*)/;
+    const rowPat = /(\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2})\s+(.{2,35}?)\s+([\d,]{3,})\s*([\d,]*)\s*([\d,]*)/;
     for (const line of lines) {
       const m = rowPat.exec(line);
       if (!m) continue;
       const date = m[1].replace(/[.\-/]/g, '-');
       const desc = m[2].trim();
-      const out  = Number((m[3] || '').replace(/,/g, '')) || 0;
-      const inn  = Number((m[4] || '').replace(/,/g, '')) || 0;
+      const out  = cleanBankMoney(m[3]);
+      const inn  = cleanBankMoney(m[4]);
       if (!desc || (out === 0 && inn === 0)) continue;
       txns.push({ date, desc, out, in: inn, balance: 0, category: '' });
     }
@@ -7903,7 +8038,8 @@
 
           let txns = parseBankText(rawText, bankType);
           if (txns.length === 0) {
-            bankShowStatus('⚠️ 거래내역을 자동으로 찾지 못했어요. 은행 선택을 확인하거나 직접 엑셀에 입력해 주세요.', 'error');
+            const bName = bankType === 'shinhan' ? '신한은행' : (bankType === 'kookmin' ? '국민은행' : (bankType === 'woori' ? '우리은행' : '선택 은행'));
+            bankShowStatus(`⚠️ ${bName} 거래내역을 찾지 못했어요. 은행 선택이 맞는지 확인해 주세요. (콘솔 로그 확인 가능)`, 'error');
             return;
           }
           txns = bankAutoClassify(txns);
