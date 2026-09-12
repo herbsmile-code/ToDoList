@@ -1021,7 +1021,7 @@
       income: { total: 0, salary: 0, extra: 0, items: [] },
       fixed: { total: 0, items: [] },
       variable: { total: 0, items: [] },
-      savings: { total: 0, cheongyak: 0, installment: 0, items: [] },
+      savings: { total: 0, cheongyak: 0, installment: 0, stockExtra: 0, items: [] },
       etcExpense: 0,
       totalExpense: 0,
       remaining: 0,
@@ -3851,6 +3851,7 @@
       const statValSavingsTotal = document.getElementById('stat-val-savings-total');
       const statValSavingsCheongyak = document.getElementById('stat-val-savings-cheongyak');
       const statValSavingsInstallment = document.getElementById('stat-val-savings-installment');
+      const statValSavingsStock = document.getElementById('stat-val-savings-stock');
 
       const statTitleRemaining = document.getElementById('stat-title-remaining');
       const statValRemainingTotal = document.getElementById('stat-val-remaining-total');
@@ -3877,7 +3878,8 @@
 
       const savCheongyak = (mData.savings && mData.savings.cheongyak != null) ? mData.savings.cheongyak : 0;
       const savInstallment = (mData.savings && mData.savings.installment != null) ? mData.savings.installment : 0;
-      const savTotal = (mData.savings && mData.savings.total != null) ? mData.savings.total : (savCheongyak + savInstallment);
+      const savStock = (mData.savings && mData.savings.stockExtra != null) ? mData.savings.stockExtra : 0;
+      const savTotal = (mData.savings && mData.savings.total != null) ? mData.savings.total : (savCheongyak + savInstallment + savStock);
 
       const remainingVal = (mData.remaining != null) ? mData.remaining : (incomeTotal - expTotal - savTotal);
 
@@ -3898,6 +3900,7 @@
       if (statValSavingsTotal) statValSavingsTotal.textContent = formatKRW(savTotal);
       if (statValSavingsCheongyak) statValSavingsCheongyak.textContent = formatKRW(savCheongyak);
       if (statValSavingsInstallment) statValSavingsInstallment.textContent = formatKRW(savInstallment);
+      if (statValSavingsStock) statValSavingsStock.textContent = formatKRW(savStock);
 
       if (statTitleRemaining) statTitleRemaining.textContent = `💰 ${targetMonth}월 남은돈(기타)`;
       if (statValRemainingTotal) {
@@ -8483,6 +8486,7 @@
         etcExpenseTotal: 0,
         cheongyakTotal: 0,
         installmentTotal: 0,
+        stockExtraTotal: 0,
         savingsTotal: 0,
         incomeMap: {},
         fixedMap: {},
@@ -8533,15 +8537,26 @@
         const cleanMainCat = mainCategory.replace(/\s+/g, '');
 
         // [사용자 요청]: 대분류 '통장금액이동' 및 통장이동 관련 내역은 지출/수입에서 100% 완전 제외!
-        const isTransfer = (
-          cleanMainCat.includes('통장금액이동') || cleanMainCat.includes('통장이동') ||
-          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(mainCategory) ||
-          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(catStr) ||
-          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(desc) ||
-          (category && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/i.test(category))
+        // 단, 항목명이나 대분류가 저축, 적금, 청약, 투자, 주식 등 명확한 항목일 때는 desc의 '계좌이체' 단어 때문에 무단 제외되지 않도록 안전 보호!
+        const isExplicitSavingsOrExpense = (
+          cleanMainCat.includes('저축') || cleanMainCat.includes('투자') || cleanMainCat.includes('적금') || cleanMainCat.includes('청약') ||
+          cleanMainCat.includes('고정') || cleanMainCat.includes('용돈') || cleanMainCat.includes('변동') ||
+          /(청약|주택청약|적금|예금|저축|주식|증권|펀드|ISA)/.test(catStr)
         );
 
-        if (isTransfer) {
+        const isTransfer = !isExplicitSavingsOrExpense && (
+          cleanMainCat.includes('통장금액이동') || cleanMainCat.includes('통장이동') ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|본인이체|내계좌이체/i.test(mainCategory) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|본인이체|내계좌이체/i.test(catStr) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|본인이체|내계좌이체/i.test(desc) ||
+          (category && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/i.test(category))
+        );
+        const isExplicitTransfer = (
+          cleanMainCat.includes('통장금액이동') || cleanMainCat.includes('통장이동') ||
+          (category && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/.test(category))
+        );
+
+        if (isExplicitTransfer || isTransfer) {
           return; // 변동지출, 고정지출, 기타지출, 저축, 수입 어디에도 합산하지 않고 완전 통과!
         }
 
@@ -8588,6 +8603,21 @@
           let itemName = category || subCategory || (desc ? desc.substring(0, 16) : '기타지출');
 
           // =============================================================
+          // 🏆 0순위: [청약 항목 최우선 보호]
+          // 진영-청약, 주택청약 등 청약 항목은 대분류가 고정지출이더라도 무조건 저축의 청약으로 100% 편입
+          // =============================================================
+          const isCheongyak = /(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc) || cleanMainCat.includes('청약');
+          if (isCheongyak) {
+            bucket.cheongyakTotal += outAmt;
+            bucket.savingsTotal += outAmt;
+            const savItemName = category || '주택청약';
+            if (!bucket.savingsMap[savItemName]) bucket.savingsMap[savItemName] = { total: 0, count: 0 };
+            bucket.savingsMap[savItemName].total += outAmt;
+            bucket.savingsMap[savItemName].count++;
+            return;
+          }
+
+          // =============================================================
           // 🏆 1순위: [대분류 100% 절대 우선 판별]
           // =============================================================
 
@@ -8600,16 +8630,16 @@
             return;
           }
 
-          // B. 저축/투자 ('저축', '투자', '적금', '예금', '청약' 포함) - 적금은 절대 변동지출로 가지 않음!
-          if (cleanMainCat.includes('저축') || cleanMainCat.includes('투자') || cleanMainCat.includes('적금') || cleanMainCat.includes('예금') || cleanMainCat.includes('청약')) {
-            const isCheongyak = /(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc) || cleanMainCat.includes('청약');
-            if (isCheongyak) {
-              bucket.cheongyakTotal += outAmt;
-            } else {
+          // B. 저축/투자 ('저축', '투자', '적금', '예금', '주식' 포함) -> 적금 vs 주식 외
+          if (cleanMainCat.includes('저축') || cleanMainCat.includes('투자') || cleanMainCat.includes('적금') || cleanMainCat.includes('예금') || cleanMainCat.includes('주식')) {
+            const isInstallment = /(적금|예금)/.test(catStr) || /(적금|예금)/.test(desc) || cleanMainCat.includes('적금') || cleanMainCat.includes('예금');
+            if (isInstallment) {
               bucket.installmentTotal += outAmt;
+            } else {
+              bucket.stockExtraTotal += outAmt;
             }
             bucket.savingsTotal += outAmt;
-            const savItemName = category || (isCheongyak ? '주택청약' : '적금/저축');
+            const savItemName = category || (isInstallment ? '적금/예금' : '주식 외');
             if (!bucket.savingsMap[savItemName]) bucket.savingsMap[savItemName] = { total: 0, count: 0 };
             bucket.savingsMap[savItemName].total += outAmt;
             bucket.savingsMap[savItemName].count++;
@@ -8646,21 +8676,21 @@
           // -------------------------------------------------------------
           // [대분류 미지정 시 폴백]: 키워드 기반 스마트 추론
           // -------------------------------------------------------------
-          // 1) 저축 추론 (청약 vs 적금/투자)
-          if (/(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc)) {
-            bucket.cheongyakTotal += outAmt;
+          // 1) 저축 추론 (적금 vs 주식 외)
+          if (/(적금|예금)/.test(catStr) || /(적금|예금)/.test(desc)) {
+            bucket.installmentTotal += outAmt;
             bucket.savingsTotal += outAmt;
-            const savItemName = category || '주택청약';
+            const savItemName = category || subCategory || '적금/예금';
             if (!bucket.savingsMap[savItemName]) bucket.savingsMap[savItemName] = { total: 0, count: 0 };
             bucket.savingsMap[savItemName].total += outAmt;
             bucket.savingsMap[savItemName].count++;
             return;
           }
 
-          if (/(적금|예금|저축|투자|ISA|연금|펀드)/.test(catStr) || /(적금|예금|저축|투자|ISA|연금|펀드)/.test(desc)) {
-            bucket.installmentTotal += outAmt;
+          if (/(주식|증권|투자|ISA|연금|펀드|외화|코인|저축)/.test(catStr) || /(주식|증권|투자|ISA|연금|펀드|외화|코인|저축)/.test(desc)) {
+            bucket.stockExtraTotal += outAmt;
             bucket.savingsTotal += outAmt;
-            const savItemName = category || subCategory || '적금/저축';
+            const savItemName = category || subCategory || '주식 외';
             if (!bucket.savingsMap[savItemName]) bucket.savingsMap[savItemName] = { total: 0, count: 0 };
             bucket.savingsMap[savItemName].total += outAmt;
             bucket.savingsMap[savItemName].count++;
@@ -8748,7 +8778,8 @@
           savings: {
             total: b.savingsTotal,
             cheongyak: b.cheongyakTotal,
-            installment: b.installmentTotal
+            installment: b.installmentTotal,
+            stockExtra: b.stockExtraTotal
           },
           remaining: remainingTotal
         };
@@ -8761,7 +8792,7 @@
           expense: { total: 0, fixed: 0, variable: 0, etc: 0 },
           fixed: { total: 0, items: [] },
           variable: { total: 0, items: [] },
-          savings: { total: 0, cheongyak: 0, installment: 0 },
+          savings: { total: 0, cheongyak: 0, installment: 0, stockExtra: 0 },
           remaining: 0
         };
         updated = true;
@@ -8880,14 +8911,24 @@
         const cleanMCat = mainCat.replace(/\s+/g, '');
 
         // [사용자 요청]: 통장금액이동은 순수 소비/지출이 아니므로 월별 통계에서도 완전 제외!
-        const isTransfer = (
+        // 단, 항목명이나 대분류가 저축, 적금, 청약, 투자, 주식 등 명확한 항목일 때는 desc의 '계좌이체' 단어 때문에 무단 제외되지 않도록 안전 보호!
+        const isExplicitSavingsOrExpense = (
+          cleanMCat.includes('저축') || cleanMCat.includes('투자') || cleanMCat.includes('적금') || cleanMCat.includes('청약') ||
+          cleanMCat.includes('고정') || cleanMCat.includes('용돈') || cleanMCat.includes('변동') ||
+          /(청약|주택청약|적금|예금|저축|주식|증권|펀드|ISA)/.test(catStr)
+        );
+        const isTransfer = !isExplicitSavingsOrExpense && (
           cleanMCat.includes('통장금액이동') || cleanMCat.includes('통장이동') ||
-          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(mainCat) ||
-          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(catStr) ||
-          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(desc) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|본인이체|내계좌이체/i.test(mainCat) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|본인이체|내계좌이체/i.test(catStr) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|본인이체|내계좌이체/i.test(desc) ||
           (cat && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/i.test(cat))
         );
-        if (isTransfer) return;
+        const isExplicitTransfer = (
+          cleanMCat.includes('통장금액이동') || cleanMCat.includes('통장이동') ||
+          (cat && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/.test(cat))
+        );
+        if (isExplicitTransfer || isTransfer) return;
 
         const outAmt = parseAmount(tx.out);
         const inAmt  = parseAmount(tx.in);
@@ -8906,11 +8947,20 @@
           cat     = '확인필요';
         } else {
           // 출금 건 대분류 확정:
-          // 🏆 1순위: 지정된 대분류 100% 절대 적용
-          if (cleanMCat.includes('고정')) {
-            mainCat = '고정지출';
-          } else if (cleanMCat.includes('저축') || cleanMCat.includes('투자') || cleanMCat.includes('적금') || cleanMCat.includes('예금') || cleanMCat.includes('청약')) {
+          // 🏆 0순위: 청약 항목 최우선 보호 (진영-청약, 주택청약 등)
+          const isCheongyak = /(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc) || cleanMCat.includes('청약');
+          if (isCheongyak) {
             mainCat = '저축/투자';
+            subCat = '청약';
+          } else if (cleanMCat.includes('고정')) {
+            mainCat = '고정지출';
+          } else if (cleanMCat.includes('저축') || cleanMCat.includes('투자') || cleanMCat.includes('적금') || cleanMCat.includes('예금') || cleanMCat.includes('주식')) {
+            mainCat = '저축/투자';
+            if (/(적금|예금)/.test(catStr) || /(적금|예금)/.test(desc) || cleanMCat.includes('적금') || cleanMCat.includes('예금')) {
+              subCat = '적금';
+            } else {
+              subCat = '주식 외';
+            }
           } else if (cleanMCat.includes('용돈')) {
             mainCat = '부부용돈';
             cat = (curBank === 'shinhan' || /진영/.test(catStr) || /진영/.test(desc)) ? '진영-용돈' : '영호-용돈';
@@ -8919,8 +8969,12 @@
             mainCat = '변동지출';
           } else {
             // 🔍 2순위: 대분류 미지정 시 키워드 스마트 추론
-            if (/(적금|예금|저축|투자|ISA|연금|펀드|청약)/.test(catStr) || /(적금|예금|저축|투자|ISA|연금|펀드|청약)/.test(desc)) {
-              mainCat = '저축/투자'; // 적금은 진영/영호 키워드가 있어도 절대 용돈으로 빠지지 않음!
+            if (/(적금|예금)/.test(catStr) || /(적금|예금)/.test(desc)) {
+              mainCat = '저축/투자';
+              subCat = '적금';
+            } else if (/(주식|증권|투자|ISA|연금|펀드|외화|코인|저축)/.test(catStr) || /(주식|증권|투자|ISA|연금|펀드|외화|코인|저축)/.test(desc)) {
+              mainCat = '저축/투자';
+              subCat = '주식 외';
             } else if (/집세|월세|관리비|공과금|전기|수도|통신|인터넷|보험|대출|정기|구독/.test(catStr) || /집세|관리비|전기세|수도세|가스비|통신요금/.test(desc)) {
               mainCat = '고정지출';
             } else if (/용돈|현대카드/.test(catStr) || /용돈|현대카드/.test(desc) || cat === '진영-현대카드') {
