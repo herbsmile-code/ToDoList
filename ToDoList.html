@@ -20,7 +20,7 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260912_v152">
+  <link rel="stylesheet" href="css/style.css?v=20260912_v153">
   <link rel="stylesheet" href="css/animations.css?v=20260912_v152">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
@@ -837,31 +837,73 @@
           <div id="ledger-tab-budget" style="display: flex; flex-direction: column; gap: 1.35rem;">
             <!-- Honeymoon 4 Core Stats Cards -->
             <div class="ledger-stats-banner">
-              <div class="ledger-stat-card">
-                <span class="ledger-stat-title" id="ledger-stat-month-title">💌 7월 수입(급여) & 총 지출</span>
-                <div style="display: flex; align-items: baseline; gap: 0.4rem;">
-                  <span class="ledger-stat-val" id="ledger-stat-cur-month">7,064,406원</span>
-                  <span style="font-size: 0.76rem; color: var(--text-muted);" id="ledger-stat-income-sub">/ 급여 6,075,570원</span>
+              <!-- [박스 1] N월 수입 -->
+              <div class="ledger-stat-card ledger-stat-income">
+                <div class="stat-card-header">
+                  <span class="stat-card-title" id="stat-title-income">💵 6월 수입</span>
+                  <span class="stat-card-total" id="stat-val-income-total">0원</span>
                 </div>
-                <span class="ledger-stat-badge" id="ledger-stat-diff-badge">7월 결산 완료 ✨</span>
+                <div class="stat-card-list">
+                  <div class="stat-card-row">
+                    <span class="stat-row-label">월급</span>
+                    <span class="stat-row-val" id="stat-val-income-salary">0원</span>
+                  </div>
+                  <div class="stat-card-row">
+                    <span class="stat-row-label">부수입</span>
+                    <span class="stat-row-val" id="stat-val-income-extra">0원</span>
+                  </div>
+                </div>
               </div>
 
-              <div class="ledger-stat-card">
-                <span class="ledger-stat-title">🔒 7월 고정지출 계 (집세/공과금)</span>
-                <span class="ledger-stat-val" id="ledger-stat-fixed" style="color: #7048e8;">649,070원</span>
-                <span class="ledger-stat-sub">전세이자, 관리비, 가스/전기/수도</span>
+              <!-- [박스 2] N월 지출 -->
+              <div class="ledger-stat-card ledger-stat-expense">
+                <div class="stat-card-header">
+                  <span class="stat-card-title" id="stat-title-expense">💳 6월 지출</span>
+                  <span class="stat-card-total" id="stat-val-expense-total">0원</span>
+                </div>
+                <div class="stat-card-list">
+                  <div class="stat-card-row">
+                    <span class="stat-row-label">고정지출</span>
+                    <span class="stat-row-val" id="stat-val-expense-fixed">0원</span>
+                  </div>
+                  <div class="stat-card-row">
+                    <span class="stat-row-label">변동지출</span>
+                    <span class="stat-row-val" id="stat-val-expense-variable">0원</span>
+                  </div>
+                  <div class="stat-card-row">
+                    <span class="stat-row-label">기타</span>
+                    <span class="stat-row-val" id="stat-val-expense-etc">0원</span>
+                  </div>
+                </div>
               </div>
 
-              <div class="ledger-stat-card">
-                <span class="ledger-stat-title">🛍️ 7월 변동지출 계 (I35 생활비)</span>
-                <span class="ledger-stat-val" id="ledger-stat-variable" style="color: #ff6b8b;">6,415,336원</span>
-                <span class="ledger-stat-sub">식비, 외식, 여름휴가, 경조사, 쇼핑</span>
+              <!-- [박스 3] N월 저축 -->
+              <div class="ledger-stat-card ledger-stat-savings">
+                <div class="stat-card-header">
+                  <span class="stat-card-title" id="stat-title-savings">🏦 6월 저축</span>
+                  <span class="stat-card-total" id="stat-val-savings-total">0원</span>
+                </div>
+                <div class="stat-card-list">
+                  <div class="stat-card-row">
+                    <span class="stat-row-label">청약</span>
+                    <span class="stat-row-val" id="stat-val-savings-cheongyak">0원</span>
+                  </div>
+                  <div class="stat-card-row">
+                    <span class="stat-row-label">적금</span>
+                    <span class="stat-row-val" id="stat-val-savings-installment">0원</span>
+                  </div>
+                </div>
               </div>
 
-              <div class="ledger-stat-card">
-                <span class="ledger-stat-title">🌱 7월 결산 수지 (초과분)</span>
-                <span class="ledger-stat-val" id="ledger-stat-savings" style="color: #ff6b6b;">-988,836원</span>
-                <span class="ledger-stat-sub" id="ledger-stat-savings-rate">비상금/전월저축분 활용 💡</span>
+              <!-- [박스 4] N월 남은돈(기타) -->
+              <div class="ledger-stat-card ledger-stat-remaining">
+                <div class="stat-card-header">
+                  <span class="stat-card-title" id="stat-title-remaining">💰 6월 남은돈(기타)</span>
+                </div>
+                <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; flex:1; padding:0.25rem 0;">
+                  <span class="stat-card-total" id="stat-val-remaining-total" style="font-size:1.35rem; font-weight:800;">0원</span>
+                  <span style="font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem; white-space:nowrap;" id="stat-sub-remaining-desc">수입 - 지출 - 저축</span>
+                </div>
               </div>
             </div>
 
@@ -2913,7 +2955,7 @@
   <script src="js/utils/constants.js?v=20260912_v152"></script>
   <script src="js/utils/helpers.js?v=20260912_v152"></script>
   <script src="js/services/crypto.js?v=20260912_v152"></script>
-  <script src="js/app.js?v=20260912_v152"></script>
+  <script src="js/app.js?v=20260912_v153"></script>
   <script src="js/treasure.js?v=20260912_v152"></script>
 </body>
 </html>
