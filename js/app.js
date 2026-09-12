@@ -7565,10 +7565,27 @@
         }
       }
 
-      // 3. 행 내부 아이템 X좌표 오름차순(좌->우) 정렬 및 조합
+      // 3. 행 내부 아이템 X좌표 오름차순(좌->우) 정렬 및 단어/자간 결합
       for (const row of rowGroups) {
         row.items.sort((a, b) => a.x - b.x);
-        const rowText = row.items.map(it => it.str).join('   ');
+        let rowText = '';
+        let lastX = -999;
+        let lastWidth = 0;
+        for (const it of row.items) {
+          const w = it.width || (it.str.length * 6.5);
+          if (lastX !== -999) {
+            const gap = it.x - (lastX + lastWidth);
+            if (gap > 12) {
+              rowText += '   '; // 큰 간격 (컬럼 구분)
+            } else if (gap > 3.0) {
+              rowText += ' ';   // 단어 간격
+            }
+            // gap <= 3.0이면 같은 단어의 쪼개진 글자이므로 공백 없이 붙임
+          }
+          rowText += it.str;
+          lastX = it.x;
+          lastWidth = w;
+        }
         fullText += rowText + '\n';
       }
       fullText += '\n';
@@ -7576,6 +7593,23 @@
 
     console.log('[BankAnalyzer] PDF 추출 텍스트 미리보기 (최초 10줄):\n', fullText.split('\n').slice(0, 10).join('\n'));
     return fullText;
+  }
+
+  // 자간 공백 정규화: 분리된 글자/숫자/시간/금액 복원
+  function normalizeSpacedLine(line) {
+    if (!line) return '';
+    let s = line.replace(/\s+/g, ' ').trim();
+    // 연속된 숫자 사이의 공백 제거 ("2 0 2 6 0 9 1 2" -> "20260912")
+    for (let i = 0; i < 8; i++) {
+      s = s.replace(/(\d)\s+(\d)/g, '$1$2');
+    }
+    // 시간 콜론 주변 공백 제거 ("1 0 : 5 8 : 0 4" -> "10:58:04")
+    s = s.replace(/(\d)\s*:\s*(\d)/g, '$1:$2').replace(/(\d)\s*:\s*(\d)/g, '$1:$2');
+    // 금액 쉼표 주변 공백 제거 ("1 5 , 0 0 0" -> "15,000")
+    s = s.replace(/(\d)\s*,\s*(\d)/g, '$1,$2').replace(/(\d)\s*,\s*(\d)/g, '$1,$2');
+    // 괄호 주변 정리 ("( 케 이 )" -> "(케이)")
+    s = s.replace(/\(\s*([^()]+?)\s*\)/g, '($1)');
+    return s;
   }
 
   // 공통 금액 변환 유틸
@@ -7603,7 +7637,7 @@
       const out = cleanBankMoney(tokens[endIdx - 2]);
 
       let descTokens = tokens.slice(1, endIdx - 2);
-      descTokens = descTokens.filter(t => !/^\d{2}:\d{2}(:\d{2})?$/.test(t) && !/^\d{4}[.\-/]\d{2}[.\-/]\d{2}$/.test(t));
+      descTokens = descTokens.filter(t => !/^\d{2}:\d{2}(:\d{2})?$/.test(t) && !/^\d{4}[.\-/]\d{2}[.\-/]\d{2}$/.test(t) && !/^\d{8}$/.test(t));
       const desc = descTokens.join(' ').trim() || '거래내역';
 
       if (out > 0 || inn > 0) {
@@ -7616,7 +7650,7 @@
       const bal = cleanBankMoney(tokens[endIdx]);
       const amt = cleanBankMoney(tokens[endIdx - 1]);
       let descTokens = tokens.slice(1, endIdx - 1);
-      descTokens = descTokens.filter(t => !/^\d{2}:\d{2}(:\d{2})?$/.test(t));
+      descTokens = descTokens.filter(t => !/^\d{2}:\d{2}(:\d{2})?$/.test(t) && !/^\d{8}$/.test(t));
       const fullDesc = descTokens.join(' ').trim();
       const isDeposit = fullDesc.includes('입금') || fullDesc.includes('수신');
       const out = isDeposit ? 0 : amt;
@@ -7641,46 +7675,91 @@
 
   function parseShinhan(lines, fullText) {
     const txns = [];
-    const datePat = /^(\d{4}[.\-/]\d{2}[.\-/]\d{2})/;
-    const regPat  = /(\d{4}[.\-/]\d{2}[.\-/]\d{2})\s+(?:[\d:]{5,8}\s+)?(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
 
-    for (const line of lines) {
-      const dMatch = line.match(datePat);
-      if (dMatch) {
-        const date = dMatch[1].replace(/[.\-/]/g, '-');
-        const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(Boolean);
-        const parsed = tryParseBankTokens(tokens, date);
-        if (parsed) {
-          txns.push(parsed);
+    // 신한 쏠(SOL) 모바일 앱 서식:
+    // [날짜 8자리 또는 10자리] [시간] [출금] [입금] [내용] [잔액] [거래점(선택)]
+    // 예: 20260912 10:58:04 0 15,000 김진영 5,529,503 (케이)
+    const solPat1 = /(\d{8}|\d{4}[.\-/]\d{2}[.\-/]\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)\s+([\d,]+|-)\s+([\d,]+|-)\s+(.+?)\s+([\d,]+)(?:\s+(.+))?$/;
+    // 시간 생략된 SOL 패턴: [날짜] [출금] [입금] [내용] [잔액]
+    const solPat2 = /(\d{8}|\d{4}[.\-/]\d{2}[.\-/]\d{2})\s+([\d,]+|-)\s+([\d,]+|-)\s+(.+?)\s+([\d,]+)(?:\s+(.+))?$/;
+    // 표준 인터넷뱅킹 패턴: [날짜] [내용] [출금] [입금] [잔액]
+    const solPat3 = /(\d{8}|\d{4}[.\-/]\d{2}[.\-/]\d{2})\s+(?:[\d:]{5,8}\s+)?(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+
+    for (const rawLine of lines) {
+      if (!rawLine) continue;
+      const line = normalizeSpacedLine(rawLine);
+
+      // 날짜 감지: 20260912 또는 2026.09.12 또는 2026-09-12
+      const dMatch = line.match(/^(\d{8}|\d{4}[.\-/]\d{2}[.\-/]\d{2})/);
+      if (!dMatch) continue;
+
+      const dRaw = dMatch[1];
+      const date = (dRaw.length === 8 && !/[.\-/]/.test(dRaw))
+        ? `${dRaw.slice(0, 4)}-${dRaw.slice(4, 6)}-${dRaw.slice(6, 8)}`
+        : dRaw.replace(/[.\-/]/g, '-');
+
+      // 1. 신한 SOL 모바일 전용 매칭 (시간 + 출금 + 입금 + 내용 + 잔액)
+      const m1 = solPat1.exec(line);
+      if (m1) {
+        const out = cleanBankMoney(m1[3]);
+        const inn = cleanBankMoney(m1[4]);
+        const rawDesc = m1[5].replace(/\s+/g, '').trim();
+        const bal = cleanBankMoney(m1[6]);
+        if (out > 0 || inn > 0) {
+          txns.push({ date, desc: rawDesc || '신한입출금', out, in: inn, balance: bal, category: '' });
           continue;
         }
       }
 
-      // 정규식 폴백
-      const m = regPat.exec(line);
-      if (m) {
-        const date = m[1].replace(/[.\-/]/g, '-');
-        const desc = m[2].replace(/\s+/g, ' ').trim();
-        const out  = cleanBankMoney(m[3]);
-        const inn  = cleanBankMoney(m[4]);
-        const bal  = cleanBankMoney(m[5]);
-        if (desc && (out > 0 || inn > 0)) {
-          txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
+      // 2. 시간 생략 SOL 모바일 매칭
+      const m2 = solPat2.exec(line);
+      if (m2) {
+        const out = cleanBankMoney(m2[2]);
+        const inn = cleanBankMoney(m2[3]);
+        const rawDesc = m2[4].replace(/\s+/g, '').trim();
+        const bal = cleanBankMoney(m2[5]);
+        if (out > 0 || inn > 0) {
+          txns.push({ date, desc: rawDesc || '신한입출금', out, in: inn, balance: bal, category: '' });
+          continue;
         }
+      }
+
+      // 3. 표준 인터넷뱅킹 매칭 (내용이 출금/입금 앞에 오는 경우)
+      const m3 = solPat3.exec(line);
+      if (m3) {
+        const rawDesc = m3[2].replace(/\s+/g, ' ').trim();
+        const out = cleanBankMoney(m3[3]);
+        const inn = cleanBankMoney(m3[4]);
+        const bal = cleanBankMoney(m3[5]);
+        if (rawDesc && (out > 0 || inn > 0)) {
+          txns.push({ date, desc: rawDesc, out, in: inn, balance: bal, category: '' });
+          continue;
+        }
+      }
+
+      // 4. 스마트 토큰 파서 폴백
+      const tokens = line.split(/\s+/).filter(Boolean);
+      const parsed = tryParseBankTokens(tokens, date);
+      if (parsed) {
+        txns.push(parsed);
       }
     }
 
     // 전역 텍스트 정규식 검색 폴백
     if (txns.length === 0) {
-      const globalPat = /(\d{4}[.\-/]\d{2}[.\-/]\d{2})(?:\s+[\d:]{5,8})?\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/g;
+      const normalizedFull = fullText.split('\n').map(normalizeSpacedLine).join('\n');
+      const gPat = /(\d{8}|\d{4}[.\-/]\d{2}[.\-/]\d{2})(?:\s+[\d:]{5,8})?\s+([\d,]+|-)\s+([\d,]+|-)\s+(.+?)\s+([\d,]+)/g;
       let gm;
-      while ((gm = globalPat.exec(fullText)) !== null) {
-        const date = gm[1].replace(/[.\-/]/g, '-');
-        const desc = gm[2].replace(/\s+/g, ' ').trim();
-        const out  = cleanBankMoney(gm[3]);
-        const inn  = cleanBankMoney(gm[4]);
+      while ((gm = gPat.exec(normalizedFull)) !== null) {
+        const dRaw = gm[1];
+        const date = (dRaw.length === 8 && !/[.\-/]/.test(dRaw))
+          ? `${dRaw.slice(0, 4)}-${dRaw.slice(4, 6)}-${dRaw.slice(6, 8)}`
+          : dRaw.replace(/[.\-/]/g, '-');
+        const out  = cleanBankMoney(gm[2]);
+        const inn  = cleanBankMoney(gm[3]);
+        const desc = gm[4].replace(/\s+/g, '').trim();
         const bal  = cleanBankMoney(gm[5]);
-        if (desc && (out > 0 || inn > 0) && desc.length < 60) {
+        if (desc && (out > 0 || inn > 0) && desc.length < 50) {
           txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
         }
       }
