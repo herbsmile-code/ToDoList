@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260907_v138">
-  <link rel="stylesheet" href="css/animations.css?v=20260907_v138">
+  <link rel="stylesheet" href="css/style.css?v=20260912_v139">
+  <link rel="stylesheet" href="css/animations.css?v=20260912_v139">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -943,16 +943,6 @@
               </div>
             </div>
 
-            <!-- Upload Dropzone Card -->
-            <div class="file-upload-card" id="ledger-dropzone" style="background: rgba(255, 107, 139, 0.03); border: 2px dashed rgba(255, 107, 139, 0.35);">
-              <input type="file" id="ledger-file-hidden-input" accept=".xlsx, .xls, .csv" style="display: none;">
-              <div class="file-upload-icon">💍 📊</div>
-              <div class="file-upload-title">'2026년 신혼가계부' 엑셀 파일을 끌어다 놓거나 클릭하세요</div>
-              <div class="file-upload-desc">A열(구분), B열(항목) 및 1~12월 지출 데이터가 자동으로 분석되어 대시보드에 즉시 반영됩니다 ✨</div>
-              <button type="button" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.1rem;" onclick="event.stopPropagation(); document.getElementById('ledger-file-hidden-input').click()">
-                내 컴퓨터에서 신혼 가계부 엑셀 선택
-              </button>
-            </div>
 
             <!-- Stored Ledger Files Section -->
             <div>
@@ -969,6 +959,42 @@
                 <div class="empty-state-icon">💰</div>
                 <h3>보관된 가계부 엑셀 파일이 없어요</h3>
                 <p>매월 작성하시는 신혼 가계부 엑셀 파일을 업로드해 두면 언제든 다운로드하고 월별 지출을 비교할 수 있어요 ✨</p>
+              </div>
+            </div>
+
+            <!-- =====================================================
+                 [NEW] 거래내역서 자동 분류 섹션 (Bank Statement Analyzer)
+                 ===================================================== -->
+            <div id="bank-analyzer-section" style="margin-top: 1.5rem;">
+              <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem; padding-top:1rem; border-top: 1.5px solid var(--border-light, #f0e6ea);">
+                <span style="font-size:1.1rem;">📄</span>
+                <h3 style="font-size:1rem; font-weight:800; color:var(--text-main); margin:0;">거래내역서 자동 분류</h3>
+                <span style="font-size:0.78rem; color:var(--text-muted); margin-left:auto;">국민 · 신한 · 우리은행 PDF 지원</span>
+              </div>
+
+              <!-- 처리 상태 메시지 -->
+              <div id="bank-process-status" style="display:none; padding:0.75rem 1rem; border-radius:12px; font-size:0.84rem; font-weight:600; margin-bottom:1rem;"></div>
+
+              <!-- 매칭 룰 현황 배너 -->
+              <div id="bank-rules-banner" style="display:none; background:rgba(112,72,232,0.07); border:1px solid rgba(112,72,232,0.18); border-radius:12px; padding:0.7rem 1rem; margin-bottom:1rem; font-size:0.82rem; color:#7048e8; display:flex; align-items:center; gap:0.5rem;">
+                <span>📚</span>
+                <span id="bank-rules-banner-text">저장된 분류 규칙 0개</span>
+                <button type="button" id="btn-bank-rules-manage" style="margin-left:auto; font-size:0.75rem; padding:0.25rem 0.7rem; border-radius:8px; border:1px solid rgba(112,72,232,0.3); background:transparent; color:#7048e8; cursor:pointer;">규칙 관리</button>
+              </div>
+
+              <!-- 월별 거래내역 카드 그리드 -->
+              <div id="bank-monthly-grid" style="display:flex; flex-direction:column; gap:1rem;">
+                <!-- JS로 동적 생성: 각 월별 카드 -->
+              </div>
+
+              <!-- 분류 규칙 관리 패널 (접힘/펼침) -->
+              <div id="bank-rules-panel" style="display:none; margin-top:1rem; background:rgba(0,0,0,0.02); border-radius:14px; padding:1rem;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+                  <h4 style="margin:0; font-size:0.9rem; font-weight:800;">📚 저장된 항목 분류 규칙</h4>
+                  <button type="button" id="btn-bank-rules-close" style="font-size:0.78rem; color:var(--text-muted); border:none; background:none; cursor:pointer;">닫기 ✕</button>
+                </div>
+                <div id="bank-rules-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:200px; overflow-y:auto;"></div>
+                <div id="bank-rules-empty" style="color:var(--text-muted); font-size:0.82rem; text-align:center; padding:1rem;">아직 저장된 분류 규칙이 없어요.<br>분류된 엑셀을 업로드하면 자동으로 학습됩니다 📖</div>
               </div>
             </div>
           </div>
@@ -1333,54 +1359,83 @@
        Modal: Ledger Excel Upload (가계부 엑셀 등록 모달)
        ========================================================================= -->
   <div id="ledger-upload-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
-    <div class="modal-card" style="max-width: 480px;">
+    <div class="modal-card" style="max-width: 520px;">
       <div class="modal-header">
-        <h3 class="modal-title">💰 가계부 엑셀 파일 등록</h3>
+        <h3 class="modal-title" id="ledger-modal-title">💰 거래내역서 / 가계부 업로드</h3>
         <button class="modal-close-btn" data-close-ledger-modal title="닫기 (Esc)">✕</button>
       </div>
 
-      <form id="ledger-upload-form">
-        <div class="form-group">
-          <label class="form-label" for="ledger-modal-file-input">가계부 엑셀 파일 (.xlsx, .csv) *</label>
-          <input type="file" id="ledger-modal-file-input" class="form-input" accept=".xlsx, .xls, .csv" required>
-        </div>
+      <!-- 모드 선택 탭 -->
+      <div style="display:flex; gap:0.5rem; padding: 0 1.5rem 0.5rem; border-bottom: 1px solid var(--border-light, #f0e6ea); margin-bottom:1rem;">
+        <button type="button" class="ledger-mode-tab active" id="lm-tab-pdf" onclick="window.UI && UI.switchLedgerModalMode('pdf')" style="flex:1; padding:0.5rem; border-radius:10px; border:none; background:rgba(255,107,139,0.12); color:var(--primary,#ff6b8b); font-weight:700; font-size:0.82rem; cursor:pointer;">📄 PDF 거래내역서 → 엑셀 변환</button>
+        <button type="button" class="ledger-mode-tab" id="lm-tab-excel" onclick="window.UI && UI.switchLedgerModalMode('excel')" style="flex:1; padding:0.5rem; border-radius:10px; border:none; background:rgba(0,0,0,0.04); color:var(--text-muted,#999); font-weight:600; font-size:0.82rem; cursor:pointer;">📊 분류된 엑셀 업로드 → 자동 학습</button>
+      </div>
 
-        <div class="form-row">
+      <!-- PDF 모드 -->
+      <div id="ledger-modal-pdf-mode">
+        <form id="ledger-pdf-form" style="padding: 0 1.5rem 1.5rem;">
           <div class="form-group">
-            <label class="form-label" for="ledger-modal-month">대상 월 선택 (선택)</label>
-            <select id="ledger-modal-month" class="form-select">
-              <option value="auto">엑셀 데이터 자동 분석 🤖</option>
-              <option value="1">2026년 1월</option>
-              <option value="2">2026년 2월</option>
-              <option value="3">2026년 3월</option>
-              <option value="4">2026년 4월</option>
-              <option value="5">2026년 5월</option>
-              <option value="6">2026년 6월</option>
-              <option value="7">2026년 7월</option>
-              <option value="8" selected>2026년 8월</option>
-              <option value="9">2026년 9월</option>
-              <option value="10">2026년 10월</option>
-              <option value="11">2026년 11월</option>
-              <option value="12">2026년 12월</option>
+            <label class="form-label" for="ledger-pdf-bank">은행 선택 *</label>
+            <select id="ledger-pdf-bank" class="form-select" onchange="window._updatePdfPasswordHint && window._updatePdfPasswordHint(this.value)">
+              <option value="kookmin">🏦 국민은행 (KB)</option>
+              <option value="shinhan">🏦 신한은행</option>
+              <option value="woori">🏦 우리은행</option>
             </select>
           </div>
-
           <div class="form-group">
-            <label class="form-label" for="ledger-modal-manual-amount">직접 지출 총액 입력 (선택)</label>
-            <input type="text" id="ledger-modal-manual-amount" class="form-input" placeholder="예: 1,250,000">
+            <label class="form-label" for="ledger-pdf-input">PDF 거래내역서 파일 *</label>
+            <input type="file" id="ledger-pdf-input" class="form-input" accept=".pdf" required>
+            <div style="font-size:0.78rem; color:var(--text-muted,#999); margin-top:4px;">📌 선택한 은행 앱 또는 인터넷뱅킹에서 다운로드한 PDF 파일을 업로드하세요</div>
           </div>
-        </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-ledger-modal>취소</button>
+            <button type="submit" class="btn btn-primary" id="ledger-pdf-submit-btn">📥 엑셀로 변환 & 다운로드</button>
+          </div>
+        </form>
+      </div>
 
-        <div class="form-group">
-          <label class="form-label" for="ledger-modal-note">이달의 가계부 한줄 메모</label>
-          <textarea id="ledger-modal-note" class="form-textarea" placeholder="예: 휴가철 여행 경비 포함, 식비 절약 목표 달성 등..." style="min-height: 70px;"></textarea>
-        </div>
-
-        <div class="modal-actions">
-          <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-ledger-modal>취소</button>
-          <button type="submit" class="btn btn-primary">가계부에 저장 & 분석 📊</button>
-        </div>
-      </form>
+      <!-- 엑셀 학습 모드 -->
+      <div id="ledger-modal-excel-mode" style="display:none;">
+        <form id="ledger-upload-form" style="padding: 0 1.5rem 1.5rem;">
+          <div class="form-group">
+            <label class="form-label" for="ledger-modal-file-input">항목 분류된 엑셀 파일 (.xlsx) *</label>
+            <input type="file" id="ledger-modal-file-input" class="form-input" accept=".xlsx, .xls, .csv" required>
+            <div style="font-size:0.78rem; color:var(--text-muted,#999); margin-top:4px;">📌 PDF에서 변환된 엑셀에 항목을 직접 입력한 후 업로드하세요. 자동으로 분류 규칙을 학습합니다.</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="ledger-modal-month">대상 월 (선택)</label>
+              <select id="ledger-modal-month" class="form-select">
+                <option value="auto">자동 감지 🤖</option>
+                <option value="1">2026년 1월</option>
+                <option value="2">2026년 2월</option>
+                <option value="3">2026년 3월</option>
+                <option value="4">2026년 4월</option>
+                <option value="5">2026년 5월</option>
+                <option value="6">2026년 6월</option>
+                <option value="7">2026년 7월</option>
+                <option value="8" selected>2026년 8월</option>
+                <option value="9">2026년 9월</option>
+                <option value="10">2026년 10월</option>
+                <option value="11">2026년 11월</option>
+                <option value="12">2026년 12월</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="ledger-modal-manual-amount">직접 지출 총액 (선택)</label>
+              <input type="text" id="ledger-modal-manual-amount" class="form-input" placeholder="예: 1,250,000">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ledger-modal-note">메모 (선택)</label>
+            <textarea id="ledger-modal-note" class="form-textarea" placeholder="이달의 한줄 메모..." style="min-height: 60px;"></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-ledger-modal>취소</button>
+            <button type="submit" class="btn btn-primary">📚 학습 & 대시보드 반영 ✨</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -2829,12 +2884,15 @@
 
   <!-- External Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- PDF.js for bank statement parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';</script>
 
   <!-- Application Logic Scripts (Phase 1 Modularization) -->
-  <script src="js/utils/constants.js?v=20260907_v138"></script>
-  <script src="js/utils/helpers.js?v=20260907_v138"></script>
-  <script src="js/services/crypto.js?v=20260907_v138"></script>
-  <script src="js/app.js?v=20260907_v138"></script>
-  <script src="js/treasure.js?v=20260907_v138"></script>
+  <script src="js/utils/constants.js?v=20260912_v139"></script>
+  <script src="js/utils/helpers.js?v=20260912_v139"></script>
+  <script src="js/services/crypto.js?v=20260912_v139"></script>
+  <script src="js/app.js?v=20260912_v139"></script>
+  <script src="js/treasure.js?v=20260912_v139"></script>
 </body>
 </html>

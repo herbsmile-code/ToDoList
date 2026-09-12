@@ -29,3 +29,13 @@ Thumbs.db
 chrome_dom.html
 test_full.html
 *.tmp
+
+# Data Recovery / Sensitive Backup Files
+recovered_data.json
+restored_vacations_full.json
+recovered_summary.txt
+scratch_decrypt.py
+upload_restored_vacations.py
+print_all_recovered.py
+scratch/
+
