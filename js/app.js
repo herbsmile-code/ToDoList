@@ -8168,35 +8168,6 @@
 
         // [출금] 출금액(outAmt > 0)
         if (outAmt > 0) {
-          // A. 저축 판별 (청약 vs 적금/투자)
-          const isCheongyak = /(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc);
-          const isInstallment = !isCheongyak && (
-            mainCategory === '저축/투자' ||
-            /(적금|예금|저축|투자|ISA|연금|펀드)/.test(catStr) ||
-            /(적금|예금|저축|투자|ISA|연금|펀드)/.test(desc)
-          );
-
-          if (isCheongyak) {
-            bucket.cheongyakTotal += outAmt;
-            bucket.savingsTotal += outAmt;
-            const itemName = category || '주택청약';
-            if (!bucket.savingsMap[itemName]) bucket.savingsMap[itemName] = { total: 0, count: 0 };
-            bucket.savingsMap[itemName].total += outAmt;
-            bucket.savingsMap[itemName].count++;
-            return;
-          }
-
-          if (isInstallment) {
-            bucket.installmentTotal += outAmt;
-            bucket.savingsTotal += outAmt;
-            const itemName = category || subCategory || '적금/저축';
-            if (!bucket.savingsMap[itemName]) bucket.savingsMap[itemName] = { total: 0, count: 0 };
-            bucket.savingsMap[itemName].total += outAmt;
-            bucket.savingsMap[itemName].count++;
-            return;
-          }
-
-          // B. 순수 지출 (고정 vs 변동 vs 기타)
           let itemName = category || subCategory || (desc ? desc.substring(0, 16) : '기타지출');
 
           // [사용자 요청]: 진영-용돈 및 진영-현대카드는 오직 '진영-용돈'으로 단일화 (변동지출)
@@ -8204,38 +8175,87 @@
             itemName = '진영-용돈';
           }
 
-          let expType = 'variable'; // 기본값 변동지출
+          // -------------------------------------------------------------
+          // [대분류(mainCategory) 100% 최우선 기준]:
+          // 사용자가 엑셀(H열 대분류) 또는 [규칙 관리]에서 지정한 대분류를 절대 기준으로 적용
+          // -------------------------------------------------------------
           if (mainCategory === '고정지출') {
-            expType = 'fixed';
-          } else if (mainCategory === '변동지출' || mainCategory === '부부용돈' || itemName === '진영-용돈' || itemName === '영호-용돈') {
-            expType = 'variable';
-          } else if (mainCategory === '기타' || category === '기타') {
-            expType = 'etc';
-          } else {
-            // 대분류 미입력 시 스마트 추론
-            if (/집세|월세|관리비|공과금|전기|수도|가스|통신|인터넷|보험|대출|정기|구독/.test(catStr) || /집세|관리비|전기세|수도세|가스비|통신요금/.test(desc)) {
-              expType = 'fixed';
-            } else if (/기타/.test(catStr)) {
-              expType = 'etc';
-            }
-          }
-
-          if (expType === 'fixed') {
             bucket.fixedTotal += outAmt;
             if (!bucket.fixedMap[itemName]) bucket.fixedMap[itemName] = { total: 0, count: 0 };
             bucket.fixedMap[itemName].total += outAmt;
             bucket.fixedMap[itemName].count++;
-          } else if (expType === 'etc') {
-            bucket.etcExpenseTotal += outAmt;
-            if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
-            bucket.variableMap[itemName].total += outAmt;
-            bucket.variableMap[itemName].count++;
-          } else {
+            return;
+          }
+
+          if (mainCategory === '변동지출' || mainCategory === '부부용돈' || itemName === '진영-용돈' || itemName === '영호-용돈') {
             bucket.variableTotal += outAmt;
             if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
             bucket.variableMap[itemName].total += outAmt;
             bucket.variableMap[itemName].count++;
+            return;
           }
+
+          if (mainCategory === '저축/투자') {
+            const isCheongyak = /(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc);
+            if (isCheongyak) {
+              bucket.cheongyakTotal += outAmt;
+            } else {
+              bucket.installmentTotal += outAmt;
+            }
+            bucket.savingsTotal += outAmt;
+            const savItemName = category || (isCheongyak ? '주택청약' : '적금/저축');
+            if (!bucket.savingsMap[savItemName]) bucket.savingsMap[savItemName] = { total: 0, count: 0 };
+            bucket.savingsMap[savItemName].total += outAmt;
+            bucket.savingsMap[savItemName].count++;
+            return;
+          }
+
+          if (mainCategory === '기타' || category === '기타') {
+            bucket.etcExpenseTotal += outAmt;
+            if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
+            bucket.variableMap[itemName].total += outAmt;
+            bucket.variableMap[itemName].count++;
+            return;
+          }
+
+          // -------------------------------------------------------------
+          // [대분류 미지정 시 폴백]: 키워드 기반 스마트 추론
+          // -------------------------------------------------------------
+          // 1) 저축 추론 (청약 vs 적금/투자)
+          if (/(주택청약|청약)/.test(catStr) || /(주택청약|청약)/.test(desc)) {
+            bucket.cheongyakTotal += outAmt;
+            bucket.savingsTotal += outAmt;
+            const savItemName = category || '주택청약';
+            if (!bucket.savingsMap[savItemName]) bucket.savingsMap[savItemName] = { total: 0, count: 0 };
+            bucket.savingsMap[savItemName].total += outAmt;
+            bucket.savingsMap[savItemName].count++;
+            return;
+          }
+
+          if (/(적금|예금|저축|투자|ISA|연금|펀드)/.test(catStr) || /(적금|예금|저축|투자|ISA|연금|펀드)/.test(desc)) {
+            bucket.installmentTotal += outAmt;
+            bucket.savingsTotal += outAmt;
+            const savItemName = category || subCategory || '적금/저축';
+            if (!bucket.savingsMap[savItemName]) bucket.savingsMap[savItemName] = { total: 0, count: 0 };
+            bucket.savingsMap[savItemName].total += outAmt;
+            bucket.savingsMap[savItemName].count++;
+            return;
+          }
+
+          // 2) 고정지출 추론
+          if (/집세|월세|관리비|공과금|전기|수도|가스|통신|인터넷|보험|대출|정기|구독/.test(catStr) || /집세|관리비|전기세|수도세|가스비|통신요금/.test(desc)) {
+            bucket.fixedTotal += outAmt;
+            if (!bucket.fixedMap[itemName]) bucket.fixedMap[itemName] = { total: 0, count: 0 };
+            bucket.fixedMap[itemName].total += outAmt;
+            bucket.fixedMap[itemName].count++;
+            return;
+          }
+
+          // 3) 기본값: 변동지출
+          bucket.variableTotal += outAmt;
+          if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
+          bucket.variableMap[itemName].total += outAmt;
+          bucket.variableMap[itemName].count++;
         }
       });
     }
@@ -8360,9 +8380,9 @@
           return mon === currentSelectedMonth;
         });
 
-    // 상단 필터 제어 바 (월 선택 상태 + 수정한 엑셀 올리기 + 전체보기 토글)
+    // 하단 필터 제어 바 (전체보기 토글 - 맨 하단 배치)
     const filterBarHtml = `
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.6rem;padding:0.65rem 1rem;background:rgba(255,255,255,0.7);border-radius:12px;border:1px solid var(--border-light,#f0e6ea);margin-bottom:0.85rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.6rem;padding:0.65rem 1rem;background:rgba(255,255,255,0.7);border-radius:12px;border:1px solid var(--border-light,#f0e6ea);margin-top:0.75rem;margin-bottom:0.25rem;">
         <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.86rem;font-weight:700;color:var(--text-main);">
           <span>${showAll ? '🌐 전체 월 가계부 모아보기' : `📅 ${currentSelectedMonth}월 가계부 내역`}</span>
           <span style="font-size:0.75rem;font-weight:normal;color:var(--text-muted);">${filteredMonths.length > 0 ? `(표시 중인 월: ${filteredMonths.length}개)` : ''}</span>
@@ -8615,7 +8635,7 @@
       `;
     }).join('');
 
-    grid.innerHTML = filterBarHtml + cardsHtml;
+    grid.innerHTML = cardsHtml + filterBarHtml;
   }
   window.bankRenderMonthlyDashboard = bankRenderMonthlyDashboard;
 
