@@ -8082,6 +8082,306 @@
     return fileName;
   }
 
+  // HTML 거래내역서(우리은행 attach.html 등) 파싱 & 원본 표 100% 보존 + 우측 [항목, 소분류, 대분류] 자동 완성 엑셀 내보내기
+  async function processBankHTML(file, bankType = 'woori', password = '') {
+    if (!window.XLSX) {
+      throw new Error('엑셀 라이브러리(XLSX)를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    const buffer = await file.arrayBuffer();
+    // 1. 인코딩 처리 (EUC-KR vs UTF-8 스마트 감지)
+    let text = new TextDecoder('utf-8').decode(buffer);
+    if (text.includes('charset=euc-kr') || text.includes('charset="euc-kr"') || text.includes('charset=cp949') || (text.match(/\uFFFD/g) || []).length > 5) {
+      try {
+        const eucText = new TextDecoder('euc-kr').decode(buffer);
+        if ((eucText.match(/\uFFFD/g) || []).length < (text.match(/\uFFFD/g) || []).length) {
+          text = eucText;
+        }
+      } catch(e) {}
+    }
+
+    // 2. DOM 파싱
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/html');
+
+    // 3. 거래내역 테이블 검색 (상위 15개 테이블 검사)
+    const allTables = Array.from(doc.querySelectorAll('table'));
+    let targetTable = null;
+    let headerCells = [];
+    let headerRowIdx = -1;
+
+    for (const tbl of allTables) {
+      const rows = Array.from(tbl.querySelectorAll('tr'));
+      for (let rIdx = 0; rIdx < Math.min(rows.length, 10); rIdx++) {
+        const tr = rows[rIdx];
+        const cells = Array.from(tr.querySelectorAll('th, td')).map(c => c.textContent.trim().replace(/\s+/g, ' '));
+        const rowStr = cells.join(' ');
+        // 거래일자/날짜와 출금/입금/적요/잔액 등이 포함된 행 감지
+        if (/날짜|거래일|일자|거래일시/.test(rowStr) && (/출금|입금|지급/.test(rowStr) || /적요|거래내용|내용|기재내용|보낸분|받는분/.test(rowStr))) {
+          targetTable = tbl;
+          headerCells = cells;
+          headerRowIdx = rIdx;
+          break;
+        }
+      }
+      if (targetTable) break;
+    }
+
+    // 4. 거래내역 테이블을 찾지 못한 경우: 보안메일(암호화) 여부 점검
+    if (!targetTable) {
+      const lowerText = text.toLowerCase();
+      const isSecured = lowerText.includes('password') || lowerText.includes('xecure') || lowerText.includes('initech') || lowerText.includes('s-core') || lowerText.includes('softforum') || lowerText.includes('보안') || lowerText.includes('비밀번호');
+      if (isSecured) {
+        throw new Error('🔒 우리은행 보안메일(암호화 파일)이 감지되었습니다!\n브라우저에서 attach.html을 더블클릭해 비밀번호를 입력하신 후, 거래내역 화면에서 [Ctrl + S](웹페이지, HTML만)로 저장하신 HTML 파일을 업로드해 주세요 📥');
+      } else {
+        throw new Error('⚠️ HTML 파일 내에서 거래내역 표(Table)를 찾지 못했습니다. 올바른 거래명세서 파일인지 확인해 주세요.');
+      }
+    }
+
+    // 5. 열 인덱스 식별
+    let colDate = -1, colDesc = -1, colSummary = -1, colOut = -1, colIn = -1, colBal = -1, colMemo = -1;
+    headerCells.forEach((cText, idx) => {
+      const clean = cText.replace(/\s+/g, '');
+      if (colDate < 0 && /날짜|거래일|일시|일자/.test(clean)) colDate = idx;
+      else if (/적요/.test(clean)) colSummary = idx;
+      else if (/거래내용|기재내용|내용|의뢰인|수취인|가맹점|보낸분|받는분/.test(clean)) colDesc = idx;
+      else if (/출금|지급/.test(clean)) colOut = idx;
+      else if (/입금/.test(clean)) colIn = idx;
+      else if (/잔액|잔고|거래후잔액/.test(clean)) colBal = idx;
+      else if (/송금메모|메모/.test(clean)) colMemo = idx;
+    });
+
+    if (colDesc < 0 && colSummary >= 0) colDesc = colSummary;
+
+    // 6. 원본 헤더 100% 보존 + 오른쪽에 [항목, 소분류, 대분류] 열 추가
+    const headers = [...headerCells];
+    const hasCategoryCol = headers.some(h => /항목|분류/.test(h) && !/대분류|소분류/.test(h));
+    if (!hasCategoryCol) {
+      headers.push('항목', '소분류', '대분류');
+    }
+
+    const allRows = Array.from(targetTable.querySelectorAll('tr'));
+    const dataRows = [];
+    const validTxns = [];
+    const owner = (bankType === 'shinhan') ? '진영' : '영호';
+
+    for (let i = headerRowIdx + 1; i < allRows.length; i++) {
+      const tr = allRows[i];
+      const cells = Array.from(tr.querySelectorAll('th, td')).map(c => c.textContent.trim().replace(/[\r\n\t]+/g, ' ').trim());
+      if (cells.length === 0 || cells.every(c => !c)) continue;
+
+      // 행의 열 개수를 원본 headerCells 길이에 맞춤
+      while (cells.length < headerCells.length) {
+        cells.push('');
+      }
+
+      // 날짜 확인
+      const rawDate = colDate >= 0 ? cells[colDate] : '';
+      const normDate = bankNormalizeDate(rawDate);
+
+      // 거래내용 구성 (적요 + 기재내용)
+      let descText = '';
+      if (colSummary >= 0 && colDesc >= 0 && colSummary !== colDesc) {
+        const sumVal = cells[colSummary] || '';
+        const descVal = cells[colDesc] || '';
+        descText = (sumVal && descVal && sumVal !== descVal) ? `${sumVal} ${descVal}`.trim() : (descVal || sumVal);
+      } else if (colDesc >= 0) {
+        descText = cells[colDesc] || '';
+      }
+
+      const outAmount = colOut >= 0 ? parseAmount(cells[colOut]) : 0;
+      const inAmount  = colIn >= 0 ? parseAmount(cells[colIn]) : 0;
+      const balAmount = colBal >= 0 ? parseAmount(cells[colBal]) : 0;
+      const memoText  = colMemo >= 0 ? cells[colMemo] : '';
+
+      // 유효 거래 행인 경우 자동 분류 수행
+      if (normDate && (outAmount > 0 || inAmount > 0 || descText)) {
+        const rawTxn = {
+          date: normDate,
+          desc: descText || (inAmount > 0 ? '입금' : '출금'),
+          out: outAmount,
+          in: inAmount,
+          balance: balAmount,
+          memo: memoText,
+          bank: bankType,
+          owner
+        };
+
+        const classified = bankAutoClassify([rawTxn], bankType)[0];
+        validTxns.push(classified);
+
+        if (!hasCategoryCol) {
+          cells.push(classified.category || '확인필요', classified.subCategory || '', classified.mainCategory || '');
+        }
+      } else {
+        if (!hasCategoryCol) {
+          cells.push('', '', '');
+        }
+      }
+
+      dataRows.push(cells);
+    }
+
+    if (validTxns.length === 0 && dataRows.length === 0) {
+      throw new Error('⚠️ 유효한 거래내역 행을 추출하지 못했습니다.');
+    }
+
+    // 7. 엑셀 워크북 생성 및 다운로드
+    const excelRows = [headers, ...dataRows];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(excelRows);
+
+    ws['!cols'] = headers.map((h, cIdx) => {
+      let maxLen = (h || '').length * 2;
+      for (let r = 0; r < Math.min(excelRows.length, 50); r++) {
+        const val = String(excelRows[r][cIdx] || '');
+        maxLen = Math.max(maxLen, val.length);
+      }
+      return { wch: Math.min(Math.max(maxLen + 3, 12), 40) };
+    });
+
+    const bankName = (bankType === 'woori') ? '우리은행' : ((bankType === 'shinhan') ? '신한은행' : '국민은행');
+    const firstDate = validTxns[0]?.date || '';
+    const mm = firstDate.match(/(\d{4})-(\d{2})/);
+    const monthStr = mm ? `${mm[1]}${mm[2]}` : '';
+    const fileName = `${bankName}_${monthStr || '거래내역'}.xlsx`;
+
+    XLSX.utils.book_append_sheet(wb, ws, '거래내역');
+    XLSX.writeFile(wb, fileName);
+
+    return { txns: validTxns, count: validTxns.length, fileName };
+  }
+
+  // 인터넷뱅킹 원본 엑셀(.xlsx, .xls, .csv) 파싱 & 원본 시트 모든 열 보존 + 우측 [항목, 소분류, 대분류] 자동 완성 엑셀 내보내기
+  async function processBankExcel(file, bankType = 'kookmin') {
+    if (!window.XLSX) {
+      throw new Error('엑셀 라이브러리(XLSX)를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    if (!rows || rows.length === 0) {
+      throw new Error('⚠️ 엑셀 파일에 데이터가 없습니다.');
+    }
+
+    // 헤더 행 탐색
+    let headerRowIdx = -1;
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      const rowStr = (rows[i] || []).map(c => String(c || '').replace(/\s+/g, '')).join(' ');
+      if (/날짜|거래일|일자|거래일시/.test(rowStr) && (/출금|입금|지급/.test(rowStr) || /적요|거래내용|내용|기재내용|보낸분|받는분/.test(rowStr))) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+
+    if (headerRowIdx < 0) {
+      throw new Error('⚠️ 엑셀 내에서 거래내역 헤더(날짜, 출금/입금 등)를 찾지 못했습니다.');
+    }
+
+    const headerCells = rows[headerRowIdx].map(c => String(c || '').trim());
+    let colDate = -1, colDesc = -1, colSummary = -1, colOut = -1, colIn = -1, colBal = -1, colMemo = -1;
+    headerCells.forEach((cText, idx) => {
+      const clean = cText.replace(/\s+/g, '');
+      if (colDate < 0 && /날짜|거래일|일시|일자/.test(clean)) colDate = idx;
+      else if (/적요/.test(clean)) colSummary = idx;
+      else if (/거래내용|기재내용|내용|의뢰인|수취인|가맹점|보낸분|받는분/.test(clean)) colDesc = idx;
+      else if (/출금|지급/.test(clean)) colOut = idx;
+      else if (/입금/.test(clean)) colIn = idx;
+      else if (/잔액|잔고|거래후잔액/.test(clean)) colBal = idx;
+      else if (/송금메모|메모/.test(clean)) colMemo = idx;
+    });
+
+    if (colDesc < 0 && colSummary >= 0) colDesc = colSummary;
+
+    const headers = [...headerCells];
+    const hasCategoryCol = headers.some(h => /항목|분류/.test(h) && !/대분류|소분류/.test(h));
+    if (!hasCategoryCol) {
+      headers.push('항목', '소분류', '대분류');
+    }
+
+    const dataRows = [];
+    const validTxns = [];
+    const owner = (bankType === 'shinhan') ? '진영' : '영호';
+
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0 || row.every(c => !c)) continue;
+      const cells = row.map(c => String(c !== undefined && c !== null ? c : '').trim());
+      while (cells.length < headerCells.length) cells.push('');
+
+      const rawDate = colDate >= 0 ? cells[colDate] : '';
+      const normDate = bankNormalizeDate(rawDate);
+
+      let descText = '';
+      if (colSummary >= 0 && colDesc >= 0 && colSummary !== colDesc) {
+        const sumVal = cells[colSummary] || '';
+        const descVal = cells[colDesc] || '';
+        descText = (sumVal && descVal && sumVal !== descVal) ? `${sumVal} ${descVal}`.trim() : (descVal || sumVal);
+      } else if (colDesc >= 0) {
+        descText = cells[colDesc] || '';
+      }
+
+      const outAmount = colOut >= 0 ? parseAmount(cells[colOut]) : 0;
+      const inAmount  = colIn >= 0 ? parseAmount(cells[colIn]) : 0;
+      const balAmount = colBal >= 0 ? parseAmount(cells[colBal]) : 0;
+      const memoText  = colMemo >= 0 ? cells[colMemo] : '';
+
+      if (normDate && (outAmount > 0 || inAmount > 0 || descText)) {
+        const rawTxn = {
+          date: normDate,
+          desc: descText || (inAmount > 0 ? '입금' : '출금'),
+          out: outAmount,
+          in: inAmount,
+          balance: balAmount,
+          memo: memoText,
+          bank: bankType,
+          owner
+        };
+
+        const classified = bankAutoClassify([rawTxn], bankType)[0];
+        validTxns.push(classified);
+
+        if (!hasCategoryCol) {
+          cells.push(classified.category || '확인필요', classified.subCategory || '', classified.mainCategory || '');
+        }
+      } else {
+        if (!hasCategoryCol) cells.push('', '', '');
+      }
+
+      dataRows.push(cells);
+    }
+
+    if (validTxns.length === 0) {
+      throw new Error('⚠️ 유효한 거래내역 행을 추출하지 못했습니다.');
+    }
+
+    const excelRows = [headers, ...dataRows];
+    const outWb = XLSX.utils.book_new();
+    const outWs = XLSX.utils.aoa_to_sheet(excelRows);
+    outWs['!cols'] = headers.map((h, cIdx) => {
+      let maxLen = (h || '').length * 2;
+      for (let r = 0; r < Math.min(excelRows.length, 50); r++) {
+        const val = String(excelRows[r][cIdx] || '');
+        maxLen = Math.max(maxLen, val.length);
+      }
+      return { wch: Math.min(Math.max(maxLen + 3, 12), 40) };
+    });
+
+    const bankName = (bankType === 'woori') ? '우리은행' : ((bankType === 'shinhan') ? '신한은행' : '국민은행');
+    const firstDate = validTxns[0]?.date || '';
+    const mm = firstDate.match(/(\d{4})-(\d{2})/);
+    const monthStr = mm ? `${mm[1]}${mm[2]}` : '';
+    const fileName = `${bankName}_${monthStr || '거래내역'}.xlsx`;
+
+    XLSX.utils.book_append_sheet(outWb, outWs, '거래내역');
+    XLSX.writeFile(outWb, fileName);
+
+    return { txns: validTxns, count: validTxns.length, fileName };
+  }
+
   // 날짜 정규화 헬퍼 (2026.07.15, 2026/07/15, 20260715, 엑셀 날짜 숫자 등 -> YYYY-MM-DD 완벽 통일)
   function bankNormalizeDate(val) {
     if (!val) return '';
@@ -9753,37 +10053,76 @@
 
         const btn  = document.getElementById('ledger-pdf-submit-btn');
         if (btn) { btn.disabled = true; btn.textContent = '⏳ 변환 중...'; }
-        bankShowStatus('⏳ PDF에서 거래내역을 추출하는 중...', 'loading');
-        try {
-          const rawText = await extractTextFromPDF(file, password);
-          // 보안 철저: 텍스트 추출 완료 즉시 비밀번호 필드 메모리 초기화
-          if (pwInput) pwInput.value = '';
 
-          let txns = parseBankText(rawText, bankType);
-          if (txns.length === 0) {
-            const bName = bankType === 'shinhan' ? '신한은행' : (bankType === 'kookmin' ? '국민은행' : (bankType === 'woori' ? '우리은행' : '선택 은행'));
-            bankShowStatus(`⚠️ ${bName} 거래내역을 찾지 못했어요. 은행 선택이 맞는지 확인해 주세요. (콘솔 로그 확인 가능)`, 'error');
-            return;
+        const fName = (file.name || '').toLowerCase();
+        const isHtml = fName.endsWith('.html') || fName.endsWith('.htm') || file.type === 'text/html';
+        const isExcel = fName.endsWith('.xlsx') || fName.endsWith('.xls') || fName.endsWith('.csv');
+
+        try {
+          if (isHtml) {
+            bankShowStatus('⏳ HTML 거래명세서에서 원본 표를 추출하고 분류하는 중...', 'loading');
+            const result = await processBankHTML(file, bankType, password);
+            if (pwInput) pwInput.value = '';
+
+            const txns = result.txns;
+            bankMergeAndSaveStatements(txns);
+            if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
+            if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
+            bankRenderMonthlyDashboard();
+
+            const unmatched = txns.filter(t => t.category === '확인필요').length;
+            bankShowStatus(unmatched > 0 ? `✅ ${txns.length}건 추출! ⚠️ 확인필요 ${unmatched}건 — 엑셀에서 항목 입력 후 재업로드하세요` : `✅ ${txns.length}건 추출 & 자동 분류 완료!`, unmatched > 0 ? 'info' : 'success');
+            UI.closeLedgerModal();
+            if (sounds.playAdd) sounds.playAdd();
+            UI.showToast(`${txns.length}건 원본 표 보존 & 엑셀 다운로드 완료! 📥`, 'success');
+          } else if (isExcel) {
+            bankShowStatus('⏳ 원본 엑셀에서 거래내역을 변환하는 중...', 'loading');
+            const result = await processBankExcel(file, bankType);
+            if (pwInput) pwInput.value = '';
+
+            const txns = result.txns;
+            bankMergeAndSaveStatements(txns);
+            if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
+            if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
+            bankRenderMonthlyDashboard();
+
+            const unmatched = txns.filter(t => t.category === '확인필요').length;
+            bankShowStatus(unmatched > 0 ? `✅ ${txns.length}건 변환! ⚠️ 확인필요 ${unmatched}건 — 엑셀에서 항목 입력 후 재업로드하세요` : `✅ ${txns.length}건 변환 & 자동 분류 완료!`, unmatched > 0 ? 'info' : 'success');
+            UI.closeLedgerModal();
+            if (sounds.playAdd) sounds.playAdd();
+            UI.showToast(`${txns.length}건 엑셀 변환 & 다운로드 완료! 📥`, 'success');
+          } else {
+            bankShowStatus('⏳ PDF에서 거래내역을 추출하는 중...', 'loading');
+            const rawText = await extractTextFromPDF(file, password);
+            // 보안 철저: 텍스트 추출 완료 즉시 비밀번호 필드 메모리 초기화
+            if (pwInput) pwInput.value = '';
+
+            let txns = parseBankText(rawText, bankType);
+            if (txns.length === 0) {
+              const bName = bankType === 'shinhan' ? '신한은행' : (bankType === 'kookmin' ? '국민은행' : (bankType === 'woori' ? '우리은행' : '선택 은행'));
+              bankShowStatus(`⚠️ ${bName} 거래내역을 찾지 못했어요. 은행 선택이 맞는지 확인해 주세요. (콘솔 로그 확인 가능)`, 'error');
+              return;
+            }
+            txns = bankAutoClassify(txns, bankType);
+            const firstDate = txns[0]?.date || '';
+            const mm = firstDate.match(/(\d{4})-(\d{2})/);
+            const monthStr = mm ? `${mm[1]}${mm[2]}` : '';
+            bankExportToExcel(txns, bankType, monthStr);
+            bankMergeAndSaveStatements(txns);
+            if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
+            if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
+            bankRenderMonthlyDashboard();
+            const unmatched = txns.filter(t => t.category === '확인필요').length;
+            bankShowStatus(unmatched > 0 ? `✅ ${txns.length}건 추출! ⚠️ 확인필요 ${unmatched}건 — 엑셀에서 항목 입력 후 재업로드하세요` : `✅ ${txns.length}건 추출 & 자동 분류 완료!`, unmatched > 0 ? 'info' : 'success');
+            UI.closeLedgerModal();
+            if (sounds.playAdd) sounds.playAdd();
+            UI.showToast(`${txns.length}건 추출 완료! 엑셀 파일이 다운로드되었어요 📥`, 'success');
           }
-          txns = bankAutoClassify(txns, bankType);
-          const firstDate = txns[0]?.date || '';
-          const mm = firstDate.match(/(\d{4})-(\d{2})/);
-          const monthStr = mm ? `${mm[1]}${mm[2]}` : '';
-          bankExportToExcel(txns, bankType, monthStr);
-          bankMergeAndSaveStatements(txns);
-          if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
-          if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
-          bankRenderMonthlyDashboard();
-          const unmatched = txns.filter(t => t.category === '확인필요').length;
-          bankShowStatus(unmatched > 0 ? `✅ ${txns.length}건 추출! ⚠️ 확인필요 ${unmatched}건 — 엑셀에서 항목 입력 후 재업로드하세요` : `✅ ${txns.length}건 추출 & 자동 분류 완료!`, unmatched > 0 ? 'info' : 'success');
-          UI.closeLedgerModal();
-          if (sounds.playAdd) sounds.playAdd();
-          UI.showToast(`${txns.length}건 추출 완료! 엑셀 파일이 다운로드되었어요 📥`, 'success');
         } catch (err) {
-          console.error('[BankAnalyzer PDF]', err);
+          console.error('[BankAnalyzer File Process]', err);
           // 보안 철저: 에러 발생 시에도 비밀번호 필드 메모리 초기화
           if (pwInput) pwInput.value = '';
-          const errMsg = err.message || 'PDF 파싱 중 오류가 발생했습니다.';
+          const errMsg = err.message || '파일 파싱 중 오류가 발생했습니다.';
           bankShowStatus(`❌ ${errMsg}`, 'error');
           UI.showToast(errMsg, 'danger');
         } finally {

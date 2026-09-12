@@ -1019,7 +1019,7 @@
               <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem; padding-top:1rem; border-top: 1.5px solid var(--border-light, #f0e6ea);">
                 <span style="font-size:1.1rem;">📄</span>
                 <h3 style="font-size:1rem; font-weight:800; color:var(--text-main); margin:0;">거래내역서 자동 분류</h3>
-                <span style="font-size:0.78rem; color:var(--text-muted); margin-left:auto;">국민 · 신한 · 우리은행 PDF 지원</span>
+                <span style="font-size:0.78rem; color:var(--text-muted); margin-left:auto;">국민 · 신한 · 우리은행 PDF · HTML · 엑셀 지원</span>
               </div>
 
               <!-- 처리 상태 메시지 -->
@@ -1426,11 +1426,11 @@
 
       <!-- 모드 선택 탭 -->
       <div style="display:flex; gap:0.5rem; padding: 0 1.5rem 0.5rem; border-bottom: 1px solid var(--border-light, #f0e6ea); margin-bottom:1rem;">
-        <button type="button" class="ledger-mode-tab active" id="lm-tab-pdf" onclick="window.UI && UI.switchLedgerModalMode('pdf')" style="flex:1; padding:0.5rem; border-radius:10px; border:none; background:rgba(255,107,139,0.12); color:var(--primary,#ff6b8b); font-weight:700; font-size:0.82rem; cursor:pointer;">📄 PDF 거래내역서 → 엑셀 변환</button>
+        <button type="button" class="ledger-mode-tab active" id="lm-tab-pdf" onclick="window.UI && UI.switchLedgerModalMode('pdf')" style="flex:1; padding:0.5rem; border-radius:10px; border:none; background:rgba(255,107,139,0.12); color:var(--primary,#ff6b8b); font-weight:700; font-size:0.82rem; cursor:pointer;">📄 거래내역서(PDF·HTML·엑셀) → 엑셀 변환</button>
         <button type="button" class="ledger-mode-tab" id="lm-tab-excel" onclick="window.UI && UI.switchLedgerModalMode('excel')" style="flex:1; padding:0.5rem; border-radius:10px; border:none; background:rgba(0,0,0,0.04); color:var(--text-muted,#999); font-weight:600; font-size:0.82rem; cursor:pointer;">📊 분류된 엑셀 업로드 → 자동 학습</button>
       </div>
 
-      <!-- PDF 모드 -->
+      <!-- PDF / HTML / 엑셀 변환 모드 -->
       <div id="ledger-modal-pdf-mode">
         <form id="ledger-pdf-form" style="padding: 0 1.5rem 1.5rem;">
           <div class="form-group">
@@ -1442,9 +1442,9 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label" for="ledger-pdf-input">PDF 거래내역서 파일 *</label>
-            <input type="file" id="ledger-pdf-input" class="form-input" accept=".pdf" required>
-            <div style="font-size:0.78rem; color:var(--text-muted,#999); margin-top:4px;">📌 선택한 은행 앱 또는 인터넷뱅킹에서 다운로드한 PDF 파일을 업로드하세요</div>
+            <label class="form-label" for="ledger-pdf-input">거래내역서 파일 (PDF / HTML / Excel) *</label>
+            <input type="file" id="ledger-pdf-input" class="form-input" accept=".pdf, .html, .htm, .xlsx, .xls, .csv" required>
+            <div style="font-size:0.78rem; color:var(--text-muted,#999); margin-top:4px;">📌 은행 앱/인터넷뱅킹에서 다운로드한 PDF, HTML(우리은행 등), 원본 Excel 파일을 업로드하세요</div>
           </div>
           <div class="form-group">
             <label class="form-label" for="ledger-pdf-password" style="display:flex; justify-content:space-between; align-items:center;">
@@ -2962,7 +2962,7 @@
   <script src="js/utils/constants.js?v=20260912_v158"></script>
   <script src="js/utils/helpers.js?v=20260912_v152"></script>
   <script src="js/services/crypto.js?v=20260912_v152"></script>
-  <script src="js/app.js?v=20260912_v171"></script>
+  <script src="js/app.js?v=20260913_v172"></script>
   <script src="js/treasure.js?v=20260912_v152"></script>
 </body>
 </html>
