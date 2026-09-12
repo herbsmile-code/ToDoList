@@ -3553,40 +3553,76 @@ body::after {
   transform: scale(0.9);
 }
 
-.ledger-bar-track {
+.ledger-bar-dual-tracks {
   width: 100%;
-  max-width: 34px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  position: relative;
+}
+
+.ledger-bar-track {
+  flex: 1;
+  max-width: 18px;
+  min-width: 10px;
   background: rgba(0, 0, 0, 0.04);
-  border-radius: 6px 6px 0 0;
+  border-radius: 4px 4px 0 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   overflow: hidden;
   position: relative;
+  transition: all 0.2s ease;
+}
+
+.ledger-bar-track.track-income {
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.ledger-bar-track.track-expense {
+  background: rgba(112, 72, 232, 0.08);
 }
 
 .ledger-bar-segment-income {
   width: 100%;
   background: linear-gradient(180deg, #34d399, #10b981);
+  border-radius: 4px 4px 0 0;
+  flex-shrink: 0;
   transition: height 0.4s ease;
 }
 
 .ledger-bar-segment-variable {
   width: 100%;
   background: linear-gradient(180deg, #ff8fa3, #ff6b8b);
+  border-radius: 4px 4px 0 0;
+  flex-shrink: 0;
   transition: height 0.4s ease;
 }
 
 .ledger-bar-segment-fixed {
   width: 100%;
   background: linear-gradient(180deg, #9775fa, #7048e8);
+  flex-shrink: 0;
   transition: height 0.4s ease;
 }
 
-.ledger-bar-col.is-current .ledger-bar-track {
-  box-shadow: 0 0 12px rgba(255, 107, 139, 0.45);
-  outline: 2px solid var(--primary);
+.ledger-bar-col.is-current .ledger-bar-dual-tracks {
+  padding: 2px;
+  background: rgba(255, 107, 139, 0.08);
+  border-radius: 6px;
+}
+
+.ledger-bar-col.is-current .ledger-bar-track.track-expense {
+  box-shadow: 0 0 10px rgba(112, 72, 232, 0.4);
+  outline: 1.5px solid #7048e8;
+}
+
+.ledger-bar-col.is-current .ledger-bar-track.track-income {
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+  outline: 1.5px solid #10b981;
 }
 
 .ledger-bar-label {

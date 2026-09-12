@@ -3915,16 +3915,16 @@
         }
       }
 
-      // Render 12-Month Stacked Bar Chart
+      // Render 12-Month Dual-Bar Comparison Chart (월급 수입 vs 고정+변동 누적 지출)
       const chartContainer = document.getElementById('ledger-bar-chart-container');
       if (chartContainer) {
-        let maxVal = 9000000;
+        let maxVal = 6000000;
         for (let m = 1; m <= 12; m++) {
           if (data[m]) {
             const exp = (data[m].fixed?.total || 0) + (data[m].variable?.total || 0);
             const inc = data[m].income?.total || 0;
-            const combined = exp + inc;
-            if (combined > maxVal) maxVal = combined;
+            if (exp > maxVal) maxVal = exp;
+            if (inc > maxVal) maxVal = inc;
           }
         }
 
@@ -3937,21 +3937,26 @@
           const totalExp = f + v;
           const isCurrent = (m === targetMonth);
 
-          const incomeHeightPct = maxVal > 0 ? (inc / maxVal) * 100 : 0;
-          const fixedHeightPct = maxVal > 0 ? (f / maxVal) * 100 : 0;
-          const varHeightPct = maxVal > 0 ? (v / maxVal) * 100 : 0;
+          const incomeHeightPct = (maxVal > 0 && inc > 0) ? Math.max((inc / maxVal) * 100, 4) : 0;
+          const fixedHeightPct = (maxVal > 0 && f > 0) ? Math.max((f / maxVal) * 100, 4) : 0;
+          const varHeightPct = (maxVal > 0 && v > 0) ? Math.max((v / maxVal) * 100, 4) : 0;
           const totalFormatted = totalExp > 0 ? (totalExp >= 10000 ? `${Math.round(totalExp / 10000)}만` : `${totalExp}원`) : '';
 
           barsHTML += `
             <div class="ledger-bar-col ${isCurrent ? 'is-current' : ''}" data-l-month="${m}" title="${m}월 수입: ${formatKRW(inc)} / 총지출: ${formatKRW(totalExp)} (고정 ${formatKRW(f)} + 변동 ${formatKRW(v)})">
               ${totalFormatted ? `<span class="ledger-bar-amount">${totalFormatted}</span>` : ''}
-              <div class="ledger-bar-track">
-                <!-- 🌸 변동지출 -->
-                <div class="ledger-bar-segment-variable" style="height: ${varHeightPct}%;"></div>
-                <!-- 🟣 고정지출 -->
-                <div class="ledger-bar-segment-fixed" style="height: ${fixedHeightPct}%;"></div>
-                <!-- 🟢 월급(수입) - 가장 아래 바닥 -->
-                <div class="ledger-bar-segment-income" style="height: ${incomeHeightPct}%;"></div>
+              <div class="ledger-bar-dual-tracks">
+                <!-- 🟢 월급(수입) 단독 막대 -->
+                <div class="ledger-bar-track track-income" title="수입: ${formatKRW(inc)}">
+                  <div class="ledger-bar-segment-income" style="height: ${incomeHeightPct}%;"></div>
+                </div>
+                <!-- 🟣 고정 + 🌸 변동 지출 누적 스택 막대 -->
+                <div class="ledger-bar-track track-expense" title="지출: ${formatKRW(totalExp)} (고정 ${formatKRW(f)} + 변동 ${formatKRW(v)})">
+                  <!-- 위: 변동지출 -->
+                  <div class="ledger-bar-segment-variable" style="height: ${varHeightPct}%;"></div>
+                  <!-- 아래: 고정지출 -->
+                  <div class="ledger-bar-segment-fixed" style="height: ${fixedHeightPct}%;"></div>
+                </div>
               </div>
               <span class="ledger-bar-label">${m}월</span>
             </div>
@@ -9081,8 +9086,8 @@
           // 🏆 1순위: [대분류 100% 절대 우선 판별]
           // =============================================================
 
-          // A. 고정지출 ('고정지출', '고정 지출', '고정' 포함)
-          if (cleanMainCat.includes('고정')) {
+          // A. 고정지출 ('고정지출', '고정 지출', '고정', '집세', '공과금', '관리비', '보험', '대출' 포함)
+          if (cleanMainCat.includes('고정') || cleanMainCat.includes('집세') || cleanMainCat.includes('공과금') || cleanMainCat.includes('관리비') || cleanMainCat.includes('보험') || cleanMainCat.includes('대출')) {
             bucket.fixedTotal += outAmt;
             if (!bucket.fixedMap[itemName]) bucket.fixedMap[itemName] = { total: 0, count: 0 };
             bucket.fixedMap[itemName].total += outAmt;
@@ -9157,8 +9162,9 @@
             return;
           }
 
-          // 2) 고정지출 추론
-          if (/집세|월세|관리비|공과금|전기|수도|가스|통신|인터넷|보험|대출|정기|구독/.test(catStr) || /집세|관리비|전기세|수도세|가스비|통신요금/.test(desc)) {
+          // 2) 고정지출 추론 (LH, 임대료, 월세, 아파트관리비, 공과금, 전기, 가스, 수도, 통신, 보험, 대출, 이자, 정기결제, 구독 등 완벽 포괄)
+          const isFixedPattern = /집세|월세|임대료|LH|주택공사|관리비|공과금|전기|수도|가스|한전|통신|인터넷|휴대폰|SKT|KT|LGU|LG유플러스|알뜰폰|보험|생명|화재|해상|손해|국민건강|건강보험|국민연금|대출|원리금|이자|정기|구독|렌탈|쿠팡와우|넷플릭스|유튜브/i;
+          if (isFixedPattern.test(catStr) || isFixedPattern.test(desc) || isFixedPattern.test(itemName)) {
             bucket.fixedTotal += outAmt;
             if (!bucket.fixedMap[itemName]) bucket.fixedMap[itemName] = { total: 0, count: 0 };
             bucket.fixedMap[itemName].total += outAmt;
