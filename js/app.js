@@ -7975,7 +7975,8 @@
               ruleMap[r.keyword] = {
                 category: r.category || '',
                 subCategory: r.subCategory || '',
-                mainCategory: r.mainCategory || ''
+                mainCategory: r.mainCategory || '',
+                isUserEdited: Boolean(r.isUserEdited)
               };
             }
           });
@@ -8006,7 +8007,7 @@
           const startIdx = headerRowIdx >= 0 ? headerRowIdx + 1 : 1;
           let newTxns = [], learnedCount = 0;
 
-          // 1단계: 사용자가 직접 입력한 새 규칙 먼저 수집 & 스마트 접두사 학습
+          // 1단계: 사용자가 직접 입력한 새 규칙 먼저 수집 & 스마트 접두사 학습 (사용자 직접 편집 규칙은 100% 최우선 보존)
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
@@ -8020,13 +8021,14 @@
               // 1-1) 전체 거래내용 등록 (앞 12자리)
               const keyword = desc.length > 12 ? desc.substring(0, 12) : desc;
               if (!ruleMap[keyword]) {
-                ruleMap[keyword] = { category, subCategory, mainCategory };
+                ruleMap[keyword] = { category, subCategory, mainCategory, isUserEdited: false };
                 learnedCount++;
-              } else {
+              } else if (!ruleMap[keyword].isUserEdited) {
                 ruleMap[keyword] = {
                   category: category || ruleMap[keyword].category,
                   subCategory: subCategory || ruleMap[keyword].subCategory,
-                  mainCategory: mainCategory || ruleMap[keyword].mainCategory
+                  mainCategory: mainCategory || ruleMap[keyword].mainCategory,
+                  isUserEdited: false
                 };
               }
 
@@ -8034,20 +8036,21 @@
               const prefix = bankExtractPrefix(desc);
               if (prefix && prefix.length >= 2) {
                 if (!ruleMap[prefix]) {
-                  ruleMap[prefix] = { category, subCategory, mainCategory };
+                  ruleMap[prefix] = { category, subCategory, mainCategory, isUserEdited: false };
                   learnedCount++;
-                } else {
+                } else if (!ruleMap[prefix].isUserEdited) {
                   ruleMap[prefix] = {
                     category: category || ruleMap[prefix].category,
                     subCategory: subCategory || ruleMap[prefix].subCategory,
-                    mainCategory: mainCategory || ruleMap[prefix].mainCategory
+                    mainCategory: mainCategory || ruleMap[prefix].mainCategory,
+                    isUserEdited: false
                   };
                 }
               }
             }
           }
 
-          // 2단계: 거래내역 생성 및 항목 미입력 건에 대해 스마트 룰 자동 적용 (단 1건의 유실도 없이 전 행 수집)
+          // 2단계: 거래내역 생성 및 룰 적용 (사용자 편집 규칙 최우선 강제 적용 + 진영-용돈 단일화)
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
@@ -8063,14 +8066,20 @@
             // 유효한 거래 행 판단 (날짜가 있고 출금이나 입금 금액이 0보다 큰 경우)
             if (!date && out === 0 && inn === 0) continue;
 
-            // 항목을 안 적었거나 '확인필요'인 경우 -> 스마트 접두사 매칭으로 자동 채움
-            if (!category || category === '확인필요') {
-              const matched = bankFindMatchingRule(desc, ruleMap);
-              if (matched) {
-                category = matched.category || '';
-                if (!subCategory) subCategory = matched.subCategory || '';
-                if (!mainCategory) mainCategory = matched.mainCategory || '';
-              }
+            // [규칙 우선순위]: 사용자 편집 규칙(isUserEdited)이 매칭되면 엑셀에 적힌 값보다 최우선 덮어쓰기!
+            // 항목이 비어있거나 '확인필요'인 경우에도 스마트 매칭 적용!
+            const matched = bankFindMatchingRule(desc, ruleMap);
+            if (matched && (matched.isUserEdited || !category || category === '확인필요')) {
+              category = matched.category || category;
+              if (matched.subCategory) subCategory = matched.subCategory;
+              if (matched.mainCategory) mainCategory = matched.mainCategory;
+            }
+
+            // '진영-현대카드' 및 '진영-용돈' 단일화 처리
+            if (category === '진영-현대카드' || /(진영[\s\-_]?현대카드)/i.test(desc)) {
+              category = '진영-용돈';
+              subCategory = '진영';
+              mainCategory = '부부용돈';
             }
 
             newTxns.push({
@@ -8085,12 +8094,13 @@
             });
           }
 
-          // 새 룰 영구 저장
+          // 새 룰 영구 저장 (사용자 편집 플래그 보존)
           bankSaveRules(Object.entries(ruleMap).map(([keyword, info]) => ({
             keyword,
             category: info.category,
             subCategory: info.subCategory,
-            mainCategory: info.mainCategory
+            mainCategory: info.mainCategory,
+            isUserEdited: Boolean(info.isUserEdited)
           })));
 
           // 기존 내역에 새 엑셀 거래내역 안전 교체/병합 (금액 유실 원천 차단)
@@ -8220,7 +8230,13 @@
           }
         }
 
-        const itemName = category || subCategory || (desc ? desc.substring(0, 16) : '기타지출');
+        let itemName = category || subCategory || (desc ? desc.substring(0, 16) : '기타지출');
+
+        // [사용자 요청]: 진영-용돈 및 진영-현대카드는 오직 '진영-용돈'으로 단일화
+        if (itemName === '진영-현대카드' || /진영[\s\-_]?현대카드/i.test(catStr) || /진영[\s\-_]?현대카드/i.test(desc)) {
+          itemName = '진영-용돈';
+          isFixed = false; // 부부용돈은 변동지출 버킷에 배정
+        }
 
         if (isFixed) {
           bucket.fixedTotal += outAmt;
@@ -8338,9 +8354,6 @@
           <span style="font-size:0.75rem;font-weight:normal;color:var(--text-muted);">${filteredMonths.length > 0 ? `(표시 중인 월: ${filteredMonths.length}개)` : ''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;">
-          <button type="button" onclick="window.UI && UI.openLedgerModal('excel')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid #7048e8;background:linear-gradient(135deg,rgba(112,72,232,0.12),rgba(112,72,232,0.06));color:#7048e8;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all 0.2s;" title="수정한 엑셀 파일 바로 등록하기">
-            📤 수정한 엑셀 올리기
-          </button>
           <button type="button" onclick="window._bankShowAllMonths = !window._bankShowAllMonths; bankRenderMonthlyDashboard();" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--border-light,#e2e8f0);background:#fff;color:var(--text-muted);cursor:pointer;font-weight:600;">
             ${showAll ? `📅 ${currentSelectedMonth}월만 보기` : '🌐 전체 월 모아보기'}
           </button>
@@ -8379,14 +8392,25 @@
         totalIn  += inAmt;
 
         const catStr = `${tx.category || ''} ${tx.subCategory || ''} ${tx.mainCategory || ''}`.trim();
+        const desc   = tx.desc || '';
+        const isJyPocket = /(진영[\s\-_]?(용돈|현대카드))/i.test(catStr) || /(진영[\s\-_]?(용돈|현대카드))/i.test(desc);
+        const isYhPocket = /(영호[\s\-_]?용돈)/i.test(catStr) || /(영호[\s\-_]?용돈)/i.test(desc);
+
         if (outAmt > 0) {
-          if (/진영/.test(catStr)) { jyAmount += outAmt; jyCount++; }
-          if (/영호/.test(catStr)) { yhAmount += outAmt; yhCount++; }
+          if (isJyPocket) { jyAmount += outAmt; jyCount++; }
+          if (isYhPocket) { yhAmount += outAmt; yhCount++; }
         }
 
         let mainCat = tx.mainCategory || '';
         let subCat  = tx.subCategory  || '';
         let cat     = tx.category     || '확인필요';
+
+        // 진영-현대카드 및 진영-용돈 단일화 처리
+        if (cat === '진영-현대카드' || isJyPocket) {
+          cat = '진영-용돈';
+          subCat = '진영';
+          mainCat = '부부용돈';
+        }
 
         // 입금(부수입/급여) 건일 경우
         if (inAmt > 0 && outAmt === 0) {
@@ -8535,9 +8559,6 @@
             ? `<button type="button" onclick="window.bankDownloadMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--primary,#ff6b8b);background:rgba(255,107,139,0.08);color:var(--primary,#ff6b8b);font-weight:700;cursor:pointer;">📥 확인필요 ${unmatchedCount}건 엑셀 받기</button>`
             : `<button type="button" onclick="window.bankDownloadFullMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--border-light,#e2e8f0);background:transparent;color:var(--text-muted);cursor:pointer;">📥 전체 내역 엑셀 받기</button>`
           }
-          <button type="button" onclick="window.UI && UI.openLedgerModal('excel')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid #7048e8;background:rgba(112,72,232,0.08);color:#7048e8;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;" title="작성한 엑셀 파일 바로 업로드">
-            📤 수정한 엑셀 올리기
-          </button>
         </div>
       `;
 
@@ -8618,10 +8639,10 @@
     ws['!cols'] = [{ wch:12 }, { wch:28 }, { wch:14 }, { wch:14 }, { wch:14 }, { wch:16 }, { wch:16 }, { wch:16 }];
     XLSX.utils.book_append_sheet(wb, ws, '확인필요');
     XLSX.writeFile(wb, `${year}년${parseInt(mon)}월_확인필요.xlsx`);
-    UI.showToast(`${parseInt(mon)}월 확인필요 ${txns.length}건 다운로드! 수정 후 [📤 수정한 엑셀 올리기]를 눌러주세요.`, 'success');
+    UI.showToast(`${parseInt(mon)}월 확인필요 ${txns.length}건 엑셀 파일이 다운로드되었습니다.`, 'success');
   };
 
-  // 규칙 관리 패널 렌더링 (항목, 소분류, 대분류 3단 태그 표시)
+  // 규칙 관리 패널 렌더링 (인라인 직접 편집 에디터)
   function bankRenderRulesPanel() {
     const list  = document.getElementById('bank-rules-list');
     const empty = document.getElementById('bank-rules-empty');
@@ -8633,22 +8654,167 @@
       return;
     }
     if (empty) empty.style.display = 'none';
+
+    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)'];
+
     list.innerHTML = rules.map((r, idx) => {
-      const subBadge = r.subCategory ? `<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:rgba(0,0,0,0.05);color:var(--text-muted);">${escapeHTML(r.subCategory)}</span>` : '';
-      const mainBadge = r.mainCategory ? `<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:rgba(255,107,139,0.1);color:var(--primary,#ff6b8b);font-weight:700;">${escapeHTML(r.mainCategory)}</span>` : '';
+      const mainOptHtml = mainOptions.map(opt => {
+        const sel = (r.mainCategory === opt) ? 'selected' : '';
+        return `<option value="${escapeHTML(opt)}" ${sel}>${escapeHTML(opt)}</option>`;
+      }).join('');
+
       return `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.45rem 0.65rem;background:rgba(255,255,255,0.85);border-radius:10px;font-size:0.82rem;border:1px solid var(--border-light,#f0e6ea);margin-bottom:0.35rem;">
-          <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;flex:1;">
-            <strong style="color:var(--text-main);">${escapeHTML(r.keyword)}</strong>
-            <span style="color:var(--text-muted);">➔</span>
-            <span style="color:#7048e8;font-weight:700;">${escapeHTML(r.category)}</span>
-            ${subBadge}
-            ${mainBadge}
+        <div class="bank-rule-edit-row" data-idx="${idx}" style="display:flex;align-items:center;gap:0.4rem;padding:0.45rem 0.65rem;background:rgba(255,255,255,0.95);border-radius:10px;font-size:0.82rem;border:1px solid var(--border-light,#f0e6ea);flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:0.35rem;flex:1;min-width:240px;flex-wrap:wrap;">
+            <div style="display:flex;flex-direction:column;gap:1px;">
+              <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">키워드</span>
+              <input type="text" class="rule-edit-kw" value="${escapeHTML(r.keyword || '')}" placeholder="키워드 (예: LH, 수도)" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:115px;font-weight:700;color:var(--text-main);">
+            </div>
+            <span style="color:var(--text-muted);margin-top:0.9rem;">➔</span>
+            <div style="display:flex;flex-direction:column;gap:1px;">
+              <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">항목</span>
+              <input type="text" class="rule-edit-cat" value="${escapeHTML(r.category || '')}" placeholder="항목 (예: 임대료)" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:105px;color:#7048e8;font-weight:700;">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1px;">
+              <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">소분류</span>
+              <input type="text" class="rule-edit-sub" value="${escapeHTML(r.subCategory || '')}" placeholder="소분류" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:85px;color:var(--text-main);">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1px;">
+              <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">대분류</span>
+              <select class="rule-edit-main" style="font-size:0.8rem;padding:0.25rem 0.4rem;border:1px solid #cbd5e1;border-radius:6px;color:var(--primary,#ff6b8b);font-weight:700;background:#fff;">
+                <option value="">(선택 안함)</option>
+                ${mainOptHtml}
+              </select>
+            </div>
           </div>
-          <button type="button" onclick="window.bankDeleteRule(${idx})" style="font-size:0.72rem;padding:0.2rem 0.5rem;border-radius:6px;border:none;background:rgba(255,107,139,0.12);color:var(--primary,#ff6b8b);cursor:pointer;font-weight:600;">삭제</button>
+          <button type="button" onclick="window.bankDeleteRule(${idx})" style="font-size:0.72rem;padding:0.3rem 0.55rem;border-radius:6px;border:none;background:rgba(255,107,139,0.12);color:var(--primary,#ff6b8b);cursor:pointer;font-weight:600;align-self:flex-end;margin-bottom:2px;" title="이 규칙 삭제">삭제</button>
         </div>`;
     }).join('');
   }
+
+  // 새 규칙 행 추가 함수
+  window.bankAddNewRuleRow = function() {
+    const list  = document.getElementById('bank-rules-list');
+    const empty = document.getElementById('bank-rules-empty');
+    if (!list) return;
+    if (empty) empty.style.display = 'none';
+
+    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)'];
+    const mainOptHtml = mainOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+
+    const newRow = document.createElement('div');
+    newRow.className = 'bank-rule-edit-row';
+    newRow.style.cssText = 'display:flex;align-items:center;gap:0.4rem;padding:0.45rem 0.65rem;background:rgba(255,255,255,0.95);border-radius:10px;font-size:0.82rem;border:1px solid #7048e8;flex-wrap:wrap;box-shadow:0 2px 8px rgba(112,72,232,0.15);';
+    newRow.innerHTML = `
+      <div style="display:flex;align-items:center;gap:0.35rem;flex:1;min-width:240px;flex-wrap:wrap;">
+        <div style="display:flex;flex-direction:column;gap:1px;">
+          <span style="font-size:0.68rem;color:#7048e8;font-weight:700;">새 키워드</span>
+          <input type="text" class="rule-edit-kw" placeholder="키워드 (예: LH, 수도)" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #7048e8;border-radius:6px;width:115px;font-weight:700;color:var(--text-main);">
+        </div>
+        <span style="color:var(--text-muted);margin-top:0.9rem;">➔</span>
+        <div style="display:flex;flex-direction:column;gap:1px;">
+          <span style="font-size:0.68rem;color:#7048e8;font-weight:700;">항목</span>
+          <input type="text" class="rule-edit-cat" placeholder="항목 (예: 임대료)" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:105px;color:#7048e8;font-weight:700;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1px;">
+          <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">소분류</span>
+          <input type="text" class="rule-edit-sub" placeholder="소분류" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:85px;color:var(--text-main);">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1px;">
+          <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">대분류</span>
+          <select class="rule-edit-main" style="font-size:0.8rem;padding:0.25rem 0.4rem;border:1px solid #cbd5e1;border-radius:6px;color:var(--primary,#ff6b8b);font-weight:700;background:#fff;">
+            <option value="">(선택 안함)</option>
+            ${mainOptHtml}
+          </select>
+        </div>
+      </div>
+      <button type="button" onclick="this.parentElement.remove()" style="font-size:0.72rem;padding:0.3rem 0.55rem;border-radius:6px;border:none;background:rgba(255,107,139,0.12);color:var(--primary,#ff6b8b);cursor:pointer;font-weight:600;align-self:flex-end;margin-bottom:2px;">취소</button>
+    `;
+    list.insertBefore(newRow, list.firstChild);
+    newRow.querySelector('.rule-edit-kw')?.focus();
+  };
+
+  // 편집사항 저장하기: 사용자 편집 규칙 최우선 영구 저장 및 전체 거래내역 강제 재분류(Override)
+  window.bankSaveEditedRules = function() {
+    const list = document.getElementById('bank-rules-list');
+    if (!list) return;
+    const rows = list.querySelectorAll('.bank-rule-edit-row');
+    const newRules = [];
+    rows.forEach(r => {
+      const kw = r.querySelector('.rule-edit-kw')?.value.trim();
+      let cat = r.querySelector('.rule-edit-cat')?.value.trim();
+      let sub = r.querySelector('.rule-edit-sub')?.value.trim() || '';
+      let main = r.querySelector('.rule-edit-main')?.value.trim() || '';
+      if (kw && cat) {
+        if (cat === '진영-현대카드') {
+          cat = '진영-용돈';
+          sub = sub || '진영';
+          main = '부부용돈';
+        }
+        newRules.push({
+          keyword: kw,
+          category: cat,
+          subCategory: sub,
+          mainCategory: (cat === '진영-용돈') ? '부부용돈' : main,
+          isUserEdited: true // 최상위 우선순위 플래그!
+        });
+      }
+    });
+
+    // 1. 규칙 영구 저장
+    bankSaveRules(newRules);
+
+    // 2. 현재 저장된 모든 거래내역에 사용자의 새 규칙을 100% 최우선 강제 재적용(Override)!
+    const statements = bankLoadStatements();
+    let overrideCount = 0;
+    const updatedStatements = statements.map(tx => {
+      const updatedTx = { ...tx };
+      // 사용자 편집 규칙 최우선 매칭
+      const matched = bankFindMatchingRule(updatedTx.desc, newRules);
+      if (matched) {
+        updatedTx.category = matched.category;
+        if (matched.subCategory) updatedTx.subCategory = matched.subCategory;
+        if (matched.mainCategory) updatedTx.mainCategory = matched.mainCategory;
+        overrideCount++;
+      }
+      // 진영-현대카드 -> 진영-용돈 단일화
+      if (updatedTx.category === '진영-현대카드' || /(진영[\s\-_]?현대카드)/i.test(updatedTx.desc || '')) {
+        updatedTx.category = '진영-용돈';
+        updatedTx.subCategory = '진영';
+        updatedTx.mainCategory = '부부용돈';
+      }
+      return updatedTx;
+    });
+
+    bankSaveStatements(updatedStatements);
+
+    // 3. 상단 및 하단 대시보드 실시간 동기화 및 렌더링
+    if (typeof syncBankToHoneymoonData === 'function') {
+      syncBankToHoneymoonData();
+    }
+    if (window.UI && typeof UI.renderLedger === 'function') {
+      UI.renderLedger();
+    }
+    if (typeof bankRenderMonthlyDashboard === 'function') {
+      bankRenderMonthlyDashboard();
+    }
+    bankRenderRulesPanel();
+
+    UI.showToast(`💾 편집사항이 저장되었습니다! (규칙 ${newRules.length}개 저장, ${overrideCount}건 거래내역 최우선 업데이트 완료)`, 'success');
+  };
+
+  // 규칙 단건 삭제
+  window.bankDeleteRule = function(idx) {
+    if (!confirm('이 분류 규칙을 삭제하시겠습니까?')) return;
+    const rules = bankLoadRules();
+    rules.splice(idx, 1);
+    bankSaveRules(rules);
+    bankRenderRulesPanel();
+    if (typeof bankRenderMonthlyDashboard === 'function') {
+      bankRenderMonthlyDashboard();
+    }
+    UI.showToast('규칙이 삭제되었습니다.', 'info');
+  };
 
   UI.switchLedgerModalMode = function(mode) {
     const pdfMode   = document.getElementById('ledger-modal-pdf-mode');

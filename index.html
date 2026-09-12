@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260912_v151">
-  <link rel="stylesheet" href="css/animations.css?v=20260912_v151">
+  <link rel="stylesheet" href="css/style.css?v=20260912_v152">
+  <link rel="stylesheet" href="css/animations.css?v=20260912_v152">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -988,13 +988,20 @@
               </div>
 
               <!-- 분류 규칙 관리 패널 (접힘/펼침) -->
-              <div id="bank-rules-panel" style="display:none; margin-top:1rem; background:rgba(0,0,0,0.02); border-radius:14px; padding:1rem;">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
-                  <h4 style="margin:0; font-size:0.9rem; font-weight:800;">📚 저장된 항목 분류 규칙</h4>
-                  <button type="button" id="btn-bank-rules-close" style="font-size:0.78rem; color:var(--text-muted); border:none; background:none; cursor:pointer;">닫기 ✕</button>
+              <div id="bank-rules-panel" style="display:none; margin-top:1rem; background:rgba(0,0,0,0.02); border-radius:14px; padding:1.1rem; border:1px solid var(--border-light,#f0e6ea);">
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.85rem;">
+                  <div style="display:flex; align-items:center; gap:0.6rem;">
+                    <h4 style="margin:0; font-size:0.92rem; font-weight:800;">📚 저장된 항목 분류 규칙 편집</h4>
+                    <span style="font-size:0.75rem; color:var(--text-muted);">(편집 후 저장 시 최우선 반영)</span>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <button type="button" onclick="window.bankAddNewRuleRow && window.bankAddNewRuleRow()" style="font-size:0.75rem; font-weight:700; padding:0.32rem 0.65rem; border-radius:8px; border:1px solid #7048e8; background:rgba(112,72,232,0.08); color:#7048e8; cursor:pointer;">+ 규칙 추가</button>
+                    <button type="button" onclick="window.bankSaveEditedRules && window.bankSaveEditedRules()" style="font-size:0.76rem; font-weight:800; padding:0.35rem 0.85rem; border-radius:8px; border:none; background:linear-gradient(135deg,#7048e8,#5f3dc4); color:#fff; cursor:pointer; box-shadow:0 2px 8px rgba(112,72,232,0.3);">💾 편집사항 저장하기</button>
+                    <button type="button" id="btn-bank-rules-close" style="font-size:0.78rem; color:var(--text-muted); border:none; background:none; cursor:pointer; margin-left:0.3rem;">닫기 ✕</button>
+                  </div>
                 </div>
-                <div id="bank-rules-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:200px; overflow-y:auto;"></div>
-                <div id="bank-rules-empty" style="color:var(--text-muted); font-size:0.82rem; text-align:center; padding:1rem;">아직 저장된 분류 규칙이 없어요.<br>분류된 엑셀을 업로드하면 자동으로 학습됩니다 📖</div>
+                <div id="bank-rules-list" style="display:flex; flex-direction:column; gap:0.45rem; max-height:360px; overflow-y:auto; padding-right:4px;"></div>
+                <div id="bank-rules-empty" style="color:var(--text-muted); font-size:0.82rem; text-align:center; padding:1.5rem;">아직 저장된 분류 규칙이 없어요.<br>우측 상단의 <strong>[+ 규칙 추가]</strong> 또는 엑셀 업로드 시 자동으로 학습됩니다 📖</div>
               </div>
             </div>
           </div>
@@ -2903,10 +2910,10 @@
   <script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';</script>
 
   <!-- Application Logic Scripts (Phase 1 Modularization) -->
-  <script src="js/utils/constants.js?v=20260912_v151"></script>
-  <script src="js/utils/helpers.js?v=20260912_v151"></script>
-  <script src="js/services/crypto.js?v=20260912_v151"></script>
-  <script src="js/app.js?v=20260912_v151"></script>
-  <script src="js/treasure.js?v=20260912_v151"></script>
+  <script src="js/utils/constants.js?v=20260912_v152"></script>
+  <script src="js/utils/helpers.js?v=20260912_v152"></script>
+  <script src="js/services/crypto.js?v=20260912_v152"></script>
+  <script src="js/app.js?v=20260912_v152"></script>
+  <script src="js/treasure.js?v=20260912_v152"></script>
 </body>
 </html>
