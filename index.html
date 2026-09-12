@@ -20,8 +20,8 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260912_v139">
-  <link rel="stylesheet" href="css/animations.css?v=20260912_v139">
+  <link rel="stylesheet" href="css/style.css?v=20260912_v140">
+  <link rel="stylesheet" href="css/animations.css?v=20260912_v140">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
   <script>
@@ -1387,6 +1387,20 @@
             <input type="file" id="ledger-pdf-input" class="form-input" accept=".pdf" required>
             <div style="font-size:0.78rem; color:var(--text-muted,#999); margin-top:4px;">📌 선택한 은행 앱 또는 인터넷뱅킹에서 다운로드한 PDF 파일을 업로드하세요</div>
           </div>
+          <div class="form-group">
+            <label class="form-label" for="ledger-pdf-password" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>문서 비밀번호 (보안 PDF인 경우)</span>
+              <span id="ledger-pdf-pw-hint" style="font-size:0.75rem; color:var(--primary,#ff6b8b); font-weight:normal;">💡 KB국민: 생년월일 6자리(YYMMDD)</span>
+            </label>
+            <div style="position:relative;">
+              <input type="password" id="ledger-pdf-password" class="form-input" placeholder="생년월일 6자리 (예: 920515)" autocomplete="new-password" style="padding-right: 42px;">
+              <button type="button" id="btn-toggle-pdf-pw" onclick="window._togglePdfPasswordVisibility && window._togglePdfPasswordVisibility()" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:1.05rem; padding:4px; line-height:1;" title="비밀번호 표시/숨김">👁️</button>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-muted,#999); margin-top:4px;">
+              🔒 <strong>보안 철저</strong>: 입력한 비밀번호는 브라우저나 서버 어디에도 저장되지 않고 1회 파싱 후 즉시 폐기됩니다.
+            </div>
+          </div>
+          <div id="ledger-pdf-status" style="display:none; padding:0.75rem 1rem; border-radius:10px; font-size:0.82rem; font-weight:600; margin-bottom:1rem;"></div>
           <div class="modal-actions">
             <button type="button" class="btn" style="background: rgba(0,0,0,0.05); color: var(--text-muted);" data-close-ledger-modal>취소</button>
             <button type="submit" class="btn btn-primary" id="ledger-pdf-submit-btn">📥 엑셀로 변환 & 다운로드</button>
@@ -2889,10 +2903,10 @@
   <script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';</script>
 
   <!-- Application Logic Scripts (Phase 1 Modularization) -->
-  <script src="js/utils/constants.js?v=20260912_v139"></script>
-  <script src="js/utils/helpers.js?v=20260912_v139"></script>
-  <script src="js/services/crypto.js?v=20260912_v139"></script>
-  <script src="js/app.js?v=20260912_v139"></script>
-  <script src="js/treasure.js?v=20260912_v139"></script>
+  <script src="js/utils/constants.js?v=20260912_v140"></script>
+  <script src="js/utils/helpers.js?v=20260912_v140"></script>
+  <script src="js/services/crypto.js?v=20260912_v140"></script>
+  <script src="js/app.js?v=20260912_v140"></script>
+  <script src="js/treasure.js?v=20260912_v140"></script>
 </body>
 </html>

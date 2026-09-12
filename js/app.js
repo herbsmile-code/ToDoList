@@ -4783,6 +4783,10 @@
 
     closeLedgerModal() {
       const modal = document.getElementById('ledger-upload-modal');
+      const pwInput = document.getElementById('ledger-pdf-password');
+      if (pwInput) pwInput.value = '';
+      const statusEl = document.getElementById('ledger-pdf-status');
+      if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
       if (modal) {
         modal.style.display = 'none';
         modal.classList.remove('active');
@@ -7500,11 +7504,31 @@
     localStorage.setItem(BANK_DATA_KEY, JSON.stringify(data));
   }
 
-  // PDF 텍스트 추출 (PDF.js)
-  async function extractTextFromPDF(file) {
+  // PDF 텍스트 추출 (PDF.js) - 보안 비밀번호 해제 지원 (절대 저장하지 않음)
+  async function extractTextFromPDF(file, password = '') {
     if (!window.pdfjsLib) throw new Error('PDF.js 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const docParams = { data: arrayBuffer };
+    if (password && typeof password === 'string' && password.trim()) {
+      docParams.password = password.trim();
+    }
+
+    let pdf;
+    try {
+      const loadingTask = pdfjsLib.getDocument(docParams);
+      pdf = await loadingTask.promise;
+    } catch (err) {
+      const isPwErr = err && (err.name === 'PasswordException' || /password/i.test(err.message || ''));
+      if (isPwErr) {
+        if (!password || !password.trim()) {
+          throw new Error('문서 비밀번호가 걸려 있는 보안 PDF입니다. 비밀번호(생년월일 6자리 등)를 입력해 주세요 🔒');
+        } else {
+          throw new Error('비밀번호가 일치하지 않습니다. 생년월일 6자리(또는 사업자등록번호)를 다시 확인해 주세요 ❌');
+        }
+      }
+      throw err;
+    }
+
     let fullText = '';
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
@@ -7810,12 +7834,51 @@
     }
   };
 
+  window._togglePdfPasswordVisibility = function() {
+    const input = document.getElementById('ledger-pdf-password');
+    const btn   = document.getElementById('btn-toggle-pdf-pw');
+    if (!input) return;
+    if (input.type === 'password') {
+      input.type = 'text';
+      if (btn) btn.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      if (btn) btn.textContent = '👁️';
+    }
+  };
+
+  window._updatePdfPasswordHint = function(bank) {
+    const hintEl = document.getElementById('ledger-pdf-pw-hint');
+    if (!hintEl) return;
+    if (bank === 'kookmin') {
+      hintEl.textContent = '💡 KB국민: 생년월일 6자리(YYMMDD) / 사업자: 사업자번호 10자리';
+    } else if (bank === 'shinhan') {
+      hintEl.textContent = '💡 신한은행: 생년월일 6자리(YYMMDD) / 사업자: 사업자번호 10자리';
+    } else if (bank === 'woori') {
+      hintEl.textContent = '💡 우리은행: 생년월일 6자리(YYMMDD) / 사업자: 사업자번호 10자리';
+    } else {
+      hintEl.textContent = '💡 생년월일 6자리(YYMMDD) 또는 사업자번호';
+    }
+  };
+
   function bankShowStatus(msg, type) {
     const el = document.getElementById('bank-process-status');
-    if (!el) return;
-    const colors = { info:'background:rgba(112,72,232,0.08);color:#7048e8;', success:'background:rgba(76,175,125,0.1);color:#2e7d56;', error:'background:rgba(255,107,139,0.1);color:#c0392b;', loading:'background:rgba(0,0,0,0.04);color:var(--text-muted);' };
-    el.style.cssText = `display:block;padding:0.75rem 1rem;border-radius:12px;font-size:0.84rem;font-weight:600;margin-bottom:1rem;${colors[type]||colors.info}`;
-    el.textContent = msg;
+    const modalEl = document.getElementById('ledger-pdf-status');
+    const colors = {
+      info:    'background:rgba(112,72,232,0.08);color:#7048e8;',
+      success: 'background:rgba(76,175,125,0.1);color:#2e7d56;',
+      error:   'background:rgba(255,107,139,0.12);color:#c0392b;',
+      loading: 'background:rgba(0,0,0,0.04);color:var(--text-muted);'
+    };
+    const css = `display:block;padding:0.75rem 1rem;border-radius:12px;font-size:0.84rem;font-weight:600;margin-bottom:1rem;${colors[type]||colors.info}`;
+    if (el) {
+      el.style.cssText = css;
+      el.textContent = msg;
+    }
+    if (modalEl) {
+      modalEl.style.cssText = css;
+      modalEl.textContent = msg;
+    }
   }
 
   function bindBankAnalyzerEvents() {
@@ -7824,14 +7887,20 @@
       pdfForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const fileInput = document.getElementById('ledger-pdf-input');
+        const pwInput   = document.getElementById('ledger-pdf-password');
         const bankType  = document.getElementById('ledger-pdf-bank')?.value || 'kookmin';
         if (!fileInput?.files?.length) return;
         const file = fileInput.files[0];
+        const password = pwInput ? pwInput.value : '';
+
         const btn  = document.getElementById('ledger-pdf-submit-btn');
         if (btn) { btn.disabled = true; btn.textContent = '⏳ 변환 중...'; }
         bankShowStatus('⏳ PDF에서 거래내역을 추출하는 중...', 'loading');
         try {
-          const rawText = await extractTextFromPDF(file);
+          const rawText = await extractTextFromPDF(file, password);
+          // 보안 철저: 텍스트 추출 완료 즉시 비밀번호 필드 메모리 초기화
+          if (pwInput) pwInput.value = '';
+
           let txns = parseBankText(rawText, bankType);
           if (txns.length === 0) {
             bankShowStatus('⚠️ 거래내역을 자동으로 찾지 못했어요. 은행 선택을 확인하거나 직접 엑셀에 입력해 주세요.', 'error');
@@ -7851,8 +7920,11 @@
           UI.showToast(`${txns.length}건 추출 완료! 엑셀 파일이 다운로드되었어요 📥`, 'success');
         } catch (err) {
           console.error('[BankAnalyzer PDF]', err);
-          bankShowStatus(`❌ 오류: ${err.message}`, 'error');
-          UI.showToast('PDF 파싱 오류. 은행 선택을 확인해 주세요.', 'danger');
+          // 보안 철저: 에러 발생 시에도 비밀번호 필드 메모리 초기화
+          if (pwInput) pwInput.value = '';
+          const errMsg = err.message || 'PDF 파싱 중 오류가 발생했습니다.';
+          bankShowStatus(`❌ ${errMsg}`, 'error');
+          UI.showToast(errMsg, 'danger');
         } finally {
           if (btn) { btn.disabled = false; btn.textContent = '📥 엑셀로 변환 & 다운로드'; }
         }
