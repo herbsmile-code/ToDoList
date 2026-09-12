@@ -7790,13 +7790,9 @@
     const rules = bankLoadRules();
     return transactions.map(tx => {
       if (tx.category && tx.category !== '확인필요') return tx;
-      let matched = null;
-      for (const rule of rules) {
-        if (tx.desc && tx.desc.includes(rule.keyword)) {
-          matched = rule;
-          break;
-        }
-      }
+      const matched = (typeof bankFindMatchingRule === 'function')
+        ? bankFindMatchingRule(tx.desc, rules)
+        : null;
       if (matched) {
         return {
           ...tx,
@@ -7808,6 +7804,7 @@
       return { ...tx, category: '확인필요', subCategory: '', mainCategory: '' };
     });
   }
+
 
   // 거래내역 → 엑셀 변환 & 다운로드 (A~H 8개 열 확장: 항목, 소분류, 대분류 기본 탑재)
   function bankExportToExcel(transactions, bankType, monthStr) {
@@ -7883,6 +7880,85 @@
     return isNaN(n) ? 0 : Math.round(n);
   }
 
+  // 거래내용(desc) 및 거래일자(dateStr)에서 실제 귀속 연월(YYYY-MM) 스마트 판별
+  // 예: "수도 2608가정" -> 2026-08 (8월분 귀속)
+  // 예: "LH202608" -> 2026-08 (8월분 귀속)
+  // 예: "LH202609", "수도 2609가정" -> 2026-09 (9월분 귀속)
+  // 예: "한국전력공사" -> 거래일자 dateStr의 연월 그대로 사용
+  function bankExtractEffectiveMonth(dateStr, desc) {
+    const dStr = bankNormalizeDate(dateStr);
+    const text = String(desc || '').trim();
+
+    // 1. 6자리 연월 감지 (예: LH202608, 202609 등)
+    const m6 = text.match(/(?:^|[^\d])(20\d{2})(0[1-9]|1[0-2])(?=[^\d]|$)/);
+    if (m6) return `${m6[1]}-${m6[2]}`;
+
+    // 2. 4자리 연월 감지 (예: 수도 2608가정, 2609 등 - 2024년~2029년)
+    const m4 = text.match(/(?:^|[^\d])(2[4-9])(0[1-9]|1[0-2])(?=[^\d]|$)/);
+    if (m4) return `20${m4[1]}-${m4[2]}`;
+
+    // 3. N월 또는 N월분 감지 (예: 8월, 9월분)
+    const mm = text.match(/(?:^|[^\d])(0?[1-9]|1[0-2])월/);
+    if (mm) {
+      const yearMatch = dStr.match(/^(\d{4})/);
+      const year = yearMatch ? yearMatch[1] : (new Date().getFullYear());
+      return `${year}-${mm[1].padStart(2, '0')}`;
+    }
+
+    // 4. 거래내용에 특정 월 표기가 없는 경우 거래일자의 연월 그대로 사용
+    const dMatch = dStr.match(/^(\d{4})-(\d{2})/);
+    return dMatch ? `${dMatch[1]}-${dMatch[2]}` : '';
+  }
+
+  // 거래내용에서 핵심 접두사(시작 단어) 스마트 추출 (LH202608 -> LH, 수도 2608가정 -> 수도)
+  function bankExtractPrefix(desc) {
+    if (!desc) return '';
+    let clean = String(desc).trim();
+    // (주), [기관] 등 앞 괄호 접두어 제거
+    const bMatch = clean.match(/^[\(\[\<]([^\)\]\>]+)[\)\]\>]/);
+    if (bMatch) clean = clean.substring(bMatch[0].length).trim();
+    const match = clean.match(/^([A-Za-z]+|[가-힣]+)/);
+    if (match && match[1] && match[1].length >= 2) {
+      return match[1];
+    }
+    const token = clean.split(/[\s\-_0-9]/)[0];
+    return (token && token.length >= 2) ? token : '';
+  }
+
+  // 등록된 룰 목록에서 거래내역과 매칭되는 룰 찾기 (접두사 시작 일치 최우선)
+  function bankFindMatchingRule(desc, rulesOrMap) {
+    if (!desc) return null;
+    const cleanDesc = String(desc).trim().toUpperCase();
+    const prefix = bankExtractPrefix(desc).toUpperCase();
+
+    // rules 배열 또는 맵 정규화
+    const ruleList = Array.isArray(rulesOrMap)
+      ? rulesOrMap
+      : Object.entries(rulesOrMap).map(([kw, info]) => ({ keyword: kw, ...info }));
+
+    // 1단계: 접두사 일치 (LH로 시작하거나, 수도로 시작하는 경우 뒤는 무시하고 최우선 매칭!)
+    for (const r of ruleList) {
+      if (!r || !r.keyword || !r.category || r.category === '확인필요') continue;
+      const kw = String(r.keyword).trim().toUpperCase();
+      if (kw.length >= 2) {
+        if (cleanDesc.startsWith(kw) || (prefix && prefix === kw)) {
+          return r;
+        }
+      }
+    }
+
+    // 2단계: 일반 키워드 포함 일치 (예: "한국전력공사" 등)
+    for (const r of ruleList) {
+      if (!r || !r.keyword || !r.category || r.category === '확인필요') continue;
+      const kw = String(r.keyword).trim().toUpperCase();
+      if (cleanDesc.includes(kw)) {
+        return r;
+      }
+    }
+
+    return null;
+  }
+
   // 분류된 엑셀 읽어서 룰 학습 및 거래내역 스마트 업데이트 (미입력 항목 자동완성 탑재)
   async function bankLearnFromExcel(file) {
     return new Promise((resolve, reject) => {
@@ -7930,7 +8006,7 @@
           const startIdx = headerRowIdx >= 0 ? headerRowIdx + 1 : 1;
           let newTxns = [], learnedCount = 0;
 
-          // 1단계: 사용자가 직접 입력한 새 규칙 먼저 수집 & 학습
+          // 1단계: 사용자가 직접 입력한 새 규칙 먼저 수집 & 스마트 접두사 학습
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
@@ -7941,7 +8017,8 @@
             if (!desc) continue;
 
             if (category && category !== '확인필요') {
-              const keyword = desc.length > 8 ? desc.substring(0, 8) : desc;
+              // 1-1) 전체 거래내용 등록 (앞 12자리)
+              const keyword = desc.length > 12 ? desc.substring(0, 12) : desc;
               if (!ruleMap[keyword]) {
                 ruleMap[keyword] = { category, subCategory, mainCategory };
                 learnedCount++;
@@ -7952,10 +8029,25 @@
                   mainCategory: mainCategory || ruleMap[keyword].mainCategory
                 };
               }
+
+              // 1-2) 핵심 접두사(시작 단어) 등록 (예: LH202608 -> LH, 수도 2608가정 -> 수도)
+              const prefix = bankExtractPrefix(desc);
+              if (prefix && prefix.length >= 2) {
+                if (!ruleMap[prefix]) {
+                  ruleMap[prefix] = { category, subCategory, mainCategory };
+                  learnedCount++;
+                } else {
+                  ruleMap[prefix] = {
+                    category: category || ruleMap[prefix].category,
+                    subCategory: subCategory || ruleMap[prefix].subCategory,
+                    mainCategory: mainCategory || ruleMap[prefix].mainCategory
+                  };
+                }
+              }
             }
           }
 
-          // 2단계: 거래내역 생성 및 항목 미입력 건에 대해 학습된 룰 자동 적용 (단 1건의 유실도 없이 전 행 수집)
+          // 2단계: 거래내역 생성 및 항목 미입력 건에 대해 스마트 룰 자동 적용 (단 1건의 유실도 없이 전 행 수집)
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
@@ -7971,17 +8063,11 @@
             // 유효한 거래 행 판단 (날짜가 있고 출금이나 입금 금액이 0보다 큰 경우)
             if (!date && out === 0 && inn === 0) continue;
 
-            // 항목을 안 적었거나 '확인필요'인 경우 -> 학습된 룰에서 키워드 매칭하여 자동 채움
+            // 항목을 안 적었거나 '확인필요'인 경우 -> 스마트 접두사 매칭으로 자동 채움
             if (!category || category === '확인필요') {
-              let matched = null;
-              for (const [kw, info] of Object.entries(ruleMap)) {
-                if (kw && desc.includes(kw) && info.category && info.category !== '확인필요') {
-                  matched = info;
-                  break;
-                }
-              }
+              const matched = bankFindMatchingRule(desc, ruleMap);
               if (matched) {
-                category = matched.category;
+                category = matched.category || '';
                 if (!subCategory) subCategory = matched.subCategory || '';
                 if (!mainCategory) mainCategory = matched.mainCategory || '';
               }
@@ -8088,7 +8174,11 @@
     // 2단계: 거래내역 순회 - 오직 금액(in vs out)을 기준으로 엄격 분리
     statements.forEach(tx => {
       const normDate = bankNormalizeDate(tx.date);
-      const mm = normDate.match(/(\d{4})-(\d{2})/);
+      // 거래내용 속 귀속 월(2608, 202608, 8월분 등) 스마트 판별 (없으면 거래일자의 월 사용)
+      const effectiveYM = (typeof bankExtractEffectiveMonth === 'function')
+        ? bankExtractEffectiveMonth(normDate, tx.desc)
+        : '';
+      const mm = (effectiveYM || normDate).match(/(\d{4})-(\d{2})/);
       if (!mm) return;
       const m = parseInt(mm[2], 10);
       if (m < 1 || m > 12) return;
@@ -8218,11 +8308,14 @@
     const byMonth = {};
     statements.forEach(tx => {
       const normDate = bankNormalizeDate(tx.date);
-      const mm = normDate.match(/(\d{4})-(\d{2})/);
+      const effectiveYM = (typeof bankExtractEffectiveMonth === 'function')
+        ? bankExtractEffectiveMonth(normDate, tx.desc)
+        : '';
+      const mm = (effectiveYM || normDate).match(/(\d{4})-(\d{2})/);
       if (!mm) return;
       const key = `${mm[1]}-${mm[2]}`;
       if (!byMonth[key]) byMonth[key] = [];
-      byMonth[key].push({ ...tx, date: normDate });
+      byMonth[key].push({ ...tx, date: normDate, effectiveYM: effectiveYM || `${mm[1]}-${mm[2]}` });
     });
 
     const sortedMonths = Object.keys(byMonth).sort().reverse();
