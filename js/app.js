@@ -7510,14 +7510,14 @@
       const items = content.items || [];
       if (!items.length) continue;
 
-      // 1. 유효 텍스트 및 X/Y 좌표 수집
+      // 1. 유효 텍스트 및 X/Y 좌표 수집 (너비 정보 포함)
       const textItems = [];
       for (const it of items) {
         const str = (it.str || '').trim();
         if (!str) continue;
         const x = it.transform ? it.transform[4] : 0;
         const y = it.transform ? it.transform[5] : 0;
-        textItems.push({ str, x, y });
+        textItems.push({ str, x, y, width: it.width });
       }
 
       // 2. Y좌표 기준으로 내림차순 정렬 후 행(Row) 그룹화 (±6.0px 범위: 표의 같은 행 완벽 병합)
@@ -7548,10 +7548,10 @@
         for (const it of row.items) {
           if (lastX !== -999) {
             const gap = it.x - (lastX + lastWidth);
-            if (gap > 10) {
-              rowText += '   '; // 컬럼 구분 (공백 3칸)
-            } else if (gap > 1.5) {
-              rowText += ' ';   // 단어 간격
+            if (gap > 6) {
+              rowText += '    '; // 컬럼 구분 확실하게 공백 4칸
+            } else if (gap > 1.2) {
+              rowText += ' ';    // 단어 간격
             }
           }
           rowText += it.str;
@@ -7766,6 +7766,7 @@
       // 헤더 및 요약 행 제외
       if (line.includes('계좌 거래내역 조회') || line.includes('조회기준일시') || (line.includes('거래일시') && line.includes('출금액'))) continue;
       if (line.includes('총 잔액') || line.includes('총 입금금액') || line.includes('총 출금금액') || line.includes('조회기간')) continue;
+      if (line.includes('계좌명') || line.includes('계좌번호') || line.includes('예금주') || line.includes('출금가능금액')) continue;
 
       // 1. 자간 쪼개짐 복원 (국민은행 PDF 특유의 공백 쪼개짐 완벽 복원)
       line = line.replace(/(2\s*0\s*\d\s*\d)\s*([01]\s*\d)\s*([0-3]\s*\d)/g, (m, y, mo, d) => {
@@ -7782,17 +7783,25 @@
 
       const date = dMatch[1].replace(/[.\-/]/g, '-');
 
-      // 3. 다중 공백 또는 탭으로 컬럼 분리
-      const tokens = line.split(/\s{2,}|\t/).map(t => t.trim()).filter(Boolean);
-      if (tokens.length < 4) continue;
+      // 날짜 및 시간 이후 텍스트 분리
+      const afterDateIdx = dMatch.index + dMatch[0].length;
+      const contentPart = line.slice(afterDateIdx).trim();
+      if (!contentPart) continue;
+
+      // 3. 모든 공백(\s+) 단위로 토큰 분리 (단일 공백, 다중 공백 무관 100% 안전)
+      const tokens = contentPart.split(/\s+/).map(t => t.trim()).filter(Boolean);
+      if (tokens.length < 3) continue;
 
       // 4. 역방향(Right-to-Left) 3연속 금액(출금액, 입금액, 잔액) 위치 탐색
-      // [주의]: 잔액(tokens[i])은 송금메모('-')와 구분하기 위해 반드시 순수 숫자여야 함!
+      // [핵심 원칙]:
+      // 오른쪽 끝(거래점/송금메모)에서부터 왼쪽으로 스캔하여 처음 만나는 3연속 금액 [출금액, 입금액, 잔액]을 잡음!
+      // 보낸분/받는분에 아무리 긴 계좌번호(숫자)가 있어도 출금액 왼쪽에 위치하므로 절대 출금액/잔액으로 인식되지 않음!
       const isPureDigits = (s) => /^\d[\d,]*$/.test(String(s).trim());
       const isMoneyOrDash = (s) => /^\d[\d,]*$/.test(String(s).trim()) || s === '-' || s === '--' || s === '0';
 
       let moneyTripleIdx = -1;
       for (let i = tokens.length - 1; i >= 2; i--) {
+        // 잔액(tokens[i])은 송금메모('-')와 구분하기 위해 반드시 순수 양의 정수 금액이어야 함!
         if (isPureDigits(tokens[i]) && isMoneyOrDash(tokens[i - 1]) && isMoneyOrDash(tokens[i - 2])) {
           const out = cleanBankMoney(tokens[i - 2]);
           const inn = cleanBankMoney(tokens[i - 1]);
@@ -7803,7 +7812,7 @@
         }
       }
 
-      if (moneyTripleIdx >= 1) {
+      if (moneyTripleIdx >= 0) {
         const out = cleanBankMoney(tokens[moneyTripleIdx]);
         const inn = cleanBankMoney(tokens[moneyTripleIdx + 1]);
         const bal = cleanBankMoney(tokens[moneyTripleIdx + 2]);
@@ -7812,29 +7821,37 @@
         const afterTokens = tokens.slice(moneyTripleIdx + 3);
         let memo = '';
         if (afterTokens.length >= 1) {
-          memo = afterTokens[0] === '-' ? '' : afterTokens[0];
+          memo = (afterTokens[0] === '-' || afterTokens[0] === '--') ? '' : afterTokens[0];
         }
 
         // 출금액 앞쪽 토큰들에서 [적요], [보낸분/받는분] 추출
+        // 긴 계좌번호, 특수문자, 회차 등은 출금액 앞쪽이므로 안전하게 desc에 보존
         let beforeTokens = tokens.slice(0, moneyTripleIdx);
-        // 날짜/시간 토큰 제거
-        if (beforeTokens.length > 0 && /(20\d{2}[.\-/][01]\d[.\-/][0-3]\d)/.test(beforeTokens[0])) {
-          beforeTokens.shift();
-        }
-        if (beforeTokens.length > 0 && /^[0-2]\d:[0-5]\d(?::[0-5]\d)?$/.test(beforeTokens[0])) {
-          beforeTokens.shift();
-        }
 
         let desc = '';
-        let summary = '';
-        if (beforeTokens.length === 1) {
+        if (beforeTokens.length === 0) {
+          desc = inn > 0 ? '입금' : '출금';
+        } else if (beforeTokens.length === 1) {
           desc = beforeTokens[0];
-        } else if (beforeTokens.length >= 2) {
-          summary = beforeTokens[0]; // 적요 (예: FBS 출금, 체크카드 등)
-          desc = beforeTokens.slice(1).join(' ').trim(); // 보낸분/받는분 (예: 쿠팡, 71040300177383,31회차 등)
+        } else {
+          // 첫 번째 토큰이 적요(FBS출금, 체크카드, 기일출금 등)인 경우 보낸분/받는분을 거래내용으로 우선 사용
+          const summaryList = ['FBS출금', 'FBS 출금', 'FBS입금', 'FBS 입금', '체크카드', '전자금융', '기일출금', 'ATM출금', 'ATM입금', '타행이체', '당행이체'];
+          const joined = beforeTokens.join(' ');
+          let matchedKw = '';
+          for (const kw of summaryList) {
+            if (joined.startsWith(kw)) {
+              matchedKw = kw;
+              break;
+            }
+          }
+          if (matchedKw && joined.length > matchedKw.length) {
+            desc = joined.slice(matchedKw.length).trim();
+          } else {
+            desc = beforeTokens.slice(1).join(' ').trim() || beforeTokens[0];
+          }
         }
 
-        if (!desc) desc = summary || (inn > 0 ? '입금' : '출금');
+        if (!desc) desc = inn > 0 ? '입금' : '출금';
 
         txns.push({
           date,
@@ -7848,17 +7865,19 @@
         continue;
       }
 
-      // 5. 정규식 폴백 매칭
-      const regPat = /(20\d{2}[.\-/][01]\d[.\-/][0-3]\d)(?:\s+[0-2]\d:[0-5]\d(?::[0-5]\d)?)?\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
-      const m = line.match(regPat);
+      // 5. 안전한 정규식 폴백: 오른쪽 끝 앵커링($)으로 출금액, 입금액, 잔액을 역방향 매칭
+      // 앞쪽의 긴 계좌번호를 출금액으로 오인하는 현상 원천 방지
+      const safePat = /(20\d{2}[.\-/][01]\d[.\-/][0-3]\d)(?:\s+[0-2]\d:[0-5]\d(?::[0-5]\d)?)?\s+(.*?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)(?:\s+([^\s]+))?(?:\s+([^\s]+))?\s*$/;
+      const m = line.match(safePat);
       if (m) {
         const d = m[1].replace(/[.\-/]/g, '-');
-        const desc = m[2].replace(/\s+/g, ' ').trim();
+        const rawDesc = m[2].replace(/\s+/g, ' ').trim();
         const out = cleanBankMoney(m[3]);
         const inn = cleanBankMoney(m[4]);
         const bal = cleanBankMoney(m[5]);
-        if (desc && (out > 0 || inn > 0)) {
-          txns.push({ date: d, desc, out, in: inn, balance: bal, memo: '', category: '' });
+        const fallbackMemo = (m[6] && m[6] !== '-' && m[6] !== '--') ? m[6] : '';
+        if (rawDesc && (out > 0 || inn > 0)) {
+          txns.push({ date: d, desc: rawDesc, out, in: inn, balance: bal, memo: fallbackMemo, category: '' });
           continue;
         }
       }
