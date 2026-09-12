@@ -7770,37 +7770,66 @@
     return txns;
   }
 
-  // 저장된 룰로 자동 분류
+  // 저장된 룰로 자동 분류 (항목, 소분류, 대분류 3단 계층 자동 완성)
   function bankAutoClassify(transactions) {
     const rules = bankLoadRules();
     return transactions.map(tx => {
       if (tx.category && tx.category !== '확인필요') return tx;
-      let matched = '';
+      let matched = null;
       for (const rule of rules) {
-        if (tx.desc && tx.desc.includes(rule.keyword)) { matched = rule.category; break; }
+        if (tx.desc && tx.desc.includes(rule.keyword)) {
+          matched = rule;
+          break;
+        }
       }
-      return { ...tx, category: matched || '확인필요' };
+      if (matched) {
+        return {
+          ...tx,
+          category: matched.category || '확인필요',
+          subCategory: matched.subCategory || '',
+          mainCategory: matched.mainCategory || ''
+        };
+      }
+      return { ...tx, category: '확인필요', subCategory: '', mainCategory: '' };
     });
   }
 
-  // 거래내역 → 엑셀 변환 & 다운로드
+  // 거래내역 → 엑셀 변환 & 다운로드 (A~H 8개 열 확장: 항목, 소분류, 대분류 기본 탑재)
   function bankExportToExcel(transactions, bankType, monthStr) {
     if (!window.XLSX) { UI.showToast('엑셀 라이브러리 로딩 중입니다.', 'info'); return ''; }
     const bankNames = { kookmin: '국민은행', shinhan: '신한은행', woori: '우리은행' };
     const rows = [
-      ['날짜', '거래내용', '출금액(원)', '입금액(원)', '잔액(원)', '항목'],
-      ...transactions.map(tx => [tx.date, tx.desc, tx.out || '', tx.in || '', tx.balance || '', tx.category || '확인필요'])
+      ['날짜', '거래내용', '출금액(원)', '입금액(원)', '잔액(원)', '항목', '소분류', '대분류'],
+      ...transactions.map(tx => [
+        tx.date,
+        tx.desc,
+        tx.out || '',
+        tx.in || '',
+        tx.balance || '',
+        tx.category || '확인필요',
+        tx.subCategory || '',
+        tx.mainCategory || ''
+      ])
     ];
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+    ws['!cols'] = [
+      { wch: 12 }, // 날짜
+      { wch: 28 }, // 거래내용
+      { wch: 14 }, // 출금액
+      { wch: 14 }, // 입금액
+      { wch: 14 }, // 잔액
+      { wch: 16 }, // 항목(세부)
+      { wch: 16 }, // 소분류
+      { wch: 16 }  // 대분류
+    ];
     XLSX.utils.book_append_sheet(wb, ws, '거래내역');
     const fileName = `${bankNames[bankType] || '거래내역'}_${monthStr || ''}.xlsx`;
     XLSX.writeFile(wb, fileName);
     return fileName;
   }
 
-  // 분류된 엑셀 읽어서 룰 학습
+  // 분류된 엑셀 읽어서 룰 학습 (F, G, H열 3단 계층 학습)
   async function bankLearnFromExcel(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -7811,7 +7840,13 @@
           const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
           const rules = bankLoadRules();
           const ruleMap = {};
-          rules.forEach(r => { ruleMap[r.keyword] = r.category; });
+          rules.forEach(r => {
+            ruleMap[r.keyword] = {
+              category: r.category || '',
+              subCategory: r.subCategory || '',
+              mainCategory: r.mainCategory || ''
+            };
+          });
           let newTxns = [], learnedCount = 0;
           rows.forEach((row, idx) => {
             if (idx === 0) return;
@@ -7820,15 +7855,36 @@
             const out  = Number(String(row[2] || '').replace(/[^0-9]/g, '')) || 0;
             const inn  = Number(String(row[3] || '').replace(/[^0-9]/g, '')) || 0;
             const bal  = Number(String(row[4] || '').replace(/[^0-9]/g, '')) || 0;
-            const category = String(row[5] || '').trim();
+            const category     = String(row[5] || '').trim();
+            const subCategory  = String(row[6] || '').trim();
+            const mainCategory = String(row[7] || '').trim();
             if (!desc) return;
             if (category && category !== '확인필요') {
               const keyword = desc.length > 8 ? desc.substring(0, 8) : desc;
-              if (!ruleMap[keyword]) { ruleMap[keyword] = category; learnedCount++; }
+              if (!ruleMap[keyword]) {
+                ruleMap[keyword] = { category, subCategory, mainCategory };
+                learnedCount++;
+              } else if (subCategory || mainCategory) {
+                ruleMap[keyword] = { category, subCategory, mainCategory };
+              }
             }
-            newTxns.push({ date, desc, out, in: inn, balance: bal, category: category || '확인필요' });
+            newTxns.push({
+              date,
+              desc,
+              out,
+              in: inn,
+              balance: bal,
+              category: category || '확인필요',
+              subCategory: subCategory || '',
+              mainCategory: mainCategory || ''
+            });
           });
-          bankSaveRules(Object.entries(ruleMap).map(([keyword, category]) => ({ keyword, category })));
+          bankSaveRules(Object.entries(ruleMap).map(([keyword, info]) => ({
+            keyword,
+            category: info.category,
+            subCategory: info.subCategory,
+            mainCategory: info.mainCategory
+          })));
           if (newTxns.length > 0) bankMergeAndSaveStatements(newTxns);
           resolve({ transactions: newTxns, learnedCount });
         } catch (err) { reject(err); }
@@ -7849,7 +7905,7 @@
     return merged;
   }
 
-  // 월별 카드 대시보드 렌더링
+  // 월별 카드 대시보드 렌더링 (진영-용돈 / 영호-용돈 듀얼 위젯 & 3단 아코디언 드릴다운)
   function bankRenderMonthlyDashboard() {
     const grid = document.getElementById('bank-monthly-grid');
     if (!grid) return;
@@ -7857,11 +7913,13 @@
     const rules = bankLoadRules();
     const bannerText = document.getElementById('bank-rules-banner-text');
     const banner = document.getElementById('bank-rules-banner');
-    if (bannerText) bannerText.textContent = `저장된 분류 규칙 ${rules.length}개`;
+    if (bannerText) bannerText.textContent = `저장된 분류 규칙 ${rules.length}개 (항목·소분류·대분류)`;
     if (banner) banner.style.display = rules.length > 0 ? 'flex' : 'none';
 
     if (statements.length === 0) {
-      grid.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--text-muted);font-size:0.85rem;">📄 아직 업로드된 거래내역이 없어요.<br>상단 <strong>+ 신혼 가계부 엑셀 등록</strong> 버튼에서 PDF를 업로드하세요!</div>`;
+      grid.innerHTML = `<div style="text-align:center;padding:2.5rem;color:var(--text-muted);font-size:0.88rem;background:var(--card-bg,#fff);border-radius:16px;border:1px dashed var(--border-light,#f0e6ea);">
+        📄 아직 업로드된 거래내역이 없어요.<br>상단 <strong>+ 신혼 가계부 엑셀 등록</strong> 버튼에서 PDF 또는 엑셀을 업로드하세요!
+      </div>`;
       return;
     }
 
@@ -7879,47 +7937,243 @@
       const txns = byMonth[monthKey];
       const [year, mon] = monthKey.split('-');
       const label = `${year}년 ${parseInt(mon)}월`;
-      const catMap = {};
+
       let totalOut = 0, totalIn = 0, unmatchedCount = 0;
+      let jyAmount = 0, jyCount = 0; // 진영-용돈
+      let yhAmount = 0, yhCount = 0; // 영호-용돈
+
+      // 3단 계층 트리: mainCat -> subCat -> cat
+      const tree = {};
+
       txns.forEach(tx => {
-        const cat = tx.category || '확인필요';
-        if (!catMap[cat]) catMap[cat] = { count: 0, amount: 0 };
-        catMap[cat].count++;
-        catMap[cat].amount += tx.out || 0;
-        totalOut += tx.out || 0;
-        totalIn  += tx.in  || 0;
-        if (cat === '확인필요') unmatchedCount++;
+        const outAmt = tx.out || 0;
+        const inAmt  = tx.in || 0;
+        totalOut += outAmt;
+        totalIn  += inAmt;
+
+        const catStr = `${tx.category || ''} ${tx.subCategory || ''} ${tx.mainCategory || ''}`.trim();
+        if (outAmt > 0) {
+          if (/진영/.test(catStr)) { jyAmount += outAmt; jyCount++; }
+          if (/영호/.test(catStr)) { yhAmount += outAmt; yhCount++; }
+        }
+
+        let mainCat = tx.mainCategory || '';
+        let subCat  = tx.subCategory  || '';
+        let cat     = tx.category     || '확인필요';
+
+        if (cat === '확인필요') {
+          unmatchedCount++;
+          mainCat = '⚠️ 확인필요';
+          subCat  = '미분류';
+        } else if (!mainCat) {
+          // 대분류 미입력 시 스마트 추론
+          if (/진영|영호|용돈/.test(catStr)) mainCat = '부부용돈';
+          else if (/집세|월세|관리비|전기|수도|통신|인터넷|보험|대출|정기|구독/.test(catStr)) mainCat = '고정지출';
+          else mainCat = '변동지출';
+        }
+        if (!subCat) subCat = '기타';
+
+        if (!tree[mainCat]) tree[mainCat] = { total: 0, count: 0, subs: {} };
+        tree[mainCat].total += outAmt;
+        tree[mainCat].count++;
+
+        if (!tree[mainCat].subs[subCat]) tree[mainCat].subs[subCat] = { total: 0, count: 0, items: {} };
+        tree[mainCat].subs[subCat].total += outAmt;
+        tree[mainCat].subs[subCat].count++;
+
+        if (!tree[mainCat].subs[subCat].items[cat]) tree[mainCat].subs[subCat].items[cat] = { total: 0, count: 0 };
+        tree[mainCat].subs[subCat].items[cat].total += outAmt;
+        tree[mainCat].subs[subCat].items[cat].count++;
       });
-      const catRows = Object.entries(catMap).sort((a, b) => b[1].amount - a[1].amount).map(([cat, info]) => {
-        const isU = cat === '확인필요';
-        return `<tr style="${isU ? 'background:rgba(255,220,0,0.18);' : ''}"><td style="padding:0.35rem 0.5rem;font-size:0.82rem;${isU ? 'font-weight:700;color:#b45309;' : ''}">${isU ? '⚠️ ' : ''}${escapeHTML(cat)}</td><td style="padding:0.35rem 0.5rem;font-size:0.82rem;text-align:center;color:var(--text-muted);">${info.count}건</td><td style="padding:0.35rem 0.5rem;font-size:0.82rem;text-align:right;font-weight:600;">${info.amount.toLocaleString()}원</td></tr>`;
+
+      const netAmt = totalIn - totalOut;
+      const badge = unmatchedCount > 0
+        ? `<span style="background:#fef3c7;color:#b45309;font-size:0.72rem;padding:0.2rem 0.55rem;border-radius:99px;font-weight:700;">⚠️ 확인필요 ${unmatchedCount}건</span>`
+        : `<span style="background:rgba(76,175,125,0.12);color:#2e7d56;font-size:0.72rem;padding:0.2rem 0.55rem;border-radius:99px;font-weight:700;">✅ 모두 분류 완료</span>`;
+
+      // 1. 부부 용돈 듀얼 위젯 카드
+      const couplePocketHtml = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem;">
+          <div style="padding:0.75rem 0.9rem;border-radius:12px;background:linear-gradient(135deg,rgba(255,107,139,0.12),rgba(255,107,139,0.04));border:1px solid rgba(255,107,139,0.25);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
+              <span style="font-size:0.82rem;font-weight:700;color:var(--primary,#ff6b8b);">💖 진영-용돈</span>
+              <span style="font-size:0.72rem;color:var(--text-muted);">${jyCount}건</span>
+            </div>
+            <div style="font-size:1.15rem;font-weight:800;color:var(--text-main);">${jyAmount.toLocaleString()}<span style="font-size:0.78rem;font-weight:600;margin-left:2px;">원</span></div>
+          </div>
+          <div style="padding:0.75rem 0.9rem;border-radius:12px;background:linear-gradient(135deg,rgba(112,72,232,0.12),rgba(112,72,232,0.04));border:1px solid rgba(112,72,232,0.25);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
+              <span style="font-size:0.82rem;font-weight:700;color:#7048e8;">💙 영호-용돈</span>
+              <span style="font-size:0.72rem;color:var(--text-muted);">${yhCount}건</span>
+            </div>
+            <div style="font-size:1.15rem;font-weight:800;color:var(--text-main);">${yhAmount.toLocaleString()}<span style="font-size:0.78rem;font-weight:600;margin-left:2px;">원</span></div>
+          </div>
+        </div>
+      `;
+
+      // 2. 대분류 지출 비중 프로그레스 바
+      const mainCatList = Object.entries(tree).filter(([k]) => k !== '⚠️ 확인필요');
+      const totalOutForBar = totalOut || 1;
+      const barColors = {
+        '고정지출': '#ff6b8b',
+        '변동지출': '#f59f00',
+        '부부용돈': '#7048e8',
+        '저축/투자': '#20c997',
+        '기타': '#868e96'
+      };
+
+      const barSegments = mainCatList.map(([mCat, data]) => {
+        const pct = Math.round((data.total / totalOutForBar) * 100);
+        if (pct === 0) return '';
+        const color = barColors[mCat] || '#7048e8';
+        return `<div style="width:${pct}%;background:${color};height:100%;" title="${mCat}: ${pct}% (${data.total.toLocaleString()}원)"></div>`;
       }).join('');
-      const badge = unmatchedCount > 0 ? `<span style="background:#fef3c7;color:#b45309;font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:99px;font-weight:700;margin-left:0.5rem;">⚠️ 확인필요 ${unmatchedCount}건</span>` : '';
+
+      const barLegend = mainCatList.map(([mCat, data]) => {
+        const pct = Math.round((data.total / totalOutForBar) * 100);
+        const color = barColors[mCat] || '#7048e8';
+        return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.74rem;color:var(--text-muted);">
+          <span style="width:8px;height:8px;border-radius:50%;background:${color};"></span>
+          ${mCat} ${pct}%
+        </span>`;
+      }).join('');
+
+      const progressBarHtml = `
+        <div style="margin-bottom:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
+            <span style="font-size:0.78rem;font-weight:700;color:var(--text-muted);">📊 대분류 지출 비중</span>
+          </div>
+          <div style="height:10px;border-radius:99px;background:rgba(0,0,0,0.06);overflow:hidden;display:flex;margin-bottom:0.4rem;">
+            ${barSegments || '<div style="width:100%;background:rgba(0,0,0,0.1);"></div>'}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:0.7rem;">${barLegend}</div>
+        </div>
+      `;
+
+      // 3. 계층형 아코디언 드릴다운 (대분류 ➡️ 소분류 ➡️ 항목)
+      const treeHtml = Object.entries(tree).sort((a, b) => b[1].total - a[1].total).map(([mCat, mData], mIdx) => {
+        const isUnmatched = mCat === '⚠️ 확인필요';
+        const mColor = isUnmatched ? '#b45309' : (barColors[mCat] || '#7048e8');
+        const mBg    = isUnmatched ? 'background:rgba(254,243,199,0.5);' : 'background:rgba(0,0,0,0.02);';
+        const mId    = `tree-m-${monthKey}-${mIdx}`;
+
+        const subsHtml = Object.entries(mData.subs).map(([sCat, sData], sIdx) => {
+          const sId = `tree-s-${monthKey}-${mIdx}-${sIdx}`;
+          const itemsHtml = Object.entries(sData.items).map(([cat, cData]) => `
+            <div style="display:flex;justify-content:space-between;padding:0.3rem 0.6rem 0.3rem 2.2rem;font-size:0.78rem;color:var(--text-muted);border-bottom:1px dashed rgba(0,0,0,0.04);">
+              <span>└ ${escapeHTML(cat)} (${cData.count}건)</span>
+              <span style="font-weight:600;color:var(--text-main);">${cData.total.toLocaleString()}원</span>
+            </div>
+          `).join('');
+
+          return `
+            <div style="border-bottom:1px solid rgba(0,0,0,0.03);">
+              <div onclick="const el=document.getElementById('${sId}');el.style.display=el.style.display==='none'?'block':'none';" style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.6rem 0.4rem 1.4rem;font-size:0.8rem;cursor:pointer;background:rgba(255,255,255,0.6);">
+                <span style="font-weight:600;">📁 ${escapeHTML(sCat)} <span style="font-size:0.72rem;color:var(--text-muted);font-weight:normal;">(${sData.count}건)</span></span>
+                <span style="font-weight:700;color:var(--text-main);font-size:0.82rem;">${sData.total.toLocaleString()}원 ▾</span>
+              </div>
+              <div id="${sId}" style="display:none;background:rgba(0,0,0,0.015);">${itemsHtml}</div>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div style="border:1px solid var(--border-light,#f0e6ea);border-radius:10px;margin-bottom:0.5rem;overflow:hidden;">
+            <div onclick="const el=document.getElementById('${mId}');el.style.display=el.style.display==='none'?'block':'none';" style="display:flex;justify-content:space-between;align-items:center;padding:0.55rem 0.8rem;cursor:pointer;${mBg}">
+              <div style="display:flex;align-items:center;gap:0.4rem;">
+                <span style="width:10px;height:10px;border-radius:3px;background:${mColor};display:inline-block;"></span>
+                <strong style="font-size:0.86rem;color:${mColor};">${escapeHTML(mCat)}</strong>
+                <span style="font-size:0.74rem;color:var(--text-muted);">(${mData.count}건)</span>
+              </div>
+              <div style="font-size:0.88rem;font-weight:800;color:var(--text-main);">
+                ${mData.total.toLocaleString()}원 <span style="font-size:0.75rem;color:var(--text-muted);">▾</span>
+              </div>
+            </div>
+            <div id="${mId}" style="display:${isUnmatched ? 'block' : 'none'};">${subsHtml}</div>
+          </div>
+        `;
+      }).join('');
+
       const actionBtn = unmatchedCount > 0
-        ? `<button type="button" onclick="window.bankDownloadMonth('${monthKey}')" style="font-size:0.75rem;padding:0.25rem 0.7rem;border-radius:8px;border:1px solid var(--primary,#ff6b8b);background:transparent;color:var(--primary,#ff6b8b);cursor:pointer;">📥 확인필요만 다운로드</button>`
-        : `<span style="font-size:0.76rem;color:#4caf7d;font-weight:700;">✅ 모두 분류 완료</span>`;
-      return `<div class="bank-month-card" style="background:var(--card-bg,#fff);border-radius:16px;border:1px solid var(--border-light,#f0e6ea);overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.05);">
-        <div style="padding:0.85rem 1.1rem;background:linear-gradient(135deg,rgba(255,107,139,0.08),rgba(112,72,232,0.06));border-bottom:1px solid var(--border-light,#f0e6ea);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.4rem;">
-          <div style="font-weight:800;font-size:0.95rem;">📅 ${label} 거래내역${badge}</div>
-          <div style="font-size:0.78rem;color:var(--text-muted);">출금 <strong style="color:#ff6b8b;">${totalOut.toLocaleString()}원</strong> | 입금 <strong style="color:#4caf7d;">${totalIn.toLocaleString()}원</strong></div>
+        ? `<button type="button" onclick="window.bankDownloadMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--primary,#ff6b8b);background:rgba(255,107,139,0.08);color:var(--primary,#ff6b8b);font-weight:700;cursor:pointer;">📥 확인필요 ${unmatchedCount}건 엑셀 받기</button>`
+        : `<button type="button" onclick="window.bankDownloadFullMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--border-light,#e2e8f0);background:transparent;color:var(--text-muted);cursor:pointer;">📥 전체 내역 엑셀 받기</button>`;
+
+      return `
+        <div class="bank-month-card" style="background:var(--card-bg,#fff);border-radius:18px;border:1px solid var(--border-light,#f0e6ea);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.04);margin-bottom:1.5rem;">
+          <!-- 카드 헤더 -->
+          <div style="padding:1rem 1.25rem;background:linear-gradient(135deg,rgba(255,107,139,0.08),rgba(112,72,232,0.06));border-bottom:1px solid var(--border-light,#f0e6ea);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+            <div style="display:flex;align-items:center;gap:0.6rem;">
+              <span style="font-weight:800;font-size:1.05rem;">📅 ${label} 가계부</span>
+              ${badge}
+            </div>
+            <div style="font-size:0.82rem;color:var(--text-muted);">
+              수입 <strong style="color:#2e7d56;">+${totalIn.toLocaleString()}원</strong> | 
+              지출 <strong style="color:var(--primary,#ff6b8b);">${totalOut.toLocaleString()}원</strong> | 
+              잔여 <strong style="color:${netAmt >= 0 ? '#2e7d56' : '#c0392b'};">${netAmt >= 0 ? '+' : ''}${netAmt.toLocaleString()}원</strong>
+            </div>
+          </div>
+
+          <!-- 카드 바디 -->
+          <div style="padding:1.1rem 1.25rem;">
+            <!-- 👫 부부 용돈 듀얼 현황 카드 -->
+            ${couplePocketHtml}
+
+            <!-- 📊 대분류 지출 비중 바 -->
+            ${progressBarHtml}
+
+            <!-- 3단 계층 드릴다운 목록 -->
+            <div style="margin-top:1rem;">
+              <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.5rem;">🗂️ 대분류 ➡️ 소분류 ➡️ 항목별 지출 상세 (클릭 시 펼침)</div>
+              ${treeHtml}
+            </div>
+          </div>
+
+          <!-- 카드 푸터 -->
+          <div style="padding:0.75rem 1.25rem;border-top:1px solid var(--border-light,#f0e6ea);background:rgba(0,0,0,0.015);display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:0.78rem;color:var(--text-muted);">총 거래 ${txns.length}건 기록됨</span>
+            ${actionBtn}
+          </div>
         </div>
-        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
-          <thead><tr style="background:rgba(0,0,0,0.02);">
-            <th style="padding:0.4rem 0.5rem;font-size:0.78rem;text-align:left;color:var(--text-muted);font-weight:600;">항목</th>
-            <th style="padding:0.4rem 0.5rem;font-size:0.78rem;text-align:center;color:var(--text-muted);font-weight:600;">건수</th>
-            <th style="padding:0.4rem 0.5rem;font-size:0.78rem;text-align:right;color:var(--text-muted);font-weight:600;">합계</th>
-          </tr></thead>
-          <tbody>${catRows || '<tr><td colspan="3" style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.82rem;">거래내역이 없습니다</td></tr>'}</tbody>
-        </table></div>
-        <div style="padding:0.5rem 1rem;border-top:1px solid var(--border-light,#f0e6ea);display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:0.76rem;color:var(--text-muted);">총 ${txns.length}건</span>
-          ${actionBtn}
-        </div>
-      </div>`;
+      `;
     }).join('');
   }
 
-  // 규칙 관리 패널 렌더링
+  // 전체 월 엑셀 내보내기 헬퍼
+  window.bankDownloadFullMonth = function(monthKey) {
+    if (!window.XLSX) return;
+    const statements = bankLoadStatements();
+    const txns = statements.filter(tx => {
+      const mm = String(tx.date || '').match(/(\d{4})-(\d{2})/);
+      return mm && `${mm[1]}-${mm[2]}` === monthKey;
+    });
+    if (!txns.length) { UI.showToast('해당 월 내역이 없습니다.', 'info'); return; }
+    const [year, mon] = monthKey.split('-');
+    bankExportToExcel(txns, 'shinhan', `${year}년${parseInt(mon)}월_전체`);
+  };
+
+  // 확인필요 엑셀 다운로드 (8열 호환)
+  window.bankDownloadMonth = function(monthKey) {
+    if (!window.XLSX) return;
+    const statements = bankLoadStatements();
+    const txns = statements.filter(tx => {
+      const mm = String(tx.date || '').match(/(\d{4})-(\d{2})/);
+      return mm && `${mm[1]}-${mm[2]}` === monthKey && tx.category === '확인필요';
+    });
+    if (!txns.length) { UI.showToast('확인필요 항목이 없어요 ✅', 'success'); return; }
+    const [year, mon] = monthKey.split('-');
+    const rows = [
+      ['날짜', '거래내용', '출금액(원)', '입금액(원)', '잔액(원)', '항목', '소분류', '대분류'],
+      ...txns.map(tx => [tx.date, tx.desc, tx.out || '', tx.in || '', tx.balance || '', '확인필요', tx.subCategory || '', tx.mainCategory || ''])
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch:12 }, { wch:28 }, { wch:14 }, { wch:14 }, { wch:14 }, { wch:16 }, { wch:16 }, { wch:16 }];
+    XLSX.utils.book_append_sheet(wb, ws, '확인필요');
+    XLSX.writeFile(wb, `${year}년${parseInt(mon)}월_확인필요.xlsx`);
+    UI.showToast(`${parseInt(mon)}월 확인필요 ${txns.length}건 다운로드!`, 'success');
+  };
+
+  // 규칙 관리 패널 렌더링 (항목, 소분류, 대분류 3단 태그 표시)
   function bankRenderRulesPanel() {
     const list  = document.getElementById('bank-rules-list');
     const empty = document.getElementById('bank-rules-empty');
@@ -7931,41 +8185,22 @@
       return;
     }
     if (empty) empty.style.display = 'none';
-    list.innerHTML = rules.map((r, idx) => `
-      <div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.5rem;background:rgba(255,255,255,0.7);border-radius:8px;font-size:0.82rem;">
-        <span style="flex:1;color:var(--text-main);"><strong>${escapeHTML(r.keyword)}</strong></span>
-        <span style="color:var(--text-muted);">→</span>
-        <span style="flex:1;color:#7048e8;font-weight:600;">${escapeHTML(r.category)}</span>
-        <button type="button" onclick="window.bankDeleteRule(${idx})" style="font-size:0.72rem;padding:0.15rem 0.45rem;border-radius:6px;border:none;background:rgba(255,107,139,0.12);color:var(--primary,#ff6b8b);cursor:pointer;">삭제</button>
-      </div>`).join('');
+    list.innerHTML = rules.map((r, idx) => {
+      const subBadge = r.subCategory ? `<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:rgba(0,0,0,0.05);color:var(--text-muted);">${escapeHTML(r.subCategory)}</span>` : '';
+      const mainBadge = r.mainCategory ? `<span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:4px;background:rgba(255,107,139,0.1);color:var(--primary,#ff6b8b);font-weight:700;">${escapeHTML(r.mainCategory)}</span>` : '';
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.45rem 0.65rem;background:rgba(255,255,255,0.85);border-radius:10px;font-size:0.82rem;border:1px solid var(--border-light,#f0e6ea);margin-bottom:0.35rem;">
+          <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;flex:1;">
+            <strong style="color:var(--text-main);">${escapeHTML(r.keyword)}</strong>
+            <span style="color:var(--text-muted);">➔</span>
+            <span style="color:#7048e8;font-weight:700;">${escapeHTML(r.category)}</span>
+            ${subBadge}
+            ${mainBadge}
+          </div>
+          <button type="button" onclick="window.bankDeleteRule(${idx})" style="font-size:0.72rem;padding:0.2rem 0.5rem;border-radius:6px;border:none;background:rgba(255,107,139,0.12);color:var(--primary,#ff6b8b);cursor:pointer;font-weight:600;">삭제</button>
+        </div>`;
+    }).join('');
   }
-
-  window.bankDeleteRule = function(idx) {
-    const rules = bankLoadRules();
-    rules.splice(idx, 1);
-    bankSaveRules(rules);
-    bankRenderRulesPanel();
-    bankRenderMonthlyDashboard();
-    UI.showToast('분류 규칙이 삭제되었어요', 'info');
-  };
-
-  window.bankDownloadMonth = function(monthKey) {
-    if (!window.XLSX) return;
-    const statements = bankLoadStatements();
-    const txns = statements.filter(tx => {
-      const mm = String(tx.date || '').match(/(\d{4})-(\d{2})/);
-      return mm && `${mm[1]}-${mm[2]}` === monthKey && tx.category === '확인필요';
-    });
-    if (!txns.length) { UI.showToast('확인필요 항목이 없어요 ✅', 'success'); return; }
-    const [year, mon] = monthKey.split('-');
-    const rows = [['날짜','거래내용','출금액(원)','입금액(원)','잔액(원)','항목'], ...txns.map(tx => [tx.date,tx.desc,tx.out||'',tx.in||'',tx.balance||',확인필요'])];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch:12 },{ wch:30 },{ wch:14 },{ wch:14 },{ wch:14 },{ wch:16 }];
-    XLSX.utils.book_append_sheet(wb, ws, '확인필요');
-    XLSX.writeFile(wb, `${year}년${parseInt(mon)}월_확인필요.xlsx`);
-    UI.showToast(`${parseInt(mon)}월 확인필요 ${txns.length}건 다운로드!`, 'success');
-  };
 
   UI.switchLedgerModalMode = function(mode) {
     const pdfMode   = document.getElementById('ledger-modal-pdf-mode');
