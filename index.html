@@ -1469,15 +1469,24 @@
           </div>
           <div class="form-row">
             <div class="form-group">
+              <label class="form-label" for="ledger-modal-bank">대상 은행 / 사용자 *</label>
+              <select id="ledger-modal-bank" class="form-select" style="font-weight:700; color:var(--primary,#ff6b8b);">
+                <option value="auto" selected>🤖 파일명 자동 감지</option>
+                <option value="shinhan">신한은행 (진영 💖)</option>
+                <option value="kookmin">KB국민은행 (영호 💙)</option>
+                <option value="woori">우리은행 (영호 💙)</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label class="form-label" for="ledger-modal-month">대상 월 (선택)</label>
               <select id="ledger-modal-month" class="form-select">
                 <option value="auto" selected>자동 감지 🤖</option>
               </select>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="ledger-modal-manual-amount">직접 지출 총액 (선택)</label>
-              <input type="text" id="ledger-modal-manual-amount" class="form-input" placeholder="예: 1,250,000">
-            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ledger-modal-manual-amount">직접 지출 총액 (선택)</label>
+            <input type="text" id="ledger-modal-manual-amount" class="form-input" placeholder="예: 1,250,000">
           </div>
           <div class="form-group">
             <label class="form-label" for="ledger-modal-note">메모 (선택)</label>
@@ -2945,7 +2954,7 @@
   <script src="js/utils/constants.js?v=20260912_v158"></script>
   <script src="js/utils/helpers.js?v=20260912_v152"></script>
   <script src="js/services/crypto.js?v=20260912_v152"></script>
-  <script src="js/app.js?v=20260912_v163"></script>
+  <script src="js/app.js?v=20260912_v164"></script>
   <script src="js/treasure.js?v=20260912_v152"></script>
 </body>
 </html>

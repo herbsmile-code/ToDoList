@@ -7465,8 +7465,12 @@
   const BANK_RULES_KEY = 'ledgerCategoryRules';
   const BANK_DATA_KEY  = 'ledgerBankStatements';
 
-  function bankLoadRules() {
-    try { return JSON.parse(localStorage.getItem(BANK_RULES_KEY) || '[]'); } catch(e) { return []; }
+  function bankLoadRules(filterBank = '') {
+    try {
+      const all = JSON.parse(localStorage.getItem(BANK_RULES_KEY) || '[]');
+      if (!filterBank || filterBank === 'all') return all;
+      return all.filter(r => (r.bank === filterBank) || (!r.bank && filterBank === 'shinhan'));
+    } catch(e) { return []; }
   }
   function bankSaveRules(rules) {
     localStorage.setItem(BANK_RULES_KEY, JSON.stringify(rules));
@@ -7929,23 +7933,45 @@
     return txns;
   }
 
-  // 저장된 룰로 자동 분류 (항목, 소분류, 대분류 3단 계층 자동 완성)
-  function bankAutoClassify(transactions) {
+  // 저장된 룰로 자동 분류 (해당 은행 전용 룰 최우선 매칭 및 진영/영호 자동 배정)
+  function bankAutoClassify(transactions, bankType = '') {
     const rules = bankLoadRules();
+    const owner = (bankType === 'shinhan') ? '진영' : '영호';
     return transactions.map(tx => {
-      if (tx.category && tx.category !== '확인필요') return tx;
+      const curBank = tx.bank || bankType;
+      const curOwner = tx.owner || owner;
+      if (tx.category && tx.category !== '확인필요') {
+        return { ...tx, bank: curBank, owner: curOwner };
+      }
       const matched = (typeof bankFindMatchingRule === 'function')
-        ? bankFindMatchingRule(tx.desc, rules)
+        ? bankFindMatchingRule(tx.desc, rules, curBank)
         : null;
       if (matched) {
+        let category = matched.category || '확인필요';
+        let subCategory = matched.subCategory || '';
+        let mainCategory = matched.mainCategory || '';
+
+        // 용돈 관련 분류 시 은행 소유자(진영/영호) 매칭
+        if (category === '용돈' || category === '부부용돈' || /용돈/.test(category)) {
+          category = `${curOwner}-용돈`;
+          subCategory = subCategory || curOwner;
+          mainCategory = '부부용돈';
+        } else if (category === '진영-현대카드' || /(진영[\s\-_]?현대카드)/i.test(tx.desc)) {
+          category = '진영-용돈';
+          subCategory = '진영';
+          mainCategory = '부부용돈';
+        }
+
         return {
           ...tx,
-          category: matched.category || '확인필요',
-          subCategory: matched.subCategory || '',
-          mainCategory: matched.mainCategory || ''
+          bank: curBank,
+          owner: curOwner,
+          category,
+          subCategory,
+          mainCategory
         };
       }
-      return { ...tx, category: '확인필요', subCategory: '', mainCategory: '' };
+      return { ...tx, bank: curBank, owner: curOwner, category: '확인필요', subCategory: '', mainCategory: '' };
     });
   }
 
@@ -8101,8 +8127,8 @@
     return (token && token.length >= 2) ? token : '';
   }
 
-  // 등록된 룰 목록에서 거래내역과 매칭되는 룰 찾기 (접두사 시작 일치 최우선)
-  function bankFindMatchingRule(desc, rulesOrMap) {
+  // 등록된 룰 목록에서 거래내역과 매칭되는 룰 찾기 (은행별 격리 매칭 최우선)
+  function bankFindMatchingRule(desc, rulesOrMap, targetBank = '') {
     if (!desc) return null;
     const cleanDesc = String(desc).trim().toUpperCase();
     const prefix = bankExtractPrefix(desc).toUpperCase();
@@ -8112,20 +8138,45 @@
       ? rulesOrMap
       : Object.entries(rulesOrMap).map(([kw, info]) => ({ keyword: kw, ...info }));
 
-    // 1단계: 접두사 일치 (LH로 시작하거나, 수도로 시작하는 경우 뒤는 무시하고 최우선 매칭!)
-    for (const r of ruleList) {
-      if (!r || !r.keyword || !r.category || r.category === '확인필요') continue;
-      const kw = String(r.keyword).trim().toUpperCase();
-      if (kw.length >= 2) {
-        if (cleanDesc.startsWith(kw) || (prefix && prefix === kw)) {
-          return r;
+    // 1단계: targetBank와 일치하는 은행 전용 규칙 최우선 매칭 (접두사 시작 일치)
+    if (targetBank) {
+      for (const r of ruleList) {
+        if (!r || !r.keyword || !r.category || r.category === '확인필요') continue;
+        if (r.bank && r.bank !== targetBank) continue; // 다른 은행 규칙은 완벽 배제
+        if (r.bank === targetBank) {
+          const kw = String(r.keyword).trim().toUpperCase();
+          if (kw.length >= 2 && (cleanDesc.startsWith(kw) || (prefix && prefix === kw))) {
+            return r;
+          }
+        }
+      }
+      // 1단계-2: targetBank와 일치하는 은행 전용 규칙 (포함 일치)
+      for (const r of ruleList) {
+        if (!r || !r.keyword || !r.category || r.category === '확인필요') continue;
+        if (r.bank && r.bank !== targetBank) continue;
+        if (r.bank === targetBank) {
+          const kw = String(r.keyword).trim().toUpperCase();
+          if (cleanDesc.includes(kw)) {
+            return r;
+          }
         }
       }
     }
 
-    // 2단계: 일반 키워드 포함 일치 (예: "한국전력공사" 등)
+    // 2단계: 은행이 지정되지 않은 공통/기존 규칙 매칭 (접두사 시작 일치)
     for (const r of ruleList) {
       if (!r || !r.keyword || !r.category || r.category === '확인필요') continue;
+      if (targetBank && r.bank && r.bank !== targetBank) continue;
+      const kw = String(r.keyword).trim().toUpperCase();
+      if (kw.length >= 2 && (cleanDesc.startsWith(kw) || (prefix && prefix === kw))) {
+        return r;
+      }
+    }
+
+    // 2단계-2: 공통/기존 규칙 매칭 (포함 일치)
+    for (const r of ruleList) {
+      if (!r || !r.keyword || !r.category || r.category === '확인필요') continue;
+      if (targetBank && r.bank && r.bank !== targetBank) continue;
       const kw = String(r.keyword).trim().toUpperCase();
       if (cleanDesc.includes(kw)) {
         return r;
@@ -8135,8 +8186,8 @@
     return null;
   }
 
-  // 분류된 엑셀 읽어서 룰 학습 및 거래내역 스마트 업데이트 (미입력 항목 자동완성 탑재)
-  async function bankLearnFromExcel(file) {
+  // 분류된 엑셀 읽어서 은행별 룰 독립 학습 및 거래내역 스마트 업데이트 (신한: 진영, 국민/우리: 영호)
+  async function bankLearnFromExcel(file, specifiedBank = '') {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -8144,20 +8195,8 @@
           const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
           const ws = wb.Sheets[wb.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-          const rules = bankLoadRules();
-          const ruleMap = {};
-          rules.forEach(r => {
-            if (r.keyword) {
-              ruleMap[r.keyword] = {
-                category: r.category || '',
-                subCategory: r.subCategory || '',
-                mainCategory: r.mainCategory || '',
-                isUserEdited: Boolean(r.isUserEdited)
-              };
-            }
-          });
 
-          // 헤더 행 동적 감지 (날짜, 출금액, 입금액 열 위치 자동 특정)
+          // 1. 헤더 행 동적 감지 (날짜, 출금액, 입금액, 송금메모 열 위치 자동 특정)
           let headerRowIdx = -1;
           let colDate = 0, colDesc = 1, colOut = 2, colIn = 3, colBal = 4, colMemo = -1, colCat = 5, colSub = 6, colMain = 7;
 
@@ -8181,45 +8220,95 @@
             }
           }
 
+          // 2. 대상 은행 및 소유자 스마트 식별 (신한은 진영 사용 💖, 국민과 우리은행은 영호 사용 💙)
+          let detectedBank = specifiedBank;
+          if (!detectedBank || detectedBank === 'auto') {
+            const fName = String(file.name || '').toLowerCase();
+            if (/신한|shinhan/.test(fName)) {
+              detectedBank = 'shinhan';
+            } else if (/국민|kb|kookmin/.test(fName)) {
+              detectedBank = 'kookmin';
+            } else if (/우리|woori/.test(fName)) {
+              detectedBank = 'woori';
+            } else if (colMemo >= 0) {
+              detectedBank = 'kookmin';
+            } else {
+              detectedBank = 'shinhan';
+            }
+          }
+
+          const owner = (detectedBank === 'shinhan') ? '진영' : '영호';
+
+          // 기존 규칙 로드 및 해당 은행 전용 룰맵 구성 (은행별 격리 학습)
+          const allRules = bankLoadRules();
+          const ruleMap = {};
+          allRules.forEach(r => {
+            const rBank = r.bank || 'shinhan';
+            if (rBank === detectedBank && r.keyword) {
+              ruleMap[r.keyword] = {
+                category: r.category || '',
+                subCategory: r.subCategory || '',
+                mainCategory: r.mainCategory || '',
+                isUserEdited: Boolean(r.isUserEdited),
+                bank: detectedBank,
+                owner
+              };
+            }
+          });
+
           const startIdx = headerRowIdx >= 0 ? headerRowIdx + 1 : 1;
           let newTxns = [], learnedCount = 0;
 
-          // 1단계: 최신 엑셀에 기재된 분류를 최우선 기준으로 규칙 학습 & 스마트 접두사 등록
+          // 3. 1단계: 최신 엑셀에 기재된 분류를 해당 은행 전용 규칙으로 독립 학습
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
             const desc = String(row[colDesc] || '').trim();
-            const category     = String(row[colCat] || '').trim();
-            const subCategory  = String(row[colSub] || '').trim();
-            const mainCategory = String(row[colMain] || '').trim();
+            let category     = String(row[colCat] || '').trim();
+            let subCategory  = String(row[colSub] || '').trim();
+            let mainCategory = String(row[colMain] || '').trim();
             if (!desc) continue;
 
-            // 엑셀에 유효한 항목이 기재되어 있다면 항상 최신 엑셀 기준으로 규칙 갱신/학습
             if (category && category !== '확인필요') {
+              // 용돈 관련 분류 시 은행 소유자(진영/영호)에 맞게 자동 매칭
+              if (category === '용돈' || category === '부부용돈' || /용돈/.test(category)) {
+                category = `${owner}-용돈`;
+                subCategory = subCategory || owner;
+                mainCategory = '부부용돈';
+              } else if (category === '진영-현대카드' || /(진영[\s\-_]?현대카드)/i.test(desc)) {
+                category = '진영-용돈';
+                subCategory = '진영';
+                mainCategory = '부부용돈';
+              }
+
               // 1-1) 전체 거래내용 등록 (앞 12자리)
               const keyword = desc.length > 12 ? desc.substring(0, 12) : desc;
               ruleMap[keyword] = {
                 category,
                 subCategory: subCategory || (ruleMap[keyword]?.subCategory || ''),
                 mainCategory: mainCategory || (ruleMap[keyword]?.mainCategory || ''),
-                isUserEdited: true // 최신 엑셀에 사용자가 직접 기재했으므로 최우선 규칙으로 승격
+                isUserEdited: true,
+                bank: detectedBank,
+                owner
               };
               learnedCount++;
 
-              // 1-2) 핵심 접두사(시작 단어) 등록 (예: LH202608 -> LH, 수도 2608가정 -> 수도)
+              // 1-2) 핵심 접두사 등록 (예: LH, 수도 등)
               const prefix = bankExtractPrefix(desc);
               if (prefix && prefix.length >= 2) {
                 ruleMap[prefix] = {
                   category,
                   subCategory: subCategory || (ruleMap[prefix]?.subCategory || ''),
                   mainCategory: mainCategory || (ruleMap[prefix]?.mainCategory || ''),
-                  isUserEdited: true
+                  isUserEdited: true,
+                  bank: detectedBank,
+                  owner
                 };
               }
             }
           }
 
-          // 2단계: 거래내역 생성 (엑셀에 직접 기재된 값 최우선 유지, 비어있거나 '확인필요'인 항목만 규칙으로 자동완성)
+          // 4. 2단계: 거래내역 생성 (해당 은행 규칙으로만 자동완성 & 은행/소유자 태깅)
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
@@ -8232,14 +8321,11 @@
             let subCategory  = String(row[colSub] || '').trim();
             let mainCategory = String(row[colMain] || '').trim();
 
-            // 유효한 거래 행 판단 (날짜가 있고 출금이나 입금 금액이 0보다 큰 경우)
             if (!date && out === 0 && inn === 0) continue;
 
-            // [우선순위 원칙]:
-            // 엑셀에 사용자가 직접 기재한 분류는 100% 최우선 유지!
-            // 항목이 비어있거나 '확인필요'인 경우에만 기존/새로 학습된 규칙으로 자동완성!
+            // 미분류 항목만 해당 은행 룰맵으로 자동완성
             if (!category || category === '확인필요') {
-              const matched = bankFindMatchingRule(desc, ruleMap);
+              const matched = bankFindMatchingRule(desc, ruleMap, detectedBank);
               if (matched) {
                 category = matched.category || '확인필요';
                 if (matched.subCategory) subCategory = matched.subCategory;
@@ -8247,8 +8333,12 @@
               }
             }
 
-            // '진영-현대카드' 및 '진영-용돈' 단일화 처리
-            if (category === '진영-현대카드' || /(진영[\s\-_]?현대카드)/i.test(desc)) {
+            // 용돈 자동 단일화 (신한: 진영, 국민/우리: 영호)
+            if (category === '용돈' || category === '부부용돈' || /용돈/.test(category)) {
+              category = `${owner}-용돈`;
+              subCategory = subCategory || owner;
+              mainCategory = '부부용돈';
+            } else if (category === '진영-현대카드' || /(진영[\s\-_]?현대카드)/i.test(desc)) {
               category = '진영-용돈';
               subCategory = '진영';
               mainCategory = '부부용돈';
@@ -8261,40 +8351,38 @@
               in: inn,
               balance: bal,
               memo: colMemo >= 0 ? String(row[colMemo] || '').trim() : '',
+              bank: detectedBank,
+              owner,
               category: category || '확인필요',
               subCategory: subCategory || '',
               mainCategory: mainCategory || ''
             });
           }
 
-          // 새 룰 영구 저장 (사용자 편집 플래그 보존)
-          bankSaveRules(Object.entries(ruleMap).map(([keyword, info]) => ({
+          // 5. 새 룰 영구 저장 (다른 은행의 기존 규칙 보존 + 현재 은행 규칙 갱신 병합)
+          const otherBankRules = allRules.filter(r => (r.bank || 'shinhan') !== detectedBank);
+          const currentBankRules = Object.entries(ruleMap).map(([keyword, info]) => ({
             keyword,
             category: info.category,
             subCategory: info.subCategory,
             mainCategory: info.mainCategory,
-            isUserEdited: Boolean(info.isUserEdited)
-          })));
+            isUserEdited: Boolean(info.isUserEdited),
+            bank: detectedBank,
+            owner
+          }));
+          bankSaveRules([...otherBankRules, ...currentBankRules]);
 
-          // 기존 내역에 새 엑셀 거래내역 안전 교체/병합 (금액 유실 원천 차단)
+          // 기존 내역에 새 엑셀 거래내역 안전 교체/병합
           if (newTxns.length > 0) {
             bankMergeAndSaveStatements(newTxns);
           }
 
-          // 상단 신혼 가계부 대시보드(store.honeymoonData) 자동 분류/집계 동기화
-          if (typeof syncBankToHoneymoonData === 'function') {
-            syncBankToHoneymoonData();
-          }
-
           // 상단 및 하단 대시보드 즉시 재계산 및 갱신
-          if (window.UI && typeof UI.renderLedger === 'function') {
-            UI.renderLedger();
-          }
-          if (typeof window.bankRenderMonthlyDashboard === 'function') {
-            window.bankRenderMonthlyDashboard();
-          }
+          if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
+          if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
+          if (typeof window.bankRenderMonthlyDashboard === 'function') window.bankRenderMonthlyDashboard();
 
-          resolve({ transactions: newTxns, learnedCount });
+          resolve({ transactions: newTxns, learnedCount, bank: detectedBank, owner });
         } catch (err) { reject(err); }
       };
       reader.onerror = reject;
@@ -8703,8 +8791,16 @@
         totalOut += outAmt;
         totalIn  += inAmt;
 
-        const isJyPocket = /(진영[\s\-_]?(용돈|현대카드))/i.test(catStr) || /(진영[\s\-_]?(용돈|현대카드))/i.test(desc);
-        const isYhPocket = /(영호[\s\-_]?용돈)/i.test(catStr) || /(영호[\s\-_]?용돈)/i.test(desc);
+        const isShinhan = tx.bank === 'shinhan' || tx.owner === '진영';
+        const isKookminOrWoori = tx.bank === 'kookmin' || tx.bank === 'woori' || tx.owner === '영호';
+
+        const isJyPocket = isShinhan
+          ? (/(용돈|현대카드)/i.test(catStr) || /(용돈|현대카드)/i.test(desc) || mainCatRaw === '부부용돈')
+          : (/(진영[\s\-_]?(용돈|현대카드))/i.test(catStr) || /(진영[\s\-_]?(용돈|현대카드))/i.test(desc));
+
+        const isYhPocket = isKookminOrWoori
+          ? (/(용돈)/i.test(catStr) || /(용돈)/i.test(desc) || mainCatRaw === '부부용돈')
+          : (/(영호[\s\-_]?용돈)/i.test(catStr) || /(영호[\s\-_]?용돈)/i.test(desc));
 
         if (outAmt > 0) {
           if (isJyPocket) { jyAmount += outAmt; jyCount++; }
@@ -8715,10 +8811,14 @@
         let subCat  = tx.subCategory  || '';
         let cat     = tx.category     || '확인필요';
 
-        // 진영-현대카드 및 진영-용돈 단일화 처리
+        // 진영-현대카드 및 진영-용돈 / 영호-용돈 단일화 처리
         if (cat === '진영-현대카드' || isJyPocket) {
           cat = '진영-용돈';
           subCat = '진영';
+          mainCat = '부부용돈';
+        } else if (isYhPocket) {
+          cat = '영호-용돈';
+          subCat = '영호';
           mainCat = '부부용돈';
         }
 
@@ -8952,22 +9052,62 @@
     UI.showToast(`${parseInt(mon)}월 확인필요 ${txns.length}건 엑셀 파일이 다운로드되었습니다.`, 'success');
   };
 
-  // 규칙 관리 패널 렌더링 (인라인 직접 편집 에디터)
-  function bankRenderRulesPanel() {
+  // 은행별 규칙 필터 상태
+  window._activeRuleBankFilter = window._activeRuleBankFilter || 'all';
+
+  // 규칙 관리 패널 렌더링 (은행별 탭 & 인라인 직접 편집 에디터)
+  function bankRenderRulesPanel(filterBank) {
     const list  = document.getElementById('bank-rules-list');
     const empty = document.getElementById('bank-rules-empty');
     if (!list) return;
-    const rules = bankLoadRules();
-    if (rules.length === 0) {
+
+    if (filterBank !== undefined) window._activeRuleBankFilter = filterBank;
+    const currentTab = window._activeRuleBankFilter;
+
+    const allRules = bankLoadRules();
+    const shCount = allRules.filter(r => (r.bank || 'shinhan') === 'shinhan').length;
+    const kbCount = allRules.filter(r => r.bank === 'kookmin').length;
+    const wrCount = allRules.filter(r => r.bank === 'woori').length;
+
+    // 탭 UI 렌더링 (패널 상단 탭 바가 없을 경우 동적 주입)
+    let tabsContainer = document.getElementById('bank-rules-tabs-container');
+    if (!tabsContainer) {
+      tabsContainer = document.createElement('div');
+      tabsContainer.id = 'bank-rules-tabs-container';
+      tabsContainer.style.cssText = 'display:flex;gap:0.4rem;margin-bottom:0.75rem;flex-wrap:wrap;';
+      list.parentElement.insertBefore(tabsContainer, list);
+    }
+
+    const tabDefs = [
+      { id: 'all', label: `🌐 전체 (${allRules.length})` },
+      { id: 'shinhan', label: `💖 신한은행(진영) (${shCount})` },
+      { id: 'kookmin', label: `💙 국민은행(영호) (${kbCount})` },
+      { id: 'woori', label: `💙 우리은행(영호) (${wrCount})` }
+    ];
+
+    tabsContainer.innerHTML = tabDefs.map(t => {
+      const active = (currentTab === t.id);
+      return `<button type="button" onclick="bankRenderRulesPanel('${t.id}')" style="font-size:0.76rem;padding:0.35rem 0.75rem;border-radius:8px;border:1px solid ${active ? 'var(--primary,#ff6b8b)' : '#cbd5e1'};background:${active ? 'rgba(255,107,139,0.12)' : '#fff'};color:${active ? 'var(--primary,#ff6b8b)' : 'var(--text-muted)'};font-weight:${active ? '800' : '600'};cursor:pointer;">${t.label}</button>`;
+    }).join('');
+
+    const displayRules = (currentTab === 'all')
+      ? allRules
+      : allRules.filter(r => (r.bank || 'shinhan') === currentTab);
+
+    if (displayRules.length === 0) {
       list.innerHTML = '';
-      if (empty) empty.style.display = 'block';
+      if (empty) {
+        empty.style.display = 'block';
+        empty.textContent = (currentTab === 'all') ? '등록된 분류 규칙이 없습니다.' : `해당 은행(${currentTab})에 등록된 분류 규칙이 없습니다.`;
+      }
       return;
     }
     if (empty) empty.style.display = 'none';
 
     const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장금액이동', '통장이동'];
 
-    list.innerHTML = rules.map((r, idx) => {
+    list.innerHTML = displayRules.map((r, idx) => {
+      const rBank = r.bank || 'shinhan';
       const mainOptHtml = mainOptions.map(opt => {
         const sel = (r.mainCategory === opt) ? 'selected' : '';
         return `<option value="${escapeHTML(opt)}" ${sel}>${escapeHTML(opt)}</option>`;
@@ -8977,8 +9117,16 @@
         <div class="bank-rule-edit-row" data-idx="${idx}" style="display:flex;align-items:center;gap:0.4rem;padding:0.45rem 0.65rem;background:rgba(255,255,255,0.95);border-radius:10px;font-size:0.82rem;border:1px solid var(--border-light,#f0e6ea);flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:0.35rem;flex:1;min-width:240px;flex-wrap:wrap;">
             <div style="display:flex;flex-direction:column;gap:1px;">
+              <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">은행(사용자)</span>
+              <select class="rule-edit-bank" style="font-size:0.75rem;padding:0.25rem 0.35rem;border:1px solid #cbd5e1;border-radius:6px;font-weight:700;background:#fff;color:${rBank === 'shinhan' ? '#ff6b8b' : '#339af0'};">
+                <option value="shinhan" ${rBank === 'shinhan' ? 'selected' : ''}>신한(진영 💖)</option>
+                <option value="kookmin" ${rBank === 'kookmin' ? 'selected' : ''}>국민(영호 💙)</option>
+                <option value="woori" ${rBank === 'woori' ? 'selected' : ''}>우리(영호 💙)</option>
+              </select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1px;">
               <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">키워드</span>
-              <input type="text" class="rule-edit-kw" value="${escapeHTML(r.keyword || '')}" placeholder="키워드 (예: LH, 수도)" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:115px;font-weight:700;color:var(--text-main);">
+              <input type="text" class="rule-edit-kw" value="${escapeHTML(r.keyword || '')}" placeholder="키워드 (예: LH, 수도)" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:110px;font-weight:700;color:var(--text-main);">
             </div>
             <span style="color:var(--text-muted);margin-top:0.9rem;">➔</span>
             <div style="display:flex;flex-direction:column;gap:1px;">
@@ -8987,7 +9135,7 @@
             </div>
             <div style="display:flex;flex-direction:column;gap:1px;">
               <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">소분류</span>
-              <input type="text" class="rule-edit-sub" value="${escapeHTML(r.subCategory || '')}" placeholder="소분류" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:85px;color:var(--text-main);">
+              <input type="text" class="rule-edit-sub" value="${escapeHTML(r.subCategory || '')}" placeholder="소분류" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:80px;color:var(--text-main);">
             </div>
             <div style="display:flex;flex-direction:column;gap:1px;">
               <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">대분류</span>
@@ -9002,7 +9150,7 @@
     }).join('');
   }
 
-  // 규칙 실시간 검색 함수 (1번 요구사항: 검색기능)
+  // 규칙 실시간 검색 함수
   window.bankFilterRules = function(keyword) {
     const list = document.getElementById('bank-rules-list');
     if (!list) return;
@@ -9028,6 +9176,10 @@
     if (!list) return;
     if (empty) empty.style.display = 'none';
 
+    const defaultBank = (window._activeRuleBankFilter && window._activeRuleBankFilter !== 'all')
+      ? window._activeRuleBankFilter
+      : 'shinhan';
+
     const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장금액이동', '통장이동'];
     const mainOptHtml = mainOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
 
@@ -9037,8 +9189,16 @@
     newRow.innerHTML = `
       <div style="display:flex;align-items:center;gap:0.35rem;flex:1;min-width:240px;flex-wrap:wrap;">
         <div style="display:flex;flex-direction:column;gap:1px;">
+          <span style="font-size:0.68rem;color:#7048e8;font-weight:700;">은행(사용자)</span>
+          <select class="rule-edit-bank" style="font-size:0.75rem;padding:0.25rem 0.35rem;border:1px solid #7048e8;border-radius:6px;font-weight:700;background:#fff;">
+            <option value="shinhan" ${defaultBank === 'shinhan' ? 'selected' : ''}>신한(진영 💖)</option>
+            <option value="kookmin" ${defaultBank === 'kookmin' ? 'selected' : ''}>국민(영호 💙)</option>
+            <option value="woori" ${defaultBank === 'woori' ? 'selected' : ''}>우리(영호 💙)</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1px;">
           <span style="font-size:0.68rem;color:#7048e8;font-weight:700;">새 키워드</span>
-          <input type="text" class="rule-edit-kw" placeholder="키워드 (예: LH, 수도)" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #7048e8;border-radius:6px;width:115px;font-weight:700;color:var(--text-main);">
+          <input type="text" class="rule-edit-kw" placeholder="키워드 (예: LH, 수도)" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #7048e8;border-radius:6px;width:110px;font-weight:700;color:var(--text-main);">
         </div>
         <span style="color:var(--text-muted);margin-top:0.9rem;">➔</span>
         <div style="display:flex;flex-direction:column;gap:1px;">
@@ -9047,7 +9207,7 @@
         </div>
         <div style="display:flex;flex-direction:column;gap:1px;">
           <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">소분류</span>
-          <input type="text" class="rule-edit-sub" placeholder="소분류" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:85px;color:var(--text-main);">
+          <input type="text" class="rule-edit-sub" placeholder="소분류" style="font-size:0.8rem;padding:0.25rem 0.45rem;border:1px solid #cbd5e1;border-radius:6px;width:80px;color:var(--text-main);">
         </div>
         <div style="display:flex;flex-direction:column;gap:1px;">
           <span style="font-size:0.68rem;color:var(--text-muted);font-weight:700;">대분류</span>
@@ -9063,54 +9223,79 @@
     newRow.querySelector('.rule-edit-kw')?.focus();
   };
 
-  // 편집사항 저장하기: 사용자 편집 규칙 최우선 영구 저장 및 전체 거래내역 강제 재분류(Override)
+  // 편집사항 저장하기: 사용자 편집 규칙 최우선 영구 저장 및 전체 거래내역 은행별 강제 재분류
   window.bankSaveEditedRules = function() {
     const list = document.getElementById('bank-rules-list');
     if (!list) return;
     const rows = list.querySelectorAll('.bank-rule-edit-row');
-    const newRules = [];
+    const currentTab = window._activeRuleBankFilter || 'all';
+
+    const allRules = bankLoadRules();
+    // 현재 탭 외의 다른 은행 규칙 보존
+    const preservedRules = (currentTab === 'all')
+      ? []
+      : allRules.filter(r => (r.bank || 'shinhan') !== currentTab);
+
+    const editedRules = [];
     rows.forEach(r => {
       const kw = r.querySelector('.rule-edit-kw')?.value.trim();
       let cat = r.querySelector('.rule-edit-cat')?.value.trim();
       let sub = r.querySelector('.rule-edit-sub')?.value.trim() || '';
       let main = r.querySelector('.rule-edit-main')?.value.trim() || '';
+      const bank = r.querySelector('.rule-edit-bank')?.value || (currentTab !== 'all' ? currentTab : 'shinhan');
+      const owner = (bank === 'shinhan') ? '진영' : '영호';
+
       if (kw && cat) {
-        if (cat === '진영-현대카드') {
+        if (cat === '용돈' || cat === '부부용돈' || /용돈/.test(cat)) {
+          cat = `${owner}-용돈`;
+          sub = sub || owner;
+          main = '부부용돈';
+        } else if (cat === '진영-현대카드') {
           cat = '진영-용돈';
           sub = sub || '진영';
           main = '부부용돈';
         }
-        newRules.push({
+        editedRules.push({
           keyword: kw,
           category: cat,
           subCategory: sub,
-          mainCategory: (cat === '진영-용돈') ? '부부용돈' : main,
-          isUserEdited: true // 최상위 우선순위 플래그!
+          mainCategory: (cat === `${owner}-용돈`) ? '부부용돈' : main,
+          isUserEdited: true,
+          bank,
+          owner
         });
       }
     });
 
-    // 1. 규칙 영구 저장
-    bankSaveRules(newRules);
+    const fullNewRules = [...preservedRules, ...editedRules];
 
-    // 2. 현재 저장된 모든 거래내역에 사용자의 새 규칙을 100% 최우선 강제 재적용(Override)!
+    // 1. 규칙 영구 저장
+    bankSaveRules(fullNewRules);
+
+    // 2. 현재 저장된 모든 거래내역에 사용자의 새 규칙을 해당 은행별로 최우선 강제 재적용
     const statements = bankLoadStatements();
     let overrideCount = 0;
     const updatedStatements = statements.map(tx => {
       const updatedTx = { ...tx };
-      // 사용자 편집 규칙 최우선 매칭
-      const matched = bankFindMatchingRule(updatedTx.desc, newRules);
+      const curBank = updatedTx.bank || 'shinhan';
+      const curOwner = updatedTx.owner || (curBank === 'shinhan' ? '진영' : '영호');
+      updatedTx.bank = curBank;
+      updatedTx.owner = curOwner;
+
+      const matched = bankFindMatchingRule(updatedTx.desc, fullNewRules, curBank);
       if (matched) {
-        updatedTx.category = matched.category;
-        if (matched.subCategory) updatedTx.subCategory = matched.subCategory;
-        if (matched.mainCategory) updatedTx.mainCategory = matched.mainCategory;
+        let cat = matched.category;
+        let sub = matched.subCategory;
+        let main = matched.mainCategory;
+        if (cat === '용돈' || cat === '부부용돈' || /용돈/.test(cat)) {
+          cat = `${curOwner}-용돈`;
+          sub = sub || curOwner;
+          main = '부부용돈';
+        }
+        updatedTx.category = cat;
+        if (sub) updatedTx.subCategory = sub;
+        if (main) updatedTx.mainCategory = main;
         overrideCount++;
-      }
-      // 진영-현대카드 -> 진영-용돈 단일화
-      if (updatedTx.category === '진영-현대카드' || /(진영[\s\-_]?현대카드)/i.test(updatedTx.desc || '')) {
-        updatedTx.category = '진영-용돈';
-        updatedTx.subCategory = '진영';
-        updatedTx.mainCategory = '부부용돈';
       }
       return updatedTx;
     });
@@ -9118,18 +9303,12 @@
     bankSaveStatements(updatedStatements);
 
     // 3. 상단 및 하단 대시보드 실시간 동기화 및 렌더링
-    if (typeof syncBankToHoneymoonData === 'function') {
-      syncBankToHoneymoonData();
-    }
-    if (window.UI && typeof UI.renderLedger === 'function') {
-      UI.renderLedger();
-    }
-    if (typeof bankRenderMonthlyDashboard === 'function') {
-      bankRenderMonthlyDashboard();
-    }
+    if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
+    if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
+    if (typeof bankRenderMonthlyDashboard === 'function') bankRenderMonthlyDashboard();
     bankRenderRulesPanel();
 
-    UI.showToast(`💾 편집사항이 저장되었습니다! (규칙 ${newRules.length}개 저장, ${overrideCount}건 거래내역 최우선 업데이트 완료)`, 'success');
+    UI.showToast(`💾 편집사항이 저장되었습니다! (규칙 ${fullNewRules.length}개 저장, ${overrideCount}건 거래내역 최우선 업데이트 완료)`, 'success');
   };
 
   // 규칙 단건 삭제
@@ -9237,7 +9416,7 @@
             bankShowStatus(`⚠️ ${bName} 거래내역을 찾지 못했어요. 은행 선택이 맞는지 확인해 주세요. (콘솔 로그 확인 가능)`, 'error');
             return;
           }
-          txns = bankAutoClassify(txns);
+          txns = bankAutoClassify(txns, bankType);
           const firstDate = txns[0]?.date || '';
           const mm = firstDate.match(/(\d{4})-(\d{2})/);
           const monthStr = mm ? `${mm[1]}${mm[2]}` : '';
@@ -9268,15 +9447,21 @@
     if (excelForm) {
       excelForm.addEventListener('submit', async () => {
         const fileInput = document.getElementById('ledger-modal-file-input');
+        const bankSelect = document.getElementById('ledger-modal-bank');
+        const specifiedBank = bankSelect ? bankSelect.value : 'auto';
         if (!fileInput?.files?.length) return;
         try {
-          const { learnedCount } = await bankLearnFromExcel(fileInput.files[0]);
+          const { learnedCount, bank, owner } = await bankLearnFromExcel(fileInput.files[0], specifiedBank);
           if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
           if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
           bankRenderMonthlyDashboard();
           bankRenderRulesPanel();
+          const bankName = (bank === 'shinhan') ? '신한은행(진영 💖)' : ((bank === 'kookmin') ? 'KB국민은행(영호 💙)' : '우리은행(영호 💙)');
           if (learnedCount > 0) {
-            bankShowStatus(`📚 새로운 분류 규칙 ${learnedCount}개를 학습했어요!`, 'success');
+            bankShowStatus(`📚 ${bankName} 분류 규칙 ${learnedCount}개를 학습했어요!`, 'success');
+            UI.showToast(`📚 ${bankName} 규칙 ${learnedCount}개 학습 및 대시보드 반영 완료! ✨`, 'success');
+          } else {
+            UI.showToast(`✅ ${bankName} 거래내역이 대시보드에 안전하게 반영되었어요! ✨`, 'success');
           }
         } catch (err) { console.error('[BankAnalyzer Excel]', err); }
       });
