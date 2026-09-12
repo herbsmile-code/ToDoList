@@ -3911,12 +3911,12 @@
             <div class="ledger-bar-col ${isCurrent ? 'is-current' : ''}" data-l-month="${m}" title="${m}월 수입: ${formatKRW(inc)} / 총지출: ${formatKRW(totalExp)} (고정 ${formatKRW(f)} + 변동 ${formatKRW(v)})">
               ${totalFormatted ? `<span class="ledger-bar-amount">${totalFormatted}</span>` : ''}
               <div class="ledger-bar-track">
-                <!-- 🟢 월급(수입) -->
-                <div class="ledger-bar-segment-income" style="height: ${incomeHeightPct}%;"></div>
                 <!-- 🌸 변동지출 -->
                 <div class="ledger-bar-segment-variable" style="height: ${varHeightPct}%;"></div>
                 <!-- 🟣 고정지출 -->
                 <div class="ledger-bar-segment-fixed" style="height: ${fixedHeightPct}%;"></div>
+                <!-- 🟢 월급(수입) - 가장 아래 바닥 -->
+                <div class="ledger-bar-segment-income" style="height: ${incomeHeightPct}%;"></div>
               </div>
               <span class="ledger-bar-label">${m}월</span>
             </div>
