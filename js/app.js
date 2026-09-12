@@ -3883,13 +3883,13 @@
       // Render 12-Month Stacked Bar Chart
       const chartContainer = document.getElementById('ledger-bar-chart-container');
       if (chartContainer) {
-        let maxVal = 7500000;
+        let maxVal = 9000000;
         for (let m = 1; m <= 12; m++) {
           if (data[m]) {
-            const exp = (data[m].fixed.total || 0) + (data[m].variable.total || 0);
-            const inc = data[m].income.total || 0;
-            if (exp > maxVal) maxVal = exp;
-            if (inc > maxVal) maxVal = inc;
+            const exp = (data[m].fixed?.total || 0) + (data[m].variable?.total || 0);
+            const inc = data[m].income?.total || 0;
+            const combined = exp + inc;
+            if (combined > maxVal) maxVal = combined;
           }
         }
 
@@ -3899,27 +3899,24 @@
           const inc = mObj.income?.total || 0;
           const f = mObj.fixed?.total || 0;
           const v = mObj.variable?.total || 0;
-          const total = f + v;
+          const totalExp = f + v;
           const isCurrent = (m === targetMonth);
 
           const incomeHeightPct = maxVal > 0 ? (inc / maxVal) * 100 : 0;
           const fixedHeightPct = maxVal > 0 ? (f / maxVal) * 100 : 0;
           const varHeightPct = maxVal > 0 ? (v / maxVal) * 100 : 0;
-          const totalFormatted = total > 0 ? (total >= 10000 ? `${Math.round(total / 10000)}만` : `${total}원`) : '';
+          const totalFormatted = totalExp > 0 ? (totalExp >= 10000 ? `${Math.round(totalExp / 10000)}만` : `${totalExp}원`) : '';
 
           barsHTML += `
-            <div class="ledger-bar-col ${isCurrent ? 'is-current' : ''}" data-l-month="${m}" title="${m}월 수입: ${formatKRW(inc)} / 총지출: ${formatKRW(total)} (고정 ${formatKRW(f)} + 변동 ${formatKRW(v)})">
+            <div class="ledger-bar-col ${isCurrent ? 'is-current' : ''}" data-l-month="${m}" title="${m}월 수입: ${formatKRW(inc)} / 총지출: ${formatKRW(totalExp)} (고정 ${formatKRW(f)} + 변동 ${formatKRW(v)})">
               ${totalFormatted ? `<span class="ledger-bar-amount">${totalFormatted}</span>` : ''}
-              <div class="ledger-bar-dual-tracks">
-                <!-- 🟢 월급(수입) 막대 -->
-                <div class="ledger-bar-track track-income" title="수입: ${formatKRW(inc)}">
-                  <div class="ledger-bar-segment-income" style="height: ${incomeHeightPct}%;"></div>
-                </div>
-                <!-- 🟣 고정 + 🌸 변동 지출 막대 -->
-                <div class="ledger-bar-track track-expense" title="지출: ${formatKRW(total)}">
-                  <div class="ledger-bar-segment-variable" style="height: ${varHeightPct}%;"></div>
-                  <div class="ledger-bar-segment-fixed" style="height: ${fixedHeightPct}%;"></div>
-                </div>
+              <div class="ledger-bar-track">
+                <!-- 🟢 월급(수입) -->
+                <div class="ledger-bar-segment-income" style="height: ${incomeHeightPct}%;"></div>
+                <!-- 🌸 변동지출 -->
+                <div class="ledger-bar-segment-variable" style="height: ${varHeightPct}%;"></div>
+                <!-- 🟣 고정지출 -->
+                <div class="ledger-bar-segment-fixed" style="height: ${fixedHeightPct}%;"></div>
               </div>
               <span class="ledger-bar-label">${m}월</span>
             </div>
@@ -8159,9 +8156,17 @@
         const subCategory = tx.subCategory || '';
         const mainCategory = tx.mainCategory || '';
 
-        // [사용자 요청 2]: 통장이동금액은 지출(고정/변동/기타) 및 수입에서 완전 제외!
-        if (mainCategory === '통장이동' || mainCategory === '통장이동금액' || /통장이동/i.test(catStr) || /통장이동/i.test(desc) || (category && /통장이동/i.test(category))) {
-          return; // 단순 계좌 간 이동이므로 집계에서 완전 통과
+        // [사용자 요청]: 대분류 '통장금액이동' 및 통장이동 관련 내역은 지출/수입에서 100% 완전 제외!
+        const isTransfer = (
+          mainCategory === '통장금액이동' || mainCategory === '통장이동' || mainCategory === '통장이동금액' ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(mainCategory) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(catStr) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(desc) ||
+          (category && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/i.test(category))
+        );
+
+        if (isTransfer) {
+          return; // 변동지출, 고정지출, 기타지출, 저축, 수입 어디에도 합산하지 않고 완전 통과!
         }
 
         // [수입] 입금액(inAmt > 0)
@@ -8434,13 +8439,26 @@
       const tree = {};
 
       txns.forEach(tx => {
+        const catStr = `${tx.category || ''} ${tx.subCategory || ''} ${tx.mainCategory || ''}`.trim();
+        const desc   = tx.desc || '';
+        const mainCatRaw = tx.mainCategory || '';
+        const catRaw = tx.category || '';
+
+        // [사용자 요청]: 통장금액이동은 순수 소비/지출이 아니므로 월별 통계에서도 완전 제외!
+        const isTransfer = (
+          mainCatRaw === '통장금액이동' || mainCatRaw === '통장이동' || mainCatRaw === '통장이동금액' ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(mainCatRaw) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(catStr) ||
+          /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액|계좌이동|계좌이체|본인이체|내계좌이체/i.test(desc) ||
+          (catRaw && /통장.*이동|이동.*통장|통장금액이동|통장이동|통장이동금액/i.test(catRaw))
+        );
+        if (isTransfer) return;
+
         const outAmt = parseAmount(tx.out);
         const inAmt  = parseAmount(tx.in);
         totalOut += outAmt;
         totalIn  += inAmt;
 
-        const catStr = `${tx.category || ''} ${tx.subCategory || ''} ${tx.mainCategory || ''}`.trim();
-        const desc   = tx.desc || '';
         const isJyPocket = /(진영[\s\-_]?(용돈|현대카드))/i.test(catStr) || /(진영[\s\-_]?(용돈|현대카드))/i.test(desc);
         const isYhPocket = /(영호[\s\-_]?용돈)/i.test(catStr) || /(영호[\s\-_]?용돈)/i.test(desc);
 
@@ -8703,7 +8721,7 @@
     }
     if (empty) empty.style.display = 'none';
 
-    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장이동'];
+    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장금액이동', '통장이동'];
 
     list.innerHTML = rules.map((r, idx) => {
       const mainOptHtml = mainOptions.map(opt => {
@@ -8766,7 +8784,7 @@
     if (!list) return;
     if (empty) empty.style.display = 'none';
 
-    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장이동'];
+    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장금액이동', '통장이동'];
     const mainOptHtml = mainOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
 
     const newRow = document.createElement('div');
