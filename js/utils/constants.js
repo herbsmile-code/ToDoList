@@ -256,6 +256,7 @@
     { id: 'all', name: '전체보기', icon: '📁' },
     { id: 'personal', name: '개인', icon: '🌸' },
     { id: 'work', name: '회사', icon: '💼' },
+    { id: 'ledger', name: '가계부', icon: '💰' },
     { id: 'general', name: '기타', icon: '📦' }
   ];
 

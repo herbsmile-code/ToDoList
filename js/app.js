@@ -8071,25 +8071,38 @@
     });
   }
 
-  // 거래내역 안전 교체 & 병합 (업로드된 월의 데이터를 100% 무결성으로 교체, 다른 월은 보존)
+  // 거래내역 안전 교체 & 병합 (업로드된 파일의 날짜 구간 [minDate, maxDate]은 최신 파일로 덮어쓰기, 그 외 구간은 100% 보존)
   function bankMergeAndSaveStatements(newTxns) {
+    if (!Array.isArray(newTxns) || newTxns.length === 0) return bankLoadStatements();
     const existing = bankLoadStatements();
 
-    // 새로 업로드된 엑셀에 존재하는 월 목록 (예: '2026-09')
-    const uploadedMonths = new Set(newTxns.map(t => {
-      const d = bankNormalizeDate(t.date);
-      return d ? d.substring(0, 7) : '';
-    }).filter(Boolean));
+    // 1. 새 거래내역에서 유효한 날짜 목록 추출 및 정렬
+    const validDates = newTxns.map(t => bankNormalizeDate(t.date)).filter(Boolean).sort();
 
-    // 기존 데이터 중 이번에 업로드되지 않은 다른 월 데이터는 그대로 보존
-    const otherMonthsData = existing.filter(t => {
-      const d = bankNormalizeDate(t.date);
-      const m = d ? d.substring(0, 7) : '';
-      return !uploadedMonths.has(m);
+    let nonOverlapping;
+    if (validDates.length > 0) {
+      const minDate = validDates[0];
+      const maxDate = validDates[validDates.length - 1];
+
+      // 2. 기존 데이터 중 새 파일의 날짜 구간 [minDate, maxDate]에 속하지 않는 데이터만 보존
+      //    (중복 날짜 구간은 사용자가 새로 올린 최신 엑셀 내역으로 깔끔하게 덮어쓰기)
+      nonOverlapping = existing.filter(t => {
+        const d = bankNormalizeDate(t.date);
+        if (!d) return false;
+        return d < minDate || d > maxDate;
+      });
+    } else {
+      nonOverlapping = existing;
+    }
+
+    // 3. 새 거래내역과 기존 비중복 데이터 병합 및 날짜 오름차순 정렬
+    const merged = [...nonOverlapping, ...newTxns];
+    merged.sort((a, b) => {
+      const da = bankNormalizeDate(a.date) || '';
+      const db = bankNormalizeDate(b.date) || '';
+      return da.localeCompare(db);
     });
 
-    // 이번 업로드된 월은 엑셀 원본 그대로 100% 완전하게 반영 (중복 제거로 인한 금액 누락 원천 차단)
-    const merged = [...otherMonthsData, ...newTxns];
     if (merged.length > 10000) merged.splice(0, merged.length - 10000);
     bankSaveStatements(merged);
     return merged;
@@ -8369,7 +8382,7 @@
 
     if (statements.length === 0) {
       grid.innerHTML = `<div style="text-align:center;padding:2.5rem;color:var(--text-muted);font-size:0.88rem;background:var(--card-bg,#fff);border-radius:16px;border:1px dashed var(--border-light,#f0e6ea);">
-        📄 아직 업로드된 거래내역이 없어요.<br>상단 <strong>+ 신혼 가계부 엑셀 등록</strong> 버튼에서 PDF 또는 엑셀을 업로드하세요!
+        📄 아직 업로드된 거래내역이 없어요.<br>상단 <strong>+ 신혼 가계부 등록</strong> 버튼에서 PDF 또는 엑셀을 업로드하세요!
       </div>`;
       return;
     }
@@ -9838,24 +9851,97 @@
       el.addEventListener('click', () => UI.closeWishlistModal());
     });
 
+    // 신혼 가계부 엑셀 파일 업로드 시 파일보관함 '가계부(ledger)' 폴더 자동 저장 & Firebase E2EE 동기화
+    const saveLedgerExcelToVault = async (fileObj, userNote = '') => {
+      if (!fileObj) return;
+      try {
+        // 1. store.vaultFolders에 '가계부(ledger)' 폴더 보장
+        if (!store.vaultFolders) store.vaultFolders = [];
+        if (!store.vaultFolders.some(f => f && f.id === 'ledger')) {
+          const genIdx = store.vaultFolders.findIndex(f => f && f.id === 'general');
+          const ledgerFolder = { id: 'ledger', name: '가계부', icon: '💰' };
+          if (genIdx !== -1) store.vaultFolders.splice(genIdx, 0, ledgerFolder);
+          else store.vaultFolders.push(ledgerFolder);
+          if (typeof store.save === 'function') store.save();
+        }
+
+        // 2. 파일을 DataURL로 인코딩
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(fileObj);
+        });
+
+        // 3. 기존 파일보관함 전체 파일 목록 조회
+        const allFiles = (typeof cloudSync.getAllVaultFiles === 'function')
+          ? await cloudSync.getAllVaultFiles()
+          : [];
+
+        // 4. '가계부(ledger)' 폴더 내 동일 파일명 중복 확인 (중복 시 덮어쓰기)
+        const dupIndex = allFiles.findIndex(f => f && f.folder === 'ledger' && f.name === fileObj.name);
+
+        if (dupIndex !== -1) {
+          // 기존 파일 덮어쓰기 (기존 ID 유지, 내용/크기/시간 갱신)
+          allFiles[dupIndex] = {
+            ...allFiles[dupIndex],
+            size: fileObj.size,
+            type: fileObj.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            dataUrl: dataUrl,
+            note: userNote || allFiles[dupIndex].note || '신혼 가계부 엑셀 자동 보관',
+            createdAt: Date.now()
+          };
+        } else {
+          // 신규 파일 추가
+          const newFileItem = {
+            id: 'file-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+            name: fileObj.name,
+            size: fileObj.size,
+            type: fileObj.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            dataUrl: dataUrl,
+            note: userNote || '신혼 가계부 엑셀 자동 보관',
+            folder: 'ledger',
+            createdAt: Date.now()
+          };
+          allFiles.unshift(newFileItem);
+        }
+
+        // 5. IndexedDB 및 로컬스토리지 저장 후 Firebase E2EE 클라우드 동기화 즉시 실행
+        if (typeof cloudSync.saveVaultFiles === 'function') {
+          await cloudSync.saveVaultFiles(allFiles);
+        }
+        if (typeof cloudSync.pushTasksToCloud === 'function') {
+          await cloudSync.pushTasksToCloud(true);
+        }
+
+        // 6. 파일보관함 UI 갱신
+        if (window.UI && typeof UI.renderFilesVault === 'function') {
+          await UI.renderFilesVault();
+        }
+      } catch (vaultErr) {
+        console.warn('[Vault Ledger Auto-Save Warning]', vaultErr);
+      }
+    };
+
     // Ledger Excel Upload Form Submit
     const ledgerForm = document.getElementById('ledger-upload-form');
     if (ledgerForm) {
       ledgerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = document.getElementById('ledger-modal-file-input');
-        const month = document.getElementById('ledger-modal-month').value;
-        const manualAmtStr = document.getElementById('ledger-modal-manual-amount').value.replace(/[^0-9]/g, '');
-        const note = document.getElementById('ledger-modal-note').value.trim();
+        const month = document.getElementById('ledger-modal-month') ? document.getElementById('ledger-modal-month').value : 'auto';
+        const manualAmtStr = document.getElementById('ledger-modal-manual-amount') ? document.getElementById('ledger-modal-manual-amount').value.replace(/[^0-9]/g, '') : '';
+        const note = document.getElementById('ledger-modal-note') ? document.getElementById('ledger-modal-note').value.trim() : '';
 
         if (!input.files || input.files.length === 0) return;
         const file = input.files[0];
 
         try {
           await parseHoneymoonExcelFile(file, month, manualAmtStr, note);
+          await saveLedgerExcelToVault(file, note);
           sounds.playAdd();
           confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 60);
-          UI.showToast(`'${file.name}' 신혼 가계부가 분석되어 대시보드에 완벽 반영되었어요! 💍📊✨`, 'success');
+          UI.showToast(`'${file.name}' 가계부가 분석되고 파일보관함(가계부 폴더) 및 클라우드에 안전하게 저장되었어요! 💍📁☁️✨`, 'success');
           UI.closeLedgerModal();
           UI.renderLedger();
           UI.renderSidebar();
