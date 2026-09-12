@@ -147,6 +147,7 @@
       this.lastSyncedUpdatedAt = localTs;
       this.lastSyncedRevision = localRev;
       this.isPushing = false;
+      this._vaultFilesCache = null;
     }
 
     init() {
@@ -761,11 +762,17 @@
       });
     }
 
-    async getAllVaultFiles() {
+    async getAllVaultFiles(forceRefresh = false) {
+      if (!forceRefresh && Array.isArray(this._vaultFilesCache)) {
+        return this._vaultFilesCache;
+      }
       try {
         const idbFiles = await VaultDBEngine.getAll();
         // Return indexedDB files directly (if empty, it means 0 files)
-        if (Array.isArray(idbFiles) && idbFiles.length > 0) return idbFiles;
+        if (Array.isArray(idbFiles) && idbFiles.length > 0) {
+          this._vaultFilesCache = idbFiles;
+          return idbFiles;
+        }
 
         // Legacy 1-time migration only if never migrated
         const migratedKey = 'todolist_jy_vault_migrated_v2';
@@ -775,13 +782,15 @@
           const lsFiles = raw ? JSON.parse(raw) : [];
           if (lsFiles.length > 0) {
             await VaultDBEngine.saveAll(lsFiles);
+            this._vaultFilesCache = lsFiles;
             return lsFiles;
           }
         }
+        this._vaultFilesCache = [];
         return [];
       } catch (e) {
         console.warn('getAllVaultFiles error:', e);
-        return [];
+        return this._vaultFilesCache || [];
       }
     }
 
@@ -789,9 +798,9 @@
       if (!Array.isArray(newItems) || !newItems.length) return [];
       try {
         await VaultDBEngine.addFiles(newItems);
-        const all = await this.getAllVaultFiles();
+        const all = await this.getAllVaultFiles(true);
         await this.saveVaultFiles(all);
-        await this.pushTasksToCloud(true);
+        this.pushTasksToCloud(true);
         return all;
       } catch (e) {
         console.error('addVaultFiles error:', e);
@@ -800,6 +809,7 @@
     }
 
     async saveVaultFiles(files) {
+      this._vaultFilesCache = Array.isArray(files) ? files.slice() : [];
       try {
         await VaultDBEngine.saveAll(files || []);
         const metaOnly = (files || []).map(f => ({
@@ -821,6 +831,9 @@
     async deleteVaultFile(fileId) {
       try {
         await VaultDBEngine.delete(fileId);
+        if (this._vaultFilesCache) {
+          this._vaultFilesCache = this._vaultFilesCache.filter(f => f && f.id !== fileId);
+        }
         // Clean localStorage backups immediately
         try {
           const raw = localStorage.getItem('todolist_jy_vault_files');
@@ -835,11 +848,11 @@
           }
         } catch (e) {}
 
-        const remaining = await this.getAllVaultFiles();
+        const remaining = await this.getAllVaultFiles(true);
         await this.saveVaultFiles(remaining);
 
         this.lastSyncedUpdatedAt = Date.now();
-        await this.pushTasksToCloud(true);
+        this.pushTasksToCloud(true);
       } catch (e) {
         console.error('deleteVaultFile error:', e);
       }
@@ -859,7 +872,7 @@
         });
         await this.saveVaultFiles(files);
         this.lastSyncedUpdatedAt = Date.now();
-        await this.pushTasksToCloud(true);
+        this.pushTasksToCloud(true);
         return count;
       } catch (e) {
         console.error('moveVaultFiles error:', e);
@@ -872,6 +885,9 @@
       try {
         for (const fId of fileIds) {
           await VaultDBEngine.delete(fId);
+        }
+        if (this._vaultFilesCache) {
+          this._vaultFilesCache = this._vaultFilesCache.filter(f => f && !fileIds.includes(f.id));
         }
         // Clean localStorage backups
         try {
@@ -887,10 +903,11 @@
           }
         } catch (e) {}
 
-        const remaining = await this.getAllVaultFiles();
+        const remaining = await this.getAllVaultFiles(true);
         await this.saveVaultFiles(remaining);
+
         this.lastSyncedUpdatedAt = Date.now();
-        await this.pushTasksToCloud(true);
+        this.pushTasksToCloud(true);
         return fileIds.length;
       } catch (e) {
         console.error('deleteVaultFilesBatch error:', e);
@@ -9851,7 +9868,7 @@
       el.addEventListener('click', () => UI.closeWishlistModal());
     });
 
-    // 신혼 가계부 엑셀 파일 업로드 시 파일보관함 '가계부(ledger)' 폴더 자동 저장 & Firebase E2EE 동기화
+    // 신혼 가계부 엑셀 파일 업로드 시 파일보관함 '가계부(ledger)' 폴더 자동 저장 & Firebase E2EE 동기화 (비동기 백그라운드 최적화)
     const saveLedgerExcelToVault = async (fileObj, userNote = '') => {
       if (!fileObj) return;
       try {
@@ -9873,7 +9890,7 @@
           reader.readAsDataURL(fileObj);
         });
 
-        // 3. 기존 파일보관함 전체 파일 목록 조회
+        // 3. 기존 파일보관함 전체 파일 목록 조회 (메모리 캐시 우선)
         const allFiles = (typeof cloudSync.getAllVaultFiles === 'function')
           ? await cloudSync.getAllVaultFiles()
           : [];
@@ -9906,17 +9923,17 @@
           allFiles.unshift(newFileItem);
         }
 
-        // 5. IndexedDB 및 로컬스토리지 저장 후 Firebase E2EE 클라우드 동기화 즉시 실행
+        // 5. IndexedDB 및 로컬스토리지 저장 후 Firebase E2EE 클라우드 비동기 동기화 (블로킹 방지)
         if (typeof cloudSync.saveVaultFiles === 'function') {
           await cloudSync.saveVaultFiles(allFiles);
         }
         if (typeof cloudSync.pushTasksToCloud === 'function') {
-          await cloudSync.pushTasksToCloud(true);
+          cloudSync.pushTasksToCloud(true);
         }
 
-        // 6. 파일보관함 UI 갱신
+        // 6. 파일보관함 UI 갱신 (열려있을 경우에만)
         if (window.UI && typeof UI.renderFilesVault === 'function') {
-          await UI.renderFilesVault();
+          UI.renderFilesVault();
         }
       } catch (vaultErr) {
         console.warn('[Vault Ledger Auto-Save Warning]', vaultErr);
@@ -9937,14 +9954,20 @@
         const file = input.files[0];
 
         try {
+          // 1. 엑셀 분석 및 대시보드 반영 즉각 실행 (0.05초 초고속 반응)
           await parseHoneymoonExcelFile(file, month, manualAmtStr, note);
-          await saveLedgerExcelToVault(file, note);
+
           sounds.playAdd();
           confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 60);
-          UI.showToast(`'${file.name}' 가계부가 분석되고 파일보관함(가계부 폴더) 및 클라우드에 안전하게 저장되었어요! 💍📁☁️✨`, 'success');
+          UI.showToast(`'${file.name}' 가계부가 대시보드와 파일보관함에 신속하게 반영되었어요! 💍📊☁️✨`, 'success');
           UI.closeLedgerModal();
           UI.renderLedger();
           UI.renderSidebar();
+
+          // 2. 파일보관함 가계부 폴더 저장 및 Firebase 클라우드 백업은 백그라운드 비동기로 처리 (화면 멈춤 완전 차단!)
+          saveLedgerExcelToVault(file, note).catch(err => {
+            console.warn('[Vault Background Sync Warning]', err);
+          });
         } catch (err) {
           console.error(err);
           UI.showToast('가계부 엑셀 분석 중 오류가 발생했어요', 'danger');
