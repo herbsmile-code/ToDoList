@@ -3836,6 +3836,8 @@
       // ==========================================
       const statTitleIncome = document.getElementById('stat-title-income');
       const statValIncomeTotal = document.getElementById('stat-val-income-total');
+      const statValIncomeSalaryYh = document.getElementById('stat-val-income-salary-yh');
+      const statValIncomeSalaryJy = document.getElementById('stat-val-income-salary-jy');
       const statValIncomeSalary = document.getElementById('stat-val-income-salary');
       const statValIncomeExtra = document.getElementById('stat-val-income-extra');
 
@@ -3854,22 +3856,24 @@
       const statValRemainingTotal = document.getElementById('stat-val-remaining-total');
       const statSubRemainingDesc = document.getElementById('stat-sub-remaining-desc');
 
-      const incomeSalary = (mData.income && mData.income.salary != null) ? mData.income.salary : incomeTotal;
+      let incomeSalaryYh = (mData.income && mData.income.salaryYh != null) ? mData.income.salaryYh : 0;
+      let incomeSalaryJy = (mData.income && mData.income.salaryJy != null) ? mData.income.salaryJy : 0;
+      const incomeSalary = (mData.income && mData.income.salary != null) ? mData.income.salary : (incomeSalaryYh + incomeSalaryJy || incomeTotal);
       const incomeExtra = (mData.income && mData.income.extra != null) ? mData.income.extra : 0;
 
-      const expFixed = (mData.expense && mData.expense.fixed != null) ? mData.expense.fixed : fixedTotal;
-      const expVar = (mData.expense && mData.expense.variable != null) ? mData.expense.variable : variableTotal;
-      const expEtc = (mData.expense && mData.expense.etc != null) ? mData.expense.etc : 0;
-      const expTotal = (mData.expense && mData.expense.total != null) ? mData.expense.total : (fixedTotal + variableTotal);
-
-      const savCheongyak = (mData.savings && mData.savings.cheongyak != null) ? mData.savings.cheongyak : 0;
-      const savInstallment = (mData.savings && mData.savings.installment != null) ? mData.savings.installment : 0;
-      const savTotal = (mData.savings && mData.savings.total != null) ? mData.savings.total : (savCheongyak + savInstallment);
-
-      const remainingVal = (mData.remaining != null) ? mData.remaining : (incomeTotal - expTotal - savTotal);
+      // 폴백: salaryYh/salaryJy가 둘 다 0이지만 items에 월급 항목이 있을 경우
+      if (incomeSalaryYh === 0 && incomeSalaryJy === 0 && mData.income && Array.isArray(mData.income.items)) {
+        mData.income.items.forEach(it => {
+          const nm = it.name || '';
+          if (/영호/.test(nm) && /(급여|월급|상여)/.test(nm)) incomeSalaryYh += (it.amount || 0);
+          else if (/진영/.test(nm) && /(급여|월급|상여)/.test(nm)) incomeSalaryJy += (it.amount || 0);
+        });
+      }
 
       if (statTitleIncome) statTitleIncome.textContent = `💵 ${targetMonth}월 수입`;
       if (statValIncomeTotal) statValIncomeTotal.textContent = formatKRW(incomeTotal);
+      if (statValIncomeSalaryYh) statValIncomeSalaryYh.textContent = formatKRW(incomeSalaryYh);
+      if (statValIncomeSalaryJy) statValIncomeSalaryJy.textContent = formatKRW(incomeSalaryJy);
       if (statValIncomeSalary) statValIncomeSalary.textContent = formatKRW(incomeSalary);
       if (statValIncomeExtra) statValIncomeExtra.textContent = formatKRW(incomeExtra);
 
@@ -8457,6 +8461,8 @@
     for (let m = 1; m <= 12; m++) {
       monthlyBuckets[m] = {
         hasData: false,
+        incomeSalaryYh: 0,
+        incomeSalaryJy: 0,
         incomeSalary: 0,
         incomeExtra: 0,
         incomeTotal: 0,
@@ -8515,14 +8521,36 @@
         // [수입] 입금액(inAmt > 0)
         if (inAmt > 0) {
           bucket.incomeTotal += inAmt;
-          const isSalary = /(급여|월급|상여|성과급|보너스)/.test(catStr) || /(급여|월급|상여|성과급|보너스)/.test(desc) || mainCategory === '급여' || category === '급여';
+          const isSalary = (
+            mainCategory === '월급' || mainCategory === '급여' ||
+            category === '월급' || category === '급여' ||
+            mainCategory.includes('월급') || mainCategory.includes('급여') ||
+            category.includes('월급') || category.includes('급여') ||
+            /(급여|월급|상여|성과급|보너스)/.test(catStr) ||
+            /(급여|월급|상여|성과급|보너스)/.test(desc)
+          );
+
           if (isSalary) {
             bucket.incomeSalary += inAmt;
+            const isExplicitYh = /영호/.test(catStr) || /영호/.test(desc) || /영호/.test(category) || /영호/.test(mainCategory);
+            const isExplicitJy = /진영/.test(catStr) || /진영/.test(desc) || /진영/.test(category) || /진영/.test(mainCategory);
+            const tBank = tx.bank || 'shinhan';
+
+            if (isExplicitYh && !isExplicitJy) {
+              bucket.incomeSalaryYh += inAmt;
+            } else if (isExplicitJy && !isExplicitYh) {
+              bucket.incomeSalaryJy += inAmt;
+            } else if (tBank === 'kookmin' || tBank === 'woori') {
+              bucket.incomeSalaryYh += inAmt;
+            } else {
+              bucket.incomeSalaryJy += inAmt;
+            }
           } else {
             bucket.incomeExtra += inAmt;
           }
 
-          const itemName = category || subCategory || (desc ? desc.substring(0, 16) : (isSalary ? '월급' : '부수입'));
+          const defaultSalName = (tx.bank === 'kookmin' || tx.bank === 'woori' || /영호/.test(catStr) || /영호/.test(desc)) ? '영호 월급' : '진영 월급';
+          const itemName = category || subCategory || (desc ? desc.substring(0, 16) : (isSalary ? defaultSalName : '부수입'));
           if (!bucket.incomeMap[itemName]) bucket.incomeMap[itemName] = { total: 0, count: 0 };
           bucket.incomeMap[itemName].total += inAmt;
           bucket.incomeMap[itemName].count++;
@@ -8653,6 +8681,8 @@
           income: {
             total: b.incomeTotal,
             salary: b.incomeSalary,
+            salaryYh: b.incomeSalaryYh,
+            salaryJy: b.incomeSalaryJy,
             extra: b.incomeExtra,
             items: incomeItems.length > 0 ? incomeItems : [{ name: `${m}월 수입`, amount: b.incomeTotal }]
           },
@@ -8980,6 +9010,7 @@
             ? `<button type="button" onclick="window.bankDownloadMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--primary,#ff6b8b);background:rgba(255,107,139,0.08);color:var(--primary,#ff6b8b);font-weight:700;cursor:pointer;">📥 확인필요 ${unmatchedCount}건 엑셀 받기</button>`
             : `<button type="button" onclick="window.bankDownloadFullMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--border-light,#e2e8f0);background:transparent;color:var(--text-muted);cursor:pointer;">📥 전체 내역 엑셀 받기</button>`
           }
+          <button type="button" onclick="window.bankTriggerUploadReviewed('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid #20c997;background:rgba(32,201,151,0.08);color:#20c997;font-weight:700;cursor:pointer;">📤 확인필요 엑셀 업로드하기</button>
         </div>
       `;
 
@@ -9063,6 +9094,128 @@
     UI.showToast(`${parseInt(mon)}월 확인필요 ${txns.length}건 엑셀 파일이 다운로드되었습니다.`, 'success');
   };
 
+  // 확인필요 엑셀 업로드 트리거 (파일 선택 창 호출)
+  window.bankTriggerUploadReviewed = function(monthKey) {
+    let fileInput = document.getElementById('bank-reviewed-excel-input');
+    if (!fileInput) {
+      fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.id = 'bank-reviewed-excel-input';
+      fileInput.accept = '.xlsx,.xls';
+      fileInput.style.display = 'none';
+      document.body.appendChild(fileInput);
+    }
+    fileInput.value = '';
+    fileInput.onchange = function(e) {
+      const file = e.target.files && e.target.files[0];
+      if (file) {
+        window.bankHandleReviewedExcelUpload(file, monthKey);
+      }
+    };
+    fileInput.click();
+  };
+
+  // 확인필요 엑셀 파싱 및 거래내역 업데이트 + 자동 학습 핸들러
+  window.bankHandleReviewedExcelUpload = function(file, monthKey) {
+    if (!file) return;
+    if (!window.XLSX) {
+      UI.showToast('엑셀 처리 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'warning');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const firstSheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[firstSheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (!rows || rows.length <= 1) {
+          UI.showToast('엑셀 파일에 데이터가 없습니다.', 'warning');
+          return;
+        }
+
+        const statements = bankLoadStatements();
+        let updatedCount = 0;
+        let learnedCount = 0;
+
+        // 헤더 행 건너뛰고 1행부터 순회
+        for (let r = 1; r < rows.length; r++) {
+          const row = rows[r];
+          if (!row || row.length === 0) continue;
+
+          const rDate = String(row[0] || '').trim();
+          const rDesc = String(row[1] || '').trim();
+          const rOut  = parseAmount(row[2]);
+          const rIn   = parseAmount(row[3]);
+          const rCat  = String(row[5] || '').trim();
+          const rSub  = String(row[6] || '').trim();
+          const rMain = String(row[7] || '').trim();
+
+          // 항목이 비어있거나 여전히 '확인필요'인 경우 무시
+          if (!rCat || rCat === '확인필요') continue;
+
+          const normRDate = bankNormalizeDate(rDate);
+
+          // statements에서 매칭되는 거래 찾기 (날짜, 거래내용, 입출금액 일치)
+          const matchedTx = statements.find(t => {
+            const tDate = bankNormalizeDate(t.date);
+            const tDesc = (t.desc || '').trim();
+            const tOut  = parseAmount(t.out);
+            const tIn   = parseAmount(t.in);
+
+            const dateMatch = (normRDate && tDate) ? (normRDate === tDate) : true;
+            const descMatch = (tDesc === rDesc) || (tDesc && rDesc && (tDesc.includes(rDesc) || rDesc.includes(tDesc)));
+            const amtMatch  = (tOut === rOut) && (tIn === rIn);
+
+            return dateMatch && descMatch && amtMatch;
+          });
+
+          if (matchedTx) {
+            matchedTx.category = rCat;
+            if (rSub) matchedTx.subCategory = rSub;
+            if (rMain) matchedTx.mainCategory = rMain;
+            matchedTx.manuallyReviewed = true;
+            updatedCount++;
+
+            // 규칙 자동 학습 연동 (해당 거래의 은행 기준)
+            const txBank = matchedTx.bank || 'shinhan';
+            // 거래내용에서 특수문자/숫자를 제외한 대표 키워드 추출
+            const kw = rDesc.replace(/[\d\-_.,/()]+/g, ' ').trim().split(/\s+/)[0] || rDesc;
+            if (kw && kw.length >= 2) {
+              const learned = bankLearnRule(kw, rCat, rSub, rMain, txBank, false);
+              if (learned) learnedCount++;
+            }
+          }
+        }
+
+        if (updatedCount === 0) {
+          UI.showToast('일치하는 거래내역을 찾지 못했거나 수정된 항목이 없습니다.', 'info');
+          return;
+        }
+
+        // 저장 및 리렌더링
+        bankSaveStatements(statements);
+        if (typeof syncBankToHoneymoonData === 'function') {
+          syncBankToHoneymoonData();
+        }
+        bankRenderMonthlyDashboard();
+        if (window.UI && typeof UI.renderLedger === 'function') {
+          UI.renderLedger();
+        }
+
+        UI.showToast(`확인필요 엑셀 ${updatedCount}건 업데이트 완료! (규칙 ${learnedCount}개 자동 학습) 🎉`, 'success');
+
+      } catch (err) {
+        console.error('bankHandleReviewedExcelUpload error:', err);
+        UI.showToast('엑셀 파일 파싱 중 오류가 발생했습니다: ' + (err.message || err), 'error');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   // 은행별 규칙 필터 상태
   window._activeRuleBankFilter = window._activeRuleBankFilter || 'all';
 
@@ -9115,7 +9268,7 @@
     }
     if (empty) empty.style.display = 'none';
 
-    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장금액이동', '통장이동'];
+    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '월급', '수입(부수입)', '통장금액이동', '통장이동'];
 
     list.innerHTML = displayRules.map((r, idx) => {
       const rBank = r.bank || 'shinhan';
@@ -9191,7 +9344,7 @@
       ? window._activeRuleBankFilter
       : 'shinhan';
 
-    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '수입(부수입)', '통장금액이동', '통장이동'];
+    const mainOptions = ['고정지출', '변동지출', '부부용돈', '저축/투자', '월급', '수입(부수입)', '통장금액이동', '통장이동'];
     const mainOptHtml = mainOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
 
     const newRow = document.createElement('div');
