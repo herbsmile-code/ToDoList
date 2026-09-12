@@ -3848,6 +3848,11 @@
       if (openLedgerBtn) openLedgerBtn.style.display = 'inline-flex';
       if (openSubBtn) openSubBtn.style.display = 'none';
 
+      // 은행 거래내역 ➡️ 상단 신혼 가계부 대시보드 실시간 동기화
+      if (typeof window.syncBankToHoneymoonData === 'function') {
+        try { window.syncBankToHoneymoonData(); } catch (e) { console.warn('syncBankToHoneymoonData error:', e); }
+      }
+
       const data = store.honeymoonData || INITIAL_HONEYMOON_DATA;
       const targetMonth = store.selectedLedgerMonth || 7;
       const mData = data[targetMonth] || { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } };
@@ -7970,7 +7975,15 @@
             bankMergeAndSaveStatements(newTxns);
           }
 
-          // 화면 대시보드 즉시 재계산 및 갱신
+          // 상단 신혼 가계부 대시보드(store.honeymoonData) 자동 분류/집계 동기화
+          if (typeof syncBankToHoneymoonData === 'function') {
+            syncBankToHoneymoonData();
+          }
+
+          // 상단 및 하단 대시보드 즉시 재계산 및 갱신
+          if (window.UI && typeof UI.renderLedger === 'function') {
+            UI.renderLedger();
+          }
           if (typeof window.bankRenderMonthlyDashboard === 'function') {
             window.bankRenderMonthlyDashboard();
           }
@@ -8027,6 +8040,115 @@
     bankSaveStatements(merged);
     return merged;
   }
+
+  // 🔄 은행 거래내역 ➡️ 상단 신혼 가계부 대시보드(store.honeymoonData) 월별 자동 분류/동기화 엔진
+  function syncBankToHoneymoonData() {
+    if (!window.store) return;
+    const statements = (typeof bankLoadStatements === 'function') ? bankLoadStatements() : [];
+    if (!statements || statements.length === 0) return;
+
+    if (!store.honeymoonData || typeof store.honeymoonData !== 'object') {
+      store.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
+    }
+
+    // 1월 ~ 12월 월별 집계 버킷
+    const monthlyBuckets = {};
+    for (let m = 1; m <= 12; m++) {
+      monthlyBuckets[m] = {
+        hasData: false,
+        incomeTotal: 0,
+        incomeItems: [],
+        fixedTotal: 0,
+        fixedItems: [],
+        variableTotal: 0,
+        variableItems: []
+      };
+    }
+
+    statements.forEach(tx => {
+      const normDate = (typeof bankNormalizeDate === 'function') ? bankNormalizeDate(tx.date) : String(tx.date || '');
+      const mm = normDate.match(/(\d{4})-(\d{2})/);
+      if (!mm) return;
+      const m = parseInt(mm[2], 10);
+      if (m < 1 || m > 12) return;
+
+      const bucket = monthlyBuckets[m];
+      bucket.hasData = true;
+
+      const inAmt  = Number(tx.in) || 0;
+      const outAmt = Number(tx.out) || 0;
+      const catStr = `${tx.category || ''} ${tx.subCategory || ''} ${tx.mainCategory || ''}`.trim();
+      const desc = tx.desc || '';
+      const category = tx.category || '기타';
+
+      // 1. 입금(급여/부수입) 건 처리
+      if (inAmt > 0 || /수입|급여|월급|상여|부수입|이자|환급|캐시백/.test(catStr)) {
+        const amt = inAmt > 0 ? inAmt : outAmt;
+        if (amt > 0) {
+          bucket.incomeTotal += amt;
+          const label = category !== '확인필요' ? category : (desc || '부수입/입금');
+          bucket.incomeItems.push({
+            name: `${label} (${desc})`,
+            amount: amt
+          });
+        }
+      }
+
+      // 2. 출금(지출) 건 처리
+      if (outAmt > 0 && !/수입|급여|월급|상여|부수입/.test(catStr)) {
+        let isFixed = false;
+        if (tx.mainCategory === '고정지출') {
+          isFixed = true;
+        } else if (/집세|월세|관리비|공과금|전기|수도|가스|통신|인터넷|보험|대출|정기|구독/.test(catStr) || /집세|관리비|전기세|수도세|가스비|통신요금/.test(desc)) {
+          isFixed = true;
+        }
+
+        if (isFixed) {
+          bucket.fixedTotal += outAmt;
+          const label = category !== '확인필요' ? category : (desc || '고정지출');
+          bucket.fixedItems.push({
+            name: `${label} (${desc})`,
+            amount: outAmt
+          });
+        } else {
+          bucket.variableTotal += outAmt;
+          const label = category !== '확인필요' ? category : (desc || '변동지출');
+          bucket.variableItems.push({
+            name: `${label} (${desc})`,
+            amount: outAmt
+          });
+        }
+      }
+    });
+
+    // 실제 데이터가 있는 월에 대해 store.honeymoonData 완벽 업데이트
+    let updated = false;
+    for (let m = 1; m <= 12; m++) {
+      const b = monthlyBuckets[m];
+      if (b.hasData) {
+        store.honeymoonData[m] = {
+          income: {
+            total: b.incomeTotal,
+            items: b.incomeItems.length > 0 ? b.incomeItems : [{ name: `${m}월 수입 대기`, amount: 0 }]
+          },
+          fixed: {
+            total: b.fixedTotal,
+            items: b.fixedItems.length > 0 ? b.fixedItems : [{ name: `${m}월 고정지출 대기`, amount: 0 }]
+          },
+          variable: {
+            total: b.variableTotal,
+            items: b.variableItems.length > 0 ? b.variableItems : [{ name: `${m}월 생활비 대기`, amount: 0 }]
+          }
+        };
+        updated = true;
+      }
+    }
+
+    if (updated && typeof store.save === 'function') {
+      try { store.save(); } catch (e) {}
+    }
+  }
+  window.syncBankToHoneymoonData = syncBankToHoneymoonData;
 
   // 월별 카드 대시보드 렌더링 (진영-용돈 / 영호-용돈 듀얼 위젯 & 3단 아코디언 드릴다운)
   function bankRenderMonthlyDashboard() {
@@ -8126,7 +8248,12 @@
         let subCat  = tx.subCategory  || '';
         let cat     = tx.category     || '확인필요';
 
-        if (cat === '확인필요') {
+        // 입금(부수입/급여) 건일 경우
+        if (inAmt > 0 && outAmt === 0) {
+          mainCat = '💵 수입(부수입)';
+          subCat  = subCat || '입금내역';
+          cat     = (cat !== '확인필요') ? cat : (tx.desc || '부수입/입금');
+        } else if (cat === '확인필요') {
           unmatchedCount++;
           mainCat = '⚠️ 확인필요';
           subCat  = '미분류';
@@ -8138,16 +8265,18 @@
         }
         if (!subCat) subCat = '기타';
 
+        const amt = (inAmt > 0 && outAmt === 0) ? inAmt : outAmt;
+
         if (!tree[mainCat]) tree[mainCat] = { total: 0, count: 0, subs: {} };
-        tree[mainCat].total += outAmt;
+        tree[mainCat].total += amt;
         tree[mainCat].count++;
 
         if (!tree[mainCat].subs[subCat]) tree[mainCat].subs[subCat] = { total: 0, count: 0, items: {} };
-        tree[mainCat].subs[subCat].total += outAmt;
+        tree[mainCat].subs[subCat].total += amt;
         tree[mainCat].subs[subCat].count++;
 
         if (!tree[mainCat].subs[subCat].items[cat]) tree[mainCat].subs[subCat].items[cat] = { total: 0, count: 0 };
-        tree[mainCat].subs[subCat].items[cat].total += outAmt;
+        tree[mainCat].subs[subCat].items[cat].total += amt;
         tree[mainCat].subs[subCat].items[cat].count++;
       });
 
@@ -8176,15 +8305,16 @@
         </div>
       `;
 
-      // 2. 대분류 지출 비중 프로그레스 바
-      const mainCatList = Object.entries(tree).filter(([k]) => k !== '⚠️ 확인필요');
+      // 2. 대분류 지출 비중 프로그레스 바 (수입 및 미분류 제외한 순수 지출 비중)
+      const mainCatList = Object.entries(tree).filter(([k]) => k !== '⚠️ 확인필요' && k !== '💵 수입(부수입)');
       const totalOutForBar = totalOut || 1;
       const barColors = {
         '고정지출': '#ff6b8b',
         '변동지출': '#f59f00',
         '부부용돈': '#7048e8',
         '저축/투자': '#20c997',
-        '기타': '#868e96'
+        '기타': '#868e96',
+        '💵 수입(부수입)': '#2e7d56'
       };
 
       const barSegments = mainCatList.map(([mCat, data]) => {
@@ -8478,6 +8608,8 @@
           const monthStr = mm ? `${mm[1]}${mm[2]}` : '';
           bankExportToExcel(txns, bankType, monthStr);
           bankMergeAndSaveStatements(txns);
+          if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
+          if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
           bankRenderMonthlyDashboard();
           const unmatched = txns.filter(t => t.category === '확인필요').length;
           bankShowStatus(unmatched > 0 ? `✅ ${txns.length}건 추출! ⚠️ 확인필요 ${unmatched}건 — 엑셀에서 항목 입력 후 재업로드하세요` : `✅ ${txns.length}건 추출 & 자동 분류 완료!`, unmatched > 0 ? 'info' : 'success');
@@ -8504,9 +8636,11 @@
         if (!fileInput?.files?.length) return;
         try {
           const { learnedCount } = await bankLearnFromExcel(fileInput.files[0]);
+          if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
+          if (window.UI && typeof UI.renderLedger === 'function') UI.renderLedger();
+          bankRenderMonthlyDashboard();
+          bankRenderRulesPanel();
           if (learnedCount > 0) {
-            bankRenderMonthlyDashboard();
-            bankRenderRulesPanel();
             bankShowStatus(`📚 새로운 분류 규칙 ${learnedCount}개를 학습했어요!`, 'success');
           }
         } catch (err) { console.error('[BankAnalyzer Excel]', err); }
@@ -8532,6 +8666,7 @@
       });
     }
 
+    if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
     bankRenderMonthlyDashboard();
   }
 
