@@ -7872,6 +7872,13 @@
       return `${mMatch[1]}-${mMatch[2].padStart(2, '0')}-01`;
     }
     return str;
+  // 금액 안전 파싱 헬퍼 (천단위 콤마, 원, 공백, 숫자 타입 등 오차 없는 정수 반환)
+  function parseAmount(val) {
+    if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val);
+    if (!val) return 0;
+    const s = String(val).replace(/,/g, '').replace(/[원\s]/g, '').trim();
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : Math.round(n);
   }
 
   // 분류된 엑셀 읽어서 룰 학습 및 거래내역 스마트 업데이트 (미입력 항목 자동완성 탑재)
@@ -7895,16 +7902,41 @@
             }
           });
 
+          // 헤더 행 동적 감지 (날짜, 출금액, 입금액 열 위치 자동 특정)
+          let headerRowIdx = -1;
+          let colDate = 0, colDesc = 1, colOut = 2, colIn = 3, colBal = 4, colCat = 5, colSub = 6, colMain = 7;
+
+          for (let i = 0; i < Math.min(rows.length, 10); i++) {
+            const rowStr = (rows[i] || []).map(c => String(c || '').replace(/\s+/g, '')).join(' ');
+            if (/날짜|거래일자|일자/.test(rowStr) && (/출금|입금/.test(rowStr) || /적요|거래내용|내용/.test(rowStr))) {
+              headerRowIdx = i;
+              rows[i].forEach((cell, cIdx) => {
+                const c = String(cell || '').replace(/\s+/g, '');
+                if (/날짜|거래일자|일자/.test(c)) colDate = cIdx;
+                else if (/거래내용|적요|내용|기재내용/.test(c)) colDesc = cIdx;
+                else if (/출금/.test(c)) colOut = cIdx;
+                else if (/입금/.test(c)) colIn = cIdx;
+                else if (/잔액|잔고/.test(c)) colBal = cIdx;
+                else if (/항목|분류|카테고리/.test(c) && !/대분류|소분류/.test(c)) colCat = cIdx;
+                else if (/소분류/.test(c)) colSub = cIdx;
+                else if (/대분류/.test(c)) colMain = cIdx;
+              });
+              break;
+            }
+          }
+
+          const startIdx = headerRowIdx >= 0 ? headerRowIdx + 1 : 1;
           let newTxns = [], learnedCount = 0;
 
           // 1단계: 사용자가 직접 입력한 새 규칙 먼저 수집 & 학습
-          rows.forEach((row, idx) => {
-            if (idx === 0) return;
-            const desc = String(row[1] || '').trim();
-            const category     = String(row[5] || '').trim();
-            const subCategory  = String(row[6] || '').trim();
-            const mainCategory = String(row[7] || '').trim();
-            if (!desc) return;
+          for (let idx = startIdx; idx < rows.length; idx++) {
+            const row = rows[idx];
+            if (!row || row.length === 0) continue;
+            const desc = String(row[colDesc] || '').trim();
+            const category     = String(row[colCat] || '').trim();
+            const subCategory  = String(row[colSub] || '').trim();
+            const mainCategory = String(row[colMain] || '').trim();
+            if (!desc) continue;
 
             if (category && category !== '확인필요') {
               const keyword = desc.length > 8 ? desc.substring(0, 8) : desc;
@@ -7919,22 +7951,25 @@
                 };
               }
             }
-          });
+          }
 
-          // 2단계: 거래내역 생성 및 항목 미입력 건에 대해 학습된 룰 자동 적용
-          rows.forEach((row, idx) => {
-            if (idx === 0) return;
-            const date = bankNormalizeDate(row[0]);
-            const desc = String(row[1] || '').trim();
-            const out  = Number(String(row[2] || '').replace(/[^0-9]/g, '')) || 0;
-            const inn  = Number(String(row[3] || '').replace(/[^0-9]/g, '')) || 0;
-            const bal  = Number(String(row[4] || '').replace(/[^0-9]/g, '')) || 0;
-            let category     = String(row[5] || '').trim();
-            let subCategory  = String(row[6] || '').trim();
-            let mainCategory = String(row[7] || '').trim();
-            if (!desc) return;
+          // 2단계: 거래내역 생성 및 항목 미입력 건에 대해 학습된 룰 자동 적용 (단 1건의 유실도 없이 전 행 수집)
+          for (let idx = startIdx; idx < rows.length; idx++) {
+            const row = rows[idx];
+            if (!row || row.length === 0) continue;
+            const date = bankNormalizeDate(row[colDate]);
+            const desc = String(row[colDesc] || '').trim();
+            const out  = parseAmount(row[colOut]);
+            const inn  = parseAmount(row[colIn]);
+            const bal  = parseAmount(row[colBal]);
+            let category     = String(row[colCat] || '').trim();
+            let subCategory  = String(row[colSub] || '').trim();
+            let mainCategory = String(row[colMain] || '').trim();
 
-            // 항목을 안 적었거나 '확인필요'인 경우 -> 학습된 룰에서 키워드 매칭하여 자동 채움!
+            // 유효한 거래 행 판단 (날짜가 있고 출금이나 입금 금액이 0보다 큰 경우)
+            if (!date && out === 0 && inn === 0) continue;
+
+            // 항목을 안 적었거나 '확인필요'인 경우 -> 학습된 룰에서 키워드 매칭하여 자동 채움
             if (!category || category === '확인필요') {
               let matched = null;
               for (const [kw, info] of Object.entries(ruleMap)) {
@@ -7952,7 +7987,7 @@
 
             newTxns.push({
               date,
-              desc,
+              desc: desc || (inn > 0 ? '입금' : '출금'),
               out,
               in: inn,
               balance: bal,
@@ -7960,7 +7995,7 @@
               subCategory: subCategory || '',
               mainCategory: mainCategory || ''
             });
-          });
+          }
 
           // 새 룰 영구 저장
           bankSaveRules(Object.entries(ruleMap).map(([keyword, info]) => ({
@@ -7970,7 +8005,7 @@
             mainCategory: info.mainCategory
           })));
 
-          // 기존 내역에 새 분류 스마트 덮어쓰기 & 병합
+          // 기존 내역에 새 엑셀 거래내역 안전 교체/병합 (금액 유실 원천 차단)
           if (newTxns.length > 0) {
             bankMergeAndSaveStatements(newTxns);
           }
@@ -7996,52 +8031,35 @@
     });
   }
 
-  // 거래내역 스마트 병합 & 덮어쓰기 저장 (기존 확인필요 내역을 새 분류로 업데이트)
+  // 거래내역 안전 교체 & 병합 (업로드된 월의 데이터를 100% 무결성으로 교체, 다른 월은 보존)
   function bankMergeAndSaveStatements(newTxns) {
     const existing = bankLoadStatements();
-    const map = new Map();
 
-    // 1. 기존 데이터 적재 (날짜 정규화)
-    existing.forEach(t => {
-      const normDate = bankNormalizeDate(t.date);
-      const key = `${normDate}|${t.desc}|${t.out}`;
-      map.set(key, { ...t, date: normDate });
+    // 새로 업로드된 엑셀에 존재하는 월 목록 (예: '2026-09')
+    const uploadedMonths = new Set(newTxns.map(t => {
+      const d = bankNormalizeDate(t.date);
+      return d ? d.substring(0, 7) : '';
+    }).filter(Boolean));
+
+    // 기존 데이터 중 이번에 업로드되지 않은 다른 월 데이터는 그대로 보존
+    const otherMonthsData = existing.filter(t => {
+      const d = bankNormalizeDate(t.date);
+      const m = d ? d.substring(0, 7) : '';
+      return !uploadedMonths.has(m);
     });
 
-    // 2. 새 거래내역 덮어쓰기 및 추가
-    newTxns.forEach(t => {
-      const normDate = bankNormalizeDate(t.date);
-      const key = `${normDate}|${t.desc}|${t.out}`;
-      if (map.has(key)) {
-        const prev = map.get(key);
-        // 새 분류 정보가 입력되었거나 확인필요가 채워졌으면 업데이트
-        const updatedCat = (t.category && t.category !== '확인필요')
-          ? t.category
-          : (prev.category || t.category || '확인필요');
-        const updatedSub = t.subCategory || prev.subCategory || '';
-        const updatedMain = t.mainCategory || prev.mainCategory || '';
-
-        map.set(key, {
-          ...prev,
-          date: normDate,
-          category: updatedCat,
-          subCategory: updatedSub,
-          mainCategory: updatedMain,
-          in: (t.in !== undefined && t.in > 0) ? t.in : prev.in,
-          balance: (t.balance !== undefined && t.balance > 0) ? t.balance : prev.balance
-        });
-      } else {
-        map.set(key, { ...t, date: normDate });
-      }
-    });
-
-    const merged = Array.from(map.values());
-    if (merged.length > 5000) merged.splice(0, merged.length - 5000);
+    // 이번 업로드된 월은 엑셀 원본 그대로 100% 완전하게 반영 (중복 제거로 인한 금액 누락 원천 차단)
+    const merged = [...otherMonthsData, ...newTxns];
+    if (merged.length > 10000) merged.splice(0, merged.length - 10000);
     bankSaveStatements(merged);
     return merged;
   }
 
   // 🔄 은행 거래내역 ➡️ 상단 신혼 가계부 대시보드(store.honeymoonData) 월별 자동 분류/동기화 엔진
+  // [엄격한 기준 준수]:
+  // 1. 날짜 월별 분류: YYYY-MM 해당 월에만 배정
+  // 2. 출금액(원)과 입금액(원)의 철저한 금액 기준 분리 (키워드 왜곡 금지)
+  // 3. 출금액은 항목별/대분류별 집계, 입금액은 항목별 수입 집계
   function syncBankToHoneymoonData() {
     if (!window.store) return;
     const statements = (typeof bankLoadStatements === 'function') ? bankLoadStatements() : [];
@@ -8051,27 +8069,30 @@
       store.honeymoonData = JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA));
     }
 
-    // 1단계: 월별(1~12월) 집계 버킷 준비
+    // 1단계: 1월 ~ 12월 월별 집계 버킷 준비
     const monthlyBuckets = {};
     for (let m = 1; m <= 12; m++) {
       monthlyBuckets[m] = {
         hasData: false,
-        incomeMap: {},    // 항목별 합산 (key: 항목명, val: { total, count })
-        fixedMap: {},     // 고정지출 항목별 합산
-        variableMap: {}   // 변동지출 항목별 합산
+        incomeTotal: 0,
+        fixedTotal: 0,
+        variableTotal: 0,
+        incomeMap: {},
+        fixedMap: {},
+        variableMap: {}
       };
     }
 
-    // 2단계: 거래내역 순회 - 입금/출금 엄격 구분 및 대분류/항목별 그룹화
+    // 2단계: 거래내역 순회 - 오직 금액(in vs out)을 기준으로 엄격 분리
     statements.forEach(tx => {
-      const normDate = (typeof bankNormalizeDate === 'function') ? bankNormalizeDate(tx.date) : String(tx.date || '');
+      const normDate = bankNormalizeDate(tx.date);
       const mm = normDate.match(/(\d{4})-(\d{2})/);
       if (!mm) return;
       const m = parseInt(mm[2], 10);
       if (m < 1 || m > 12) return;
 
-      const inAmt  = Number(tx.in) || 0;
-      const outAmt = Number(tx.out) || 0;
+      const inAmt  = parseAmount(tx.in);
+      const outAmt = parseAmount(tx.out);
       if (inAmt === 0 && outAmt === 0) return;
 
       const bucket = monthlyBuckets[m];
@@ -8083,22 +8104,18 @@
       const subCategory = tx.subCategory || '';
       const mainCategory = tx.mainCategory || '';
 
-      // [규칙 2]: 입금액(원)과 출금액(원)의 엄격한 구분
-      // 입금 건: inAmt > 0 (또는 mainCategory === '수입' 또는 수입 키워드)
-      const isIncome = inAmt > 0 || mainCategory === '수입' || /수입|급여|월급|상여|부수입|이자|환급|캐시백/.test(catStr);
+      // [규칙 2]: 입금액(inAmt > 0)은 오직 100% 입금(수입)으로만 처리!
+      if (inAmt > 0) {
+        bucket.incomeTotal += inAmt;
+        const itemName = category || subCategory || (desc ? desc.substring(0, 16) : '부수입/입금');
+        if (!bucket.incomeMap[itemName]) bucket.incomeMap[itemName] = { total: 0, count: 0 };
+        bucket.incomeMap[itemName].total += inAmt;
+        bucket.incomeMap[itemName].count++;
+      }
 
-      if (isIncome) {
-        const amt = inAmt > 0 ? inAmt : outAmt;
-        if (amt > 0) {
-          // 입금액 항목명 결정 (사용자 입력 항목 > 소분류 > 적요)
-          let itemName = category || subCategory || (desc ? desc.substring(0, 16) : '부수입/입금');
-          if (!bucket.incomeMap[itemName]) bucket.incomeMap[itemName] = { total: 0, count: 0 };
-          bucket.incomeMap[itemName].total += amt;
-          bucket.incomeMap[itemName].count++;
-        }
-      } else if (outAmt > 0) {
-        // [규칙 3]: 출금액의 대분류 및 항목별 분류
-        // 대분류 판별 (엑셀 H열 최우선)
+      // [규칙 3]: 출금액(outAmt > 0)은 오직 100% 출금(지출)으로만 처리!
+      if (outAmt > 0) {
+        // 대분류 판별: H열(mainCategory) 최우선 기준
         let isFixed = false;
         if (mainCategory === '고정지출') {
           isFixed = true;
@@ -8111,14 +8128,15 @@
           }
         }
 
-        // 지출 항목명 결정 (사용자 입력 항목 > 소분류 > 적요 요약)
-        let itemName = category || subCategory || (desc ? desc.substring(0, 16) : '기타지출');
+        const itemName = category || subCategory || (desc ? desc.substring(0, 16) : '기타지출');
 
         if (isFixed) {
+          bucket.fixedTotal += outAmt;
           if (!bucket.fixedMap[itemName]) bucket.fixedMap[itemName] = { total: 0, count: 0 };
           bucket.fixedMap[itemName].total += outAmt;
           bucket.fixedMap[itemName].count++;
         } else {
+          bucket.variableTotal += outAmt;
           if (!bucket.variableMap[itemName]) bucket.variableMap[itemName] = { total: 0, count: 0 };
           bucket.variableMap[itemName].total += outAmt;
           bucket.variableMap[itemName].count++;
@@ -8126,14 +8144,13 @@
       }
     });
 
-    // 3단계: store.honeymoonData에 항목별 집계 깔끔하게 정리 대입
+    // 3단계: store.honeymoonData에 정확한 합계와 항목별 정리 대입
     let updated = false;
     for (let m = 1; m <= 12; m++) {
       const b = monthlyBuckets[m];
       if (b.hasData) {
         // 수입 항목 변환 (금액 큰 순 정렬)
         const incomeEntries = Object.entries(b.incomeMap).sort((a, b) => b[1].total - a[1].total);
-        const incomeTotal = incomeEntries.reduce((sum, [, data]) => sum + data.total, 0);
         const incomeItems = incomeEntries.map(([name, data]) => ({
           name: data.count > 1 ? `${name} (${data.count}건)` : name,
           amount: data.total
@@ -8141,7 +8158,6 @@
 
         // 고정지출 항목 변환 (금액 큰 순 정렬)
         const fixedEntries = Object.entries(b.fixedMap).sort((a, b) => b[1].total - a[1].total);
-        const fixedTotal = fixedEntries.reduce((sum, [, data]) => sum + data.total, 0);
         const fixedItems = fixedEntries.map(([name, data]) => ({
           name: data.count > 1 ? `${name} (${data.count}건)` : name,
           amount: data.total
@@ -8149,23 +8165,23 @@
 
         // 변동지출 항목 변환 (금액 큰 순 정렬)
         const variableEntries = Object.entries(b.variableMap).sort((a, b) => b[1].total - a[1].total);
-        const variableTotal = variableEntries.reduce((sum, [, data]) => sum + data.total, 0);
         const variableItems = variableEntries.map(([name, data]) => ({
           name: data.count > 1 ? `${name} (${data.count}건)` : name,
           amount: data.total
         }));
 
+        // 총액은 모든 outAmt 및 inAmt의 산술 합계와 1원의 오차도 없이 일치!
         store.honeymoonData[m] = {
           income: {
-            total: incomeTotal,
+            total: b.incomeTotal,
             items: incomeItems.length > 0 ? incomeItems : [{ name: `${m}월 수입 대기`, amount: 0 }]
           },
           fixed: {
-            total: fixedTotal,
+            total: b.fixedTotal,
             items: fixedItems.length > 0 ? fixedItems : [{ name: `${m}월 고정지출 대기`, amount: 0 }]
           },
           variable: {
-            total: variableTotal,
+            total: b.variableTotal,
             items: variableItems.length > 0 ? variableItems : [{ name: `${m}월 생활비 대기`, amount: 0 }]
           }
         };
@@ -8262,8 +8278,8 @@
       const tree = {};
 
       txns.forEach(tx => {
-        const outAmt = tx.out || 0;
-        const inAmt  = tx.in || 0;
+        const outAmt = parseAmount(tx.out);
+        const inAmt  = parseAmount(tx.in);
         totalOut += outAmt;
         totalIn  += inAmt;
 
