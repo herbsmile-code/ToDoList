@@ -7604,8 +7604,8 @@
 
   // 공통 및 국민/우리은행 유연한 토큰 파서 (tryParseBankTokens)
   function tryParseBankTokens(tokens, defaultDate = '', bankType = 'kookmin') {
-    if (!Array.isArray(tokens) || tokens.length < 2) return null;
-    const isMoneyStr = (s) => /^[\d,]+$/.test(String(s).trim()) || s === '-' || s === '--';
+    if (!Array.isArray(tokens) || tokens.length < 3) return null;
+    const isMoneyStr = (s) => /^[\d,]+$/.test(String(s).trim()) || s === '-' || s === '--' || s === '0';
 
     let list = tokens.map(t => String(t).trim()).filter(Boolean);
 
@@ -7631,28 +7631,31 @@
       list.shift();
     }
 
-    if (list.length < 2) return null;
+    // 4. 역방향(Right-to-Left) 3연속 금액(출금, 입금, 잔액) 탐색
+    const isPureDigits = (s) => /^\d[\d,]*$/.test(String(s).trim());
+    const isMoneyOrDash = (s) => /^\d[\d,]*$/.test(String(s).trim()) || s === '-' || s === '--' || s === '0';
 
-    // 4. 금액 위치 찾기: 연속된 2개 이상의 숫자(출금, 입금, 잔액) 탐색
-    for (let i = 0; i < list.length - 1; i++) {
-      if (isMoneyStr(list[i]) && isMoneyStr(list[i + 1])) {
-        const out = cleanBankMoney(list[i]);
-        const inn = cleanBankMoney(list[i + 1]);
+    for (let i = list.length - 1; i >= 2; i--) {
+      // 잔액(list[i])은 반드시 순수 숫자여야 함 (송금메모 '-' 대시 오인식 원천 차단)
+      if (isPureDigits(list[i]) && isMoneyOrDash(list[i - 1]) && isMoneyOrDash(list[i - 2])) {
+        const out = cleanBankMoney(list[i - 2]);
+        const inn = cleanBankMoney(list[i - 1]);
+        const bal = cleanBankMoney(list[i]);
 
         if (out > 0 || inn > 0) {
-          let bal = 0;
-          if (i + 2 < list.length && isMoneyStr(list[i + 2])) {
-            bal = cleanBankMoney(list[i + 2]);
+          const afterTokens = list.slice(i + 1);
+          let memo = '';
+          if (afterTokens.length >= 1) {
+            memo = afterTokens[0] === '-' ? '' : afterTokens[0];
           }
 
-          // 금액 앞쪽 토큰들을 거래내용으로 취합
-          const beforeTokens = list.slice(0, i).filter(t => !isMoneyStr(t));
-          let desc = beforeTokens.join(' ').replace(/\s+/g, ' ').trim();
-
-          if (!desc) {
-            // 금액 뒤쪽에서 거래내용 탐색
-            const afterTokens = list.slice(i + (bal > 0 ? 3 : 2)).filter(t => !isMoneyStr(t));
-            desc = afterTokens.join(' ').replace(/\s+/g, ' ').trim();
+          const beforeTokens = list.slice(0, i - 2).filter(t => !isMoneyOrDash(t));
+          let desc = '';
+          if (beforeTokens.length === 1) {
+            desc = beforeTokens[0];
+          } else if (beforeTokens.length >= 2) {
+            desc = beforeTokens.slice(1).join(' ').trim();
+            if (!desc) desc = beforeTokens[0];
           }
 
           return {
@@ -7661,32 +7664,7 @@
             out,
             in: inn,
             balance: bal,
-            category: ''
-          };
-        }
-      }
-    }
-
-    // 5. 전체 금액 토큰 인덱스 기반 분석
-    const moneyIndices = [];
-    list.forEach((t, idx) => {
-      if (isMoneyStr(t)) moneyIndices.push(idx);
-    });
-
-    if (moneyIndices.length >= 2) {
-      const i1 = moneyIndices[moneyIndices.length - 2];
-      const i2 = moneyIndices[moneyIndices.length - 1];
-      if (i2 === i1 + 1) {
-        const out = cleanBankMoney(list[i1]);
-        const inn = cleanBankMoney(list[i2]);
-        if (out > 0 || inn > 0) {
-          const desc = list.slice(0, i1).filter(t => !isMoneyStr(t)).join(' ').trim();
-          return {
-            date: txnDate || defaultDate,
-            desc: desc || (inn > 0 ? '입금' : '출금'),
-            out,
-            in: inn,
-            balance: 0,
+            memo: memo || '',
             category: ''
           };
         }
@@ -7774,18 +7752,20 @@
     return txns.length ? txns : parseGeneric(lines, fullText);
   }
 
-  // KB국민은행 전용 완벽 파서
+  // KB국민은행 전용 완벽 파서 (실서식 100% 매칭: 거래일시, 적요, 보낸분/받는분, 출금액, 입금액, 잔액, 송금메모, 거래점)
   function parseKookmin(lines, fullText) {
     const txns = [];
 
-    // 국민은행 패턴 1: [거래일자] [적요/내용] [출금액] [입금액] [잔액]
-    const pKookmin1 = /(20\d{2}[.\-/][01]\d[.\-/][0-3]\d)\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
-    // 국민은행 패턴 2: 날짜가 8자리 연속 숫자인 경우 (20260912)
-    const pKookmin2 = /(20\d{2}[01]\d[0-3]\d)\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+    // 국민은행 일자 및 시간 정규식 (예: 2026.09.12 17:38:49)
+    const datePat = /(?:^|\s)(20\d{2}[.\-/][01]\d[.\-/][0-3]\d)(?:\s+([0-2]\d:[0-5]\d(?::[0-5]\d)?))?/;
 
     for (let rawLine of lines) {
       if (!rawLine || !rawLine.trim()) continue;
       let line = rawLine.trim();
+
+      // 헤더 및 요약 행 제외
+      if (line.includes('계좌 거래내역 조회') || line.includes('조회기준일시') || (line.includes('거래일시') && line.includes('출금액'))) continue;
+      if (line.includes('총 잔액') || line.includes('총 입금금액') || line.includes('총 출금금액') || line.includes('조회기간')) continue;
 
       // 1. 자간 쪼개짐 복원 (국민은행 PDF 특유의 공백 쪼개짐 완벽 복원)
       line = line.replace(/(2\s*0\s*\d\s*\d)\s*([01]\s*\d)\s*([0-3]\s*\d)/g, (m, y, mo, d) => {
@@ -7796,33 +7776,89 @@
       });
       line = line.replace(/(\d)\s*,\s*(\d)/g, '$1,$2').replace(/(\d)\s*,\s*(\d)/g, '$1,$2');
 
-      // 2. 정규식 매칭 시도
-      let m = line.match(pKookmin1);
-      if (!m) m = line.match(pKookmin2);
+      // 2. 거래일자 확인
+      const dMatch = line.match(datePat);
+      if (!dMatch) continue;
 
-      if (m) {
-        const rawD = m[1].replace(/[^\d]/g, '');
-        const date = `${rawD.slice(0, 4)}-${rawD.slice(4, 6)}-${rawD.slice(6, 8)}`;
-        const desc = m[2].replace(/\s+/g, ' ').trim();
-        const out  = cleanBankMoney(m[3]);
-        const inn  = cleanBankMoney(m[4]);
-        const bal  = cleanBankMoney(m[5]);
+      const date = dMatch[1].replace(/[.\-/]/g, '-');
 
-        if (desc && (out > 0 || inn > 0)) {
-          txns.push({ date, desc, out, in: inn, balance: bal, category: '' });
-          continue;
+      // 3. 다중 공백 또는 탭으로 컬럼 분리
+      const tokens = line.split(/\s{2,}|\t/).map(t => t.trim()).filter(Boolean);
+      if (tokens.length < 4) continue;
+
+      // 4. 역방향(Right-to-Left) 3연속 금액(출금액, 입금액, 잔액) 위치 탐색
+      // [주의]: 잔액(tokens[i])은 송금메모('-')와 구분하기 위해 반드시 순수 숫자여야 함!
+      const isPureDigits = (s) => /^\d[\d,]*$/.test(String(s).trim());
+      const isMoneyOrDash = (s) => /^\d[\d,]*$/.test(String(s).trim()) || s === '-' || s === '--' || s === '0';
+
+      let moneyTripleIdx = -1;
+      for (let i = tokens.length - 1; i >= 2; i--) {
+        if (isPureDigits(tokens[i]) && isMoneyOrDash(tokens[i - 1]) && isMoneyOrDash(tokens[i - 2])) {
+          const out = cleanBankMoney(tokens[i - 2]);
+          const inn = cleanBankMoney(tokens[i - 1]);
+          if (out > 0 || inn > 0) {
+            moneyTripleIdx = i - 2; // 출금액 인덱스
+            break;
+          }
         }
       }
 
-      // 3. 토큰 파서 폴백 (공백 2칸 이상 또는 탭으로 구분된 컬럼 분석)
-      const dateMatch = line.match(/(?:^|\s)(20\d{2}[.\-/]?[01]\d[.\-/]?[0-3]\d)(?:\s|$)/);
-      if (dateMatch) {
-        const dDigits = dateMatch[1].replace(/[^\d]/g, '');
-        const date = dDigits.length === 8 ? `${dDigits.slice(0, 4)}-${dDigits.slice(4, 6)}-${dDigits.slice(6, 8)}` : '';
-        const tokens = line.split(/\s{2,}|\t/).map(t => t.trim()).filter(Boolean);
-        const parsed = tryParseBankTokens(tokens, date, 'kookmin');
-        if (parsed) {
-          txns.push(parsed);
+      if (moneyTripleIdx >= 1) {
+        const out = cleanBankMoney(tokens[moneyTripleIdx]);
+        const inn = cleanBankMoney(tokens[moneyTripleIdx + 1]);
+        const bal = cleanBankMoney(tokens[moneyTripleIdx + 2]);
+
+        // 송금메모 추출 (잔액 뒤 첫 번째 토큰)
+        const afterTokens = tokens.slice(moneyTripleIdx + 3);
+        let memo = '';
+        if (afterTokens.length >= 1) {
+          memo = afterTokens[0] === '-' ? '' : afterTokens[0];
+        }
+
+        // 출금액 앞쪽 토큰들에서 [적요], [보낸분/받는분] 추출
+        let beforeTokens = tokens.slice(0, moneyTripleIdx);
+        // 날짜/시간 토큰 제거
+        if (beforeTokens.length > 0 && /(20\d{2}[.\-/][01]\d[.\-/][0-3]\d)/.test(beforeTokens[0])) {
+          beforeTokens.shift();
+        }
+        if (beforeTokens.length > 0 && /^[0-2]\d:[0-5]\d(?::[0-5]\d)?$/.test(beforeTokens[0])) {
+          beforeTokens.shift();
+        }
+
+        let desc = '';
+        let summary = '';
+        if (beforeTokens.length === 1) {
+          desc = beforeTokens[0];
+        } else if (beforeTokens.length >= 2) {
+          summary = beforeTokens[0]; // 적요 (예: FBS 출금, 체크카드 등)
+          desc = beforeTokens.slice(1).join(' ').trim(); // 보낸분/받는분 (예: 쿠팡, 71040300177383,31회차 등)
+        }
+
+        if (!desc) desc = summary || (inn > 0 ? '입금' : '출금');
+
+        txns.push({
+          date,
+          desc,
+          out,
+          in: inn,
+          balance: bal,
+          memo: memo || '',
+          category: ''
+        });
+        continue;
+      }
+
+      // 5. 정규식 폴백 매칭
+      const regPat = /(20\d{2}[.\-/][01]\d[.\-/][0-3]\d)(?:\s+[0-2]\d:[0-5]\d(?::[0-5]\d)?)?\s+(.+?)\s+([\d,]+|-)\s+([\d,]+|-)\s+([\d,]+)/;
+      const m = line.match(regPat);
+      if (m) {
+        const d = m[1].replace(/[.\-/]/g, '-');
+        const desc = m[2].replace(/\s+/g, ' ').trim();
+        const out = cleanBankMoney(m[3]);
+        const inn = cleanBankMoney(m[4]);
+        const bal = cleanBankMoney(m[5]);
+        if (desc && (out > 0 || inn > 0)) {
+          txns.push({ date: d, desc, out, in: inn, balance: bal, memo: '', category: '' });
           continue;
         }
       }
@@ -7895,35 +7931,67 @@
   }
 
 
-  // 거래내역 → 엑셀 변환 & 다운로드 (A~H 8개 열 확장: 항목, 소분류, 대분류 기본 탑재)
+  // 거래내역 → 엑셀 변환 & 다운로드 (국민은행: 송금메모 포함 9개 열, 타은행: 8개 열 확장)
   function bankExportToExcel(transactions, bankType, monthStr) {
     if (!window.XLSX) { UI.showToast('엑셀 라이브러리 로딩 중입니다.', 'info'); return ''; }
     const bankNames = { kookmin: '국민은행', shinhan: '신한은행', woori: '우리은행' };
-    const rows = [
-      ['날짜', '거래내용', '출금액(원)', '입금액(원)', '잔액(원)', '항목', '소분류', '대분류'],
-      ...transactions.map(tx => [
-        tx.date,
-        tx.desc,
-        tx.out || '',
-        tx.in || '',
-        tx.balance || '',
-        tx.category || '확인필요',
-        tx.subCategory || '',
-        tx.mainCategory || ''
-      ])
-    ];
+
+    let rows, colWidths;
+    if (bankType === 'kookmin') {
+      rows = [
+        ['날짜', '거래내용', '출금액(원)', '입금액(원)', '잔액(원)', '송금메모', '항목', '소분류', '대분류'],
+        ...transactions.map(tx => [
+          tx.date,
+          tx.desc,
+          tx.out || '',
+          tx.in || '',
+          tx.balance || '',
+          tx.memo || '',
+          tx.category || '확인필요',
+          tx.subCategory || '',
+          tx.mainCategory || ''
+        ])
+      ];
+      colWidths = [
+        { wch: 12 }, // 날짜
+        { wch: 28 }, // 거래내용
+        { wch: 14 }, // 출금액
+        { wch: 14 }, // 입금액
+        { wch: 14 }, // 잔액
+        { wch: 16 }, // 송금메모
+        { wch: 16 }, // 항목(세부)
+        { wch: 16 }, // 소분류
+        { wch: 16 }  // 대분류
+      ];
+    } else {
+      rows = [
+        ['날짜', '거래내용', '출금액(원)', '입금액(원)', '잔액(원)', '항목', '소분류', '대분류'],
+        ...transactions.map(tx => [
+          tx.date,
+          tx.desc,
+          tx.out || '',
+          tx.in || '',
+          tx.balance || '',
+          tx.category || '확인필요',
+          tx.subCategory || '',
+          tx.mainCategory || ''
+        ])
+      ];
+      colWidths = [
+        { wch: 12 }, // 날짜
+        { wch: 28 }, // 거래내용
+        { wch: 14 }, // 출금액
+        { wch: 14 }, // 입금액
+        { wch: 14 }, // 잔액
+        { wch: 16 }, // 항목(세부)
+        { wch: 16 }, // 소분류
+        { wch: 16 }  // 대분류
+      ];
+    }
+
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [
-      { wch: 12 }, // 날짜
-      { wch: 28 }, // 거래내용
-      { wch: 14 }, // 출금액
-      { wch: 14 }, // 입금액
-      { wch: 14 }, // 잔액
-      { wch: 16 }, // 항목(세부)
-      { wch: 16 }, // 소분류
-      { wch: 16 }  // 대분류
-    ];
+    ws['!cols'] = colWidths;
     XLSX.utils.book_append_sheet(wb, ws, '거래내역');
     const fileName = `${bankNames[bankType] || '거래내역'}_${monthStr || ''}.xlsx`;
     XLSX.writeFile(wb, fileName);
@@ -8072,7 +8140,7 @@
 
           // 헤더 행 동적 감지 (날짜, 출금액, 입금액 열 위치 자동 특정)
           let headerRowIdx = -1;
-          let colDate = 0, colDesc = 1, colOut = 2, colIn = 3, colBal = 4, colCat = 5, colSub = 6, colMain = 7;
+          let colDate = 0, colDesc = 1, colOut = 2, colIn = 3, colBal = 4, colMemo = -1, colCat = 5, colSub = 6, colMain = 7;
 
           for (let i = 0; i < Math.min(rows.length, 10); i++) {
             const rowStr = (rows[i] || []).map(c => String(c || '').replace(/\s+/g, '')).join(' ');
@@ -8085,6 +8153,7 @@
                 else if (/출금/.test(c)) colOut = cIdx;
                 else if (/입금/.test(c)) colIn = cIdx;
                 else if (/잔액|잔고/.test(c)) colBal = cIdx;
+                else if (/송금메모|메모/.test(c)) colMemo = cIdx;
                 else if (/항목|분류|카테고리/.test(c) && !/대분류|소분류/.test(c)) colCat = cIdx;
                 else if (/소분류/.test(c)) colSub = cIdx;
                 else if (/대분류/.test(c)) colMain = cIdx;
@@ -8177,6 +8246,7 @@
               out,
               in: inn,
               balance: bal,
+              memo: colMemo >= 0 ? String(row[colMemo] || '').trim() : '',
               category: category || '확인필요',
               subCategory: subCategory || '',
               mainCategory: mainCategory || ''
