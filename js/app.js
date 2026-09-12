@@ -8390,32 +8390,43 @@
     });
   }
 
-  // 거래내역 안전 교체 & 병합 (업로드된 파일의 날짜 구간 [minDate, maxDate]은 최신 파일로 덮어쓰기, 그 외 구간은 100% 보존)
+  // 거래내역 안전 교체 & 병합 (은행별 격리: 다른 은행 내역은 100% 영구 누적 보존, 동일 은행의 중복 날짜 구간만 최신 파일로 덮어쓰기)
   function bankMergeAndSaveStatements(newTxns) {
     if (!Array.isArray(newTxns) || newTxns.length === 0) return bankLoadStatements();
     const existing = bankLoadStatements();
 
+    // 새로 유입된 거래내역의 은행 식별 (기본값: shinhan)
+    const incomingBank = newTxns[0]?.bank || 'shinhan';
+
     // 1. 새 거래내역에서 유효한 날짜 목록 추출 및 정렬
     const validDates = newTxns.map(t => bankNormalizeDate(t.date)).filter(Boolean).sort();
 
-    let nonOverlapping;
+    let preservedExisting;
     if (validDates.length > 0) {
       const minDate = validDates[0];
       const maxDate = validDates[validDates.length - 1];
 
-      // 2. 기존 데이터 중 새 파일의 날짜 구간 [minDate, maxDate]에 속하지 않는 데이터만 보존
-      //    (중복 날짜 구간은 사용자가 새로 올린 최신 엑셀 내역으로 깔끔하게 덮어쓰기)
-      nonOverlapping = existing.filter(t => {
+      // 2. 기존 데이터 중:
+      //    - [다른 은행의 데이터]: 날짜 무관 100% 무조건 보존! (신한, 국민, 우리 은행 내역 누적 합산)
+      //    - [동일 은행의 데이터]: 새로 올린 파일의 날짜 구간 [minDate, maxDate] 밖의 내역만 보존 (중복 날짜 구간만 최신 파일로 덮어쓰기)
+      preservedExisting = existing.filter(t => {
+        const tBank = t.bank || 'shinhan';
+        if (tBank !== incomingBank) {
+          return true; // 다른 은행 데이터는 무조건 보존!
+        }
         const d = bankNormalizeDate(t.date);
         if (!d) return false;
-        return d < minDate || d > maxDate;
+        return d < minDate || d > maxDate; // 동일 은행의 중복 날짜 구간만 교체
       });
     } else {
-      nonOverlapping = existing;
+      preservedExisting = existing.filter(t => {
+        const tBank = t.bank || 'shinhan';
+        return tBank !== incomingBank;
+      });
     }
 
-    // 3. 새 거래내역과 기존 비중복 데이터 병합 및 날짜 오름차순 정렬
-    const merged = [...nonOverlapping, ...newTxns];
+    // 3. 기존 보존 데이터와 새 거래내역 병합 및 날짜 오름차순 정렬
+    const merged = [...preservedExisting, ...newTxns];
     merged.sort((a, b) => {
       const da = bankNormalizeDate(a.date) || '';
       const db = bankNormalizeDate(b.date) || '';
