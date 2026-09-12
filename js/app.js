@@ -7503,22 +7503,42 @@
       const raw = JSON.parse(localStorage.getItem(BANK_DATA_KEY) || '[]');
       if (!Array.isArray(raw) || raw.length === 0) return [];
 
-      // 고유 거래내역 중복 제거 (날짜 + 내용 + 출금액 + 입금액 + 잔액)
+      let hasCorruptedData = false;
       const seen = new Set();
       const deduped = [];
       raw.forEach(tx => {
         if (!tx) return;
         const d = (typeof bankNormalizeDate === 'function') ? bankNormalizeDate(tx.date) : (tx.date || '');
+        // 1. 유효한 거래일자가 없는 행(계좌번호, 메타데이터 행 오염)은 영구 제거
+        if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+          hasCorruptedData = true;
+          return;
+        }
+
         const out = tx.out || 0;
         const inn = tx.in || 0;
         const bal = tx.balance || 0;
         const desc = String(tx.desc || '').trim();
-        const key = `${d}_${desc}_${out}_${inn}_${bal}`;
+
+        // 2. 비정상 초거대 금액(10억 이상 계좌번호 오인식 데이터나 desc === '12009')은 영구 제거
+        if (out >= 1000000000 || inn >= 1000000000 || desc === '12009') {
+          hasCorruptedData = true;
+          return;
+        }
+
+        const b = (typeof resolveTxBank === 'function') ? resolveTxBank(tx) : (tx.bank || 'shinhan');
+        const key = `${b}_${d}_${desc}_${out}_${inn}_${bal}`;
         if (!seen.has(key)) {
           seen.add(key);
           deduped.push(tx);
         }
       });
+
+      // 오염된 데이터가 걸러졌다면 로컬스토리지도 깨끗하게 자동 갱신
+      if (hasCorruptedData) {
+        localStorage.setItem(BANK_DATA_KEY, JSON.stringify(deduped));
+      }
+
       return deduped;
     } catch(e) { return []; }
   }
@@ -8378,12 +8398,12 @@
     let colDate = -1, colType = -1, colDesc = -1, colSummary = -1, colOut = -1, colIn = -1, colBal = -1, colMemo = -1, colBranch = -1;
     headerCells.forEach((cText, idx) => {
       const clean = cText.replace(/\s+/g, '');
-      if (colDate < 0 && /날짜|거래일|일시|일자/.test(clean)) colDate = idx;
+      if (colDate < 0 && /날짜|거래일|일시|일자/.test(clean) && !/시간/.test(clean)) colDate = idx;
       else if (colType < 0 && /거래구분|구분/.test(clean)) colType = idx;
       else if (/적요/.test(clean)) colSummary = idx;
-      else if (/거래내용|기재내용|내용|의뢰인|수취인|가맹점|보낸분|받는분/.test(clean)) colDesc = idx;
-      else if (/출금|지급/.test(clean)) colOut = idx;
-      else if (/입금/.test(clean)) colIn = idx;
+      else if (/거래내용|기재내용|내용|의뢰인|수취인|가맹점|보낸분|받는분/.test(clean) && !/계좌/.test(clean)) colDesc = idx;
+      else if (/출금|지급/.test(clean) && !/계좌|통장|은행/.test(clean)) colOut = idx;
+      else if (/입금/.test(clean) && !/계좌|통장|은행/.test(clean)) colIn = idx;
       else if (/잔액|잔고|거래후잔액/.test(clean)) colBal = idx;
       else if (/송금메모|메모/.test(clean)) colMemo = idx;
       else if (/거래점|취급점|지점/.test(clean)) colBranch = idx;
@@ -8438,14 +8458,22 @@
       if (!dateMatch) continue;
 
       const normDate = bankNormalizeDate(dateMatch[1]);
+      if (!normDate || !/^\d{4}-\d{2}-\d{2}$/.test(normDate)) continue;
+
       const rawDesc = colDesc >= 0 ? (cells[colDesc] || '') : '';
       const rawType = colType >= 0 ? (cells[colType] || '') : '';
       const fullDesc = rawDesc || rawType || '은행거래';
+      if (fullDesc === '12009') continue;
 
-      const outAmount = parseAmount(cells[colOut]);
-      const inAmount  = parseAmount(cells[colIn]);
+      let outAmount = parseAmount(cells[colOut]);
+      let inAmount  = parseAmount(cells[colIn]);
       const balAmount = parseAmount(cells[colBal]);
       const memoText  = colMemo >= 0 ? cells[colMemo] : '';
+
+      // 계좌번호가 출금액/입금액으로 잘못 들어온 비정상 초거대 금액 가드 (10억 이상)
+      if (outAmount >= 1000000000) outAmount = 0;
+      if (inAmount >= 1000000000) inAmount = 0;
+      if (outAmount === 0 && inAmount === 0) continue;
 
       const rawTxn = {
         date: normDate,
@@ -8653,21 +8681,25 @@
           const ws = wb.Sheets[wb.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-          // 1. 헤더 행 동적 감지 (날짜, 출금액, 입금액, 송금메모 열 위치 자동 특정)
+          // 1. 헤더 행 동적 감지 (날짜, 출금액, 입금액, 송금메모 열 위치 자동 특정 - 메타데이터 요약 행 제외)
           let headerRowIdx = -1;
           let colDate = 0, colDesc = 1, colOut = 2, colIn = 3, colBal = 4, colMemo = -1, colCat = 5, colSub = 6, colMain = 7;
 
-          for (let i = 0; i < Math.min(rows.length, 10); i++) {
+          for (let i = 0; i < Math.min(rows.length, 15); i++) {
             const rowStr = (rows[i] || []).map(c => String(c || '').replace(/\s+/g, '')).join(' ');
-            if (/날짜|거래일자|일자/.test(rowStr) && (/출금|입금/.test(rowStr) || /적요|거래내용|내용/.test(rowStr))) {
+            if (/발급기준일|계좌거래내역|현재잔액|예금주|조회기간|조회계좌|조회일자|계좌번호/.test(rowStr)) {
+              continue;
+            }
+            if (/날짜|거래일자|거래일|일자|거래일시/.test(rowStr) && (/출금|지급|입금/.test(rowStr) || /적요|거래내용|내용/.test(rowStr))) {
               headerRowIdx = i;
               rows[i].forEach((cell, cIdx) => {
                 const c = String(cell || '').replace(/\s+/g, '');
-                if (/날짜|거래일자|일자/.test(c)) colDate = cIdx;
-                else if (/거래내용|적요|내용|기재내용/.test(c)) colDesc = cIdx;
-                else if (/출금/.test(c)) colOut = cIdx;
-                else if (/입금/.test(c)) colIn = cIdx;
-                else if (/잔액|잔고/.test(c)) colBal = cIdx;
+                if (/날짜|거래일자|거래일|일시|일자/.test(c) && !/시간/.test(c)) colDate = cIdx;
+                else if (/출금|지급/.test(c) && !/계좌|통장|은행/.test(c)) colOut = cIdx;
+                else if (/입금/.test(c) && !/계좌|통장|은행/.test(c)) colIn = cIdx;
+                else if (/잔액|잔고|거래후잔액/.test(c)) colBal = cIdx;
+                else if (/거래내용|기재내용|내용|의뢰인|수취인|가맹점|보낸분|받는분/.test(c) && !/계좌/.test(c)) colDesc = cIdx;
+                else if (/적요/.test(c) && colDesc < 0) colDesc = cIdx;
                 else if (/송금메모|메모/.test(c)) colMemo = cIdx;
                 else if (/항목|분류|카테고리/.test(c) && !/대분류|소분류/.test(c)) colCat = cIdx;
                 else if (/소분류/.test(c)) colSub = cIdx;
@@ -8711,13 +8743,24 @@
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
+
+            const rowJoined = row.map(c => String(c || '')).join(' ');
+            if (/발급\s*기준일|계좌거래내역|현재잔액|예금주|조회기간|계좌번호|소계|합계/.test(rowJoined)) {
+              continue;
+            }
+
+            const rawDate = row[colDate];
+            const date = bankNormalizeDate(rawDate);
+            // 거래일자가 없거나 올바른 날짜 형식이 아니면(안내문/계좌정보 등) 무조건 스킵
+            if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
             const desc = String(row[colDesc] || '').trim();
             let category     = String(row[colCat] || '').trim();
             let subCategory  = String(row[colSub] || '').trim();
             let mainCategory = String(row[colMain] || '').trim();
-            if (!desc) continue;
+            if (!desc || desc === '12009') continue;
 
-            if (category && category !== '확인필요') {
+            if (category && category !== '확인필요' && category !== '12009') {
               // 용돈 관련 분류 시 은행 소유자(진영/영호)에 맞게 자동 매칭
               if (category === '용돈' || category === '부부용돈' || /용돈/.test(category)) {
                 category = `${owner}-용돈`;
@@ -8760,16 +8803,33 @@
           for (let idx = startIdx; idx < rows.length; idx++) {
             const row = rows[idx];
             if (!row || row.length === 0) continue;
-            const date = bankNormalizeDate(row[colDate]);
+
+            const rowJoined = row.map(c => String(c || '')).join(' ');
+            if (/발급\s*기준일|계좌거래내역|현재잔액|예금주|조회기간|계좌번호|소계|합계/.test(rowJoined)) {
+              continue;
+            }
+
+            const rawDate = row[colDate];
+            const date = bankNormalizeDate(rawDate);
+            // 거래일자가 없거나 올바른 날짜 형식이 아니면 무조건 스킵!
+            if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
             const desc = String(row[colDesc] || '').trim();
-            const out  = parseAmount(row[colOut]);
-            const inn  = parseAmount(row[colIn]);
+            if (desc === '12009') continue;
+
+            let out  = parseAmount(row[colOut]);
+            let inn  = parseAmount(row[colIn]);
             const bal  = parseAmount(row[colBal]);
+
+            // 계좌번호가 출금액/입금액으로 잘못 들어온 비정상 초거대 데이터 차단 (10억 이상 가드)
+            if (out >= 1000000000) out = 0;
+            if (inn >= 1000000000) inn = 0;
+            if (out === 0 && inn === 0) continue;
+
             let category     = String(row[colCat] || '').trim();
             let subCategory  = String(row[colSub] || '').trim();
             let mainCategory = String(row[colMain] || '').trim();
-
-            if (!date && out === 0 && inn === 0) continue;
+            if (category === '12009') category = '';
 
             // 미분류 항목만 해당 은행 룰맵으로 자동완성
             if (!category || category === '확인필요') {
@@ -8959,6 +9019,19 @@
       // 2단계: 거래내역 순회 - 오직 금액(in vs out)을 기준으로 엄격 분리
       statements.forEach(tx => {
         const normDate = bankNormalizeDate(tx.date);
+        // 날짜가 없거나 YYYY-MM-DD 형식이 아닌 비정상 메타데이터 행 영구 배제
+        if (!normDate || !/^\d{4}-\d{2}-\d{2}$/.test(normDate)) return;
+
+        const descText = String(tx.desc || '').trim();
+        if (descText === '12009') return;
+
+        let inAmt  = parseAmount(tx.in);
+        let outAmt = parseAmount(tx.out);
+        // 계좌번호 크기(10억 이상) 비정상 금액 원천 배제
+        if (inAmt >= 1000000000) inAmt = 0;
+        if (outAmt >= 1000000000) outAmt = 0;
+        if (inAmt === 0 && outAmt === 0) return;
+
         // 거래내용 속 귀속 월(2608, 202608, 8월분 등) 스마트 판별 (없으면 거래일자의 월 사용)
         const effectiveYM = (typeof bankExtractEffectiveMonth === 'function')
           ? bankExtractEffectiveMonth(normDate, tx.desc)
@@ -8967,10 +9040,6 @@
         if (!mm) return;
         const m = parseInt(mm[2], 10);
         if (m < 1 || m > 12) return;
-
-        const inAmt  = parseAmount(tx.in);
-        const outAmt = parseAmount(tx.out);
-        if (inAmt === 0 && outAmt === 0) return;
 
         const bucket = monthlyBuckets[m];
         bucket.hasData = true;
@@ -9292,6 +9361,9 @@
     const byMonth = {};
     statements.forEach(tx => {
       const normDate = bankNormalizeDate(tx.date);
+      if (!normDate || !/^\d{4}-\d{2}-\d{2}$/.test(normDate)) return;
+      if (tx.desc === '12009' || (tx.out || 0) >= 1000000000 || (tx.in || 0) >= 1000000000) return;
+
       const effectiveYM = (typeof bankExtractEffectiveMonth === 'function')
         ? bankExtractEffectiveMonth(normDate, tx.desc)
         : '';
