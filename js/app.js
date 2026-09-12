@@ -7872,6 +7872,8 @@
       return `${mMatch[1]}-${mMatch[2].padStart(2, '0')}-01`;
     }
     return str;
+  }
+
   // 금액 안전 파싱 헬퍼 (천단위 콤마, 원, 공백, 숫자 타입 등 오차 없는 정수 반환)
   function parseAmount(val) {
     if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val);
