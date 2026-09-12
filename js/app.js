@@ -8515,7 +8515,20 @@
         const bucket = monthlyBuckets[m];
         bucket.hasData = true;
 
-        const curBank = tx.bank || 'shinhan';
+        let curBank = tx.bank || '';
+        let curOwner = tx.owner || '';
+        if (!curBank || !curOwner) {
+          if (curOwner === '영호' || (tx.memo !== undefined && tx.memo !== '') || /국민|kb|kookmin|fbs/i.test(tx.desc)) {
+            curBank = 'kookmin';
+            curOwner = '영호';
+          } else if (curOwner === '진영' || /신한|shinhan/i.test(tx.desc)) {
+            curBank = 'shinhan';
+            curOwner = '진영';
+          } else {
+            curBank = 'kookmin';
+            curOwner = '영호';
+          }
+        }
         let category = (tx.category && tx.category !== '확인필요') ? tx.category : '';
         let subCategory = tx.subCategory || '';
         let mainCategory = (tx.mainCategory || '').trim();
@@ -8574,24 +8587,28 @@
 
           if (isSalary) {
             bucket.incomeSalary += inAmt;
-            const isExplicitYh = /영호/.test(catStr) || /영호/.test(desc) || /영호/.test(category) || /영호/.test(mainCategory);
-            const isExplicitJy = /진영/.test(catStr) || /진영/.test(desc) || /진영/.test(category) || /진영/.test(mainCategory);
-            const tBank = tx.bank || 'shinhan';
+            const isKbOrWoori = curBank === 'kookmin' || curBank === 'woori' || curOwner === '영호';
+            const isShinhan = curBank === 'shinhan' || curOwner === '진영';
 
-            if (isExplicitYh && !isExplicitJy) {
+            const isExplicitYh = isKbOrWoori || /영호/.test(catStr) || /영호/.test(desc) || /영호/.test(category) || /영호/.test(mainCategory);
+            const isExplicitJy = isShinhan || /진영/.test(catStr) || /진영/.test(desc) || /진영/.test(category) || /진영/.test(mainCategory);
+
+            if (isExplicitYh && !isShinhan) {
               bucket.incomeSalaryYh += inAmt;
-            } else if (isExplicitJy && !isExplicitYh) {
+            } else if (isExplicitJy && !isKbOrWoori) {
               bucket.incomeSalaryJy += inAmt;
-            } else if (tBank === 'kookmin' || tBank === 'woori') {
+            } else if (isKbOrWoori) {
               bucket.incomeSalaryYh += inAmt;
+            } else if (isShinhan) {
+              bucket.incomeSalaryJy += inAmt;
             } else {
-              bucket.incomeSalaryJy += inAmt;
+              bucket.incomeSalaryYh += inAmt;
             }
           } else {
             bucket.incomeExtra += inAmt;
           }
 
-          const defaultSalName = (tx.bank === 'kookmin' || tx.bank === 'woori' || /영호/.test(catStr) || /영호/.test(desc)) ? '영호 월급' : '진영 월급';
+          const defaultSalName = (curBank === 'kookmin' || curBank === 'woori' || curOwner === '영호') ? '영호 월급' : '진영 월급';
           const itemName = category || subCategory || (desc ? desc.substring(0, 16) : (isSalary ? defaultSalName : '부수입'));
           if (!bucket.incomeMap[itemName]) bucket.incomeMap[itemName] = { total: 0, count: 0 };
           bucket.incomeMap[itemName].total += inAmt;
@@ -9554,8 +9571,20 @@
     let overrideCount = 0;
     const updatedStatements = statements.map(tx => {
       const updatedTx = { ...tx };
-      const curBank = updatedTx.bank || 'shinhan';
-      const curOwner = updatedTx.owner || (curBank === 'shinhan' ? '진영' : '영호');
+      let curBank = updatedTx.bank || '';
+      let curOwner = updatedTx.owner || '';
+      if (!curBank || !curOwner) {
+        if (curOwner === '영호' || (updatedTx.memo !== undefined && updatedTx.memo !== '') || /국민|kb|kookmin|fbs/i.test(updatedTx.desc)) {
+          curBank = 'kookmin';
+          curOwner = '영호';
+        } else if (curOwner === '진영' || /신한|shinhan/i.test(updatedTx.desc)) {
+          curBank = 'shinhan';
+          curOwner = '진영';
+        } else {
+          curBank = 'kookmin';
+          curOwner = '영호';
+        }
+      }
       updatedTx.bank = curBank;
       updatedTx.owner = curOwner;
 
