@@ -7494,7 +7494,28 @@
     localStorage.setItem(BANK_RULES_KEY, JSON.stringify(rules));
   }
   function bankLoadStatements() {
-    try { return JSON.parse(localStorage.getItem(BANK_DATA_KEY) || '[]'); } catch(e) { return []; }
+    try {
+      const raw = JSON.parse(localStorage.getItem(BANK_DATA_KEY) || '[]');
+      if (!Array.isArray(raw) || raw.length === 0) return [];
+
+      // 고유 거래내역 중복 제거 (날짜 + 내용 + 출금액 + 입금액 + 잔액)
+      const seen = new Set();
+      const deduped = [];
+      raw.forEach(tx => {
+        if (!tx) return;
+        const d = (typeof bankNormalizeDate === 'function') ? bankNormalizeDate(tx.date) : (tx.date || '');
+        const out = tx.out || 0;
+        const inn = tx.in || 0;
+        const bal = tx.balance || 0;
+        const desc = String(tx.desc || '').trim();
+        const key = `${d}_${desc}_${out}_${inn}_${bal}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(tx);
+        }
+      });
+      return deduped;
+    } catch(e) { return []; }
   }
   function bankSaveStatements(data) {
     localStorage.setItem(BANK_DATA_KEY, JSON.stringify(data));
@@ -8408,13 +8429,13 @@
     });
   }
 
-  // 거래내역 안전 교체 & 병합 (은행별 격리: 다른 은행 내역은 100% 영구 누적 보존, 동일 은행의 중복 날짜 구간만 최신 파일로 덮어쓰기)
+  // 거래내역 안전 교체 & 병합 (은행별 격리: 다른 은행 내역은 100% 영구 누적 보존, 동일 은행의 중복 날짜 구간만 최신 파일로 덮어쓰기 + 유니크 중복 제거)
   function bankMergeAndSaveStatements(newTxns) {
     if (!Array.isArray(newTxns) || newTxns.length === 0) return bankLoadStatements();
     const existing = bankLoadStatements();
 
-    // 새로 유입된 거래내역의 은행 식별 (기본값: shinhan)
-    const incomingBank = newTxns[0]?.bank || 'shinhan';
+    // 새로 유입된 거래내역의 은행 식별
+    const incomingBank = newTxns[0]?.bank || (newTxns[0]?.owner === '영호' ? 'kookmin' : 'shinhan');
 
     // 1. 새 거래내역에서 유효한 날짜 목록 추출 및 정렬
     const validDates = newTxns.map(t => bankNormalizeDate(t.date)).filter(Boolean).sort();
@@ -8428,7 +8449,14 @@
       //    - [다른 은행의 데이터]: 날짜 무관 100% 무조건 보존! (신한, 국민, 우리 은행 내역 누적 합산)
       //    - [동일 은행의 데이터]: 새로 올린 파일의 날짜 구간 [minDate, maxDate] 밖의 내역만 보존 (중복 날짜 구간만 최신 파일로 덮어쓰기)
       preservedExisting = existing.filter(t => {
-        const tBank = t.bank || 'shinhan';
+        let tBank = t.bank || '';
+        if (!tBank) {
+          if (t.owner === '영호' || (t.memo !== undefined && t.memo !== '') || /국민|kb|kookmin|fbs/i.test(t.desc)) {
+            tBank = 'kookmin';
+          } else {
+            tBank = 'shinhan';
+          }
+        }
         if (tBank !== incomingBank) {
           return true; // 다른 은행 데이터는 무조건 보존!
         }
@@ -8438,13 +8466,28 @@
       });
     } else {
       preservedExisting = existing.filter(t => {
-        const tBank = t.bank || 'shinhan';
+        const tBank = t.bank || (t.owner === '영호' ? 'kookmin' : 'shinhan');
         return tBank !== incomingBank;
       });
     }
 
-    // 3. 기존 보존 데이터와 새 거래내역 병합 및 날짜 오름차순 정렬
-    const merged = [...preservedExisting, ...newTxns];
+    // 3. 고유 키(날짜+내용+출금+입금+잔액) 기반 완전 중복 제거 병합
+    const merged = [];
+    const seen = new Set();
+    [...preservedExisting, ...newTxns].forEach(tx => {
+      if (!tx) return;
+      const d = (typeof bankNormalizeDate === 'function') ? bankNormalizeDate(tx.date) : (tx.date || '');
+      const out = tx.out || 0;
+      const inn = tx.in || 0;
+      const bal = tx.balance || 0;
+      const desc = String(tx.desc || '').trim();
+      const key = `${d}_${desc}_${out}_${inn}_${bal}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(tx);
+      }
+    });
+
     merged.sort((a, b) => {
       const da = bankNormalizeDate(a.date) || '';
       const db = bankNormalizeDate(b.date) || '';
