@@ -4079,6 +4079,11 @@
           }).join('');
         }
       }
+
+      // 은행 거래내역/신혼 가계부 월별 대시보드 동기화 렌더링
+      if (typeof window.bankRenderMonthlyDashboard === 'function') {
+        try { window.bankRenderMonthlyDashboard(); } catch (err) { console.warn('bankRenderMonthlyDashboard error:', err); }
+      }
     },
 
     // =======================================================================
@@ -4771,13 +4776,18 @@
       }
     },
 
-    openLedgerModal() {
+    openLedgerModal(mode = 'pdf') {
       const modal = document.getElementById('ledger-upload-modal');
       const form = document.getElementById('ledger-upload-form');
+      const pdfForm = document.getElementById('ledger-pdf-form');
       if (form) form.reset();
+      if (pdfForm) pdfForm.reset();
       if (modal) {
         modal.style.display = 'flex';
         modal.classList.add('active');
+        if (typeof UI.switchLedgerModalMode === 'function') {
+          UI.switchLedgerModalMode(mode);
+        }
       }
     },
 
@@ -7933,7 +7943,48 @@
     });
 
     const sortedMonths = Object.keys(byMonth).sort().reverse();
-    grid.innerHTML = sortedMonths.map(monthKey => {
+    const currentSelectedMonth = (window.store && store.selectedLedgerMonth) ? Number(store.selectedLedgerMonth) : (new Date().getMonth() + 1);
+    const showAll = Boolean(window._bankShowAllMonths);
+
+    // 사용자가 선택한 월만 기본 표시 (또는 전체 월 모아보기 모드)
+    const filteredMonths = showAll
+      ? sortedMonths
+      : sortedMonths.filter(mKey => {
+          const mon = parseInt(mKey.split('-')[1]);
+          return mon === currentSelectedMonth;
+        });
+
+    // 상단 필터 제어 바 (월 선택 상태 + 수정한 엑셀 올리기 + 전체보기 토글)
+    const filterBarHtml = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.6rem;padding:0.65rem 1rem;background:rgba(255,255,255,0.7);border-radius:12px;border:1px solid var(--border-light,#f0e6ea);margin-bottom:0.85rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.86rem;font-weight:700;color:var(--text-main);">
+          <span>${showAll ? '🌐 전체 월 가계부 모아보기' : `📅 ${currentSelectedMonth}월 가계부 내역`}</span>
+          <span style="font-size:0.75rem;font-weight:normal;color:var(--text-muted);">${filteredMonths.length > 0 ? `(표시 중인 월: ${filteredMonths.length}개)` : ''}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <button type="button" onclick="window.UI && UI.openLedgerModal('excel')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid #7048e8;background:linear-gradient(135deg,rgba(112,72,232,0.12),rgba(112,72,232,0.06));color:#7048e8;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all 0.2s;" title="수정한 엑셀 파일 바로 등록하기">
+            📤 수정한 엑셀 올리기
+          </button>
+          <button type="button" onclick="window._bankShowAllMonths = !window._bankShowAllMonths; bankRenderMonthlyDashboard();" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--border-light,#e2e8f0);background:#fff;color:var(--text-muted);cursor:pointer;font-weight:600;">
+            ${showAll ? `📅 ${currentSelectedMonth}월만 보기` : '🌐 전체 월 모아보기'}
+          </button>
+        </div>
+      </div>
+    `;
+
+    if (filteredMonths.length === 0) {
+      grid.innerHTML = filterBarHtml + `
+        <div style="text-align:center;padding:2.5rem 1rem;color:var(--text-muted);font-size:0.88rem;background:var(--card-bg,#fff);border-radius:16px;border:1px dashed var(--border-light,#f0e6ea);">
+          📅 <strong>${currentSelectedMonth}월</strong>에 업로드된 가계부 거래내역이 없습니다.<br>
+          <span style="font-size:0.8rem;color:var(--text-dim);margin-top:0.4rem;display:inline-block;">
+            상단 1~12월 탭을 클릭하여 다른 월을 확인하시거나, 우측의 <strong>[🌐 전체 월 모아보기]</strong>를 눌러보세요!
+          </span>
+        </div>
+      `;
+      return;
+    }
+
+    const cardsHtml = filteredMonths.map(monthKey => {
       const txns = byMonth[monthKey];
       const [year, mon] = monthKey.split('-');
       const label = `${year}년 ${parseInt(mon)}월`;
@@ -8094,9 +8145,17 @@
         `;
       }).join('');
 
-      const actionBtn = unmatchedCount > 0
-        ? `<button type="button" onclick="window.bankDownloadMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--primary,#ff6b8b);background:rgba(255,107,139,0.08);color:var(--primary,#ff6b8b);font-weight:700;cursor:pointer;">📥 확인필요 ${unmatchedCount}건 엑셀 받기</button>`
-        : `<button type="button" onclick="window.bankDownloadFullMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--border-light,#e2e8f0);background:transparent;color:var(--text-muted);cursor:pointer;">📥 전체 내역 엑셀 받기</button>`;
+      const actionButtons = `
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          ${unmatchedCount > 0
+            ? `<button type="button" onclick="window.bankDownloadMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--primary,#ff6b8b);background:rgba(255,107,139,0.08);color:var(--primary,#ff6b8b);font-weight:700;cursor:pointer;">📥 확인필요 ${unmatchedCount}건 엑셀 받기</button>`
+            : `<button type="button" onclick="window.bankDownloadFullMonth('${monthKey}')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid var(--border-light,#e2e8f0);background:transparent;color:var(--text-muted);cursor:pointer;">📥 전체 내역 엑셀 받기</button>`
+          }
+          <button type="button" onclick="window.UI && UI.openLedgerModal('excel')" style="font-size:0.76rem;padding:0.35rem 0.8rem;border-radius:8px;border:1px solid #7048e8;background:rgba(112,72,232,0.08);color:#7048e8;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;" title="작성한 엑셀 파일 바로 업로드">
+            📤 수정한 엑셀 올리기
+          </button>
+        </div>
+      `;
 
       return `
         <div class="bank-month-card" style="background:var(--card-bg,#fff);border-radius:18px;border:1px solid var(--border-light,#f0e6ea);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.04);margin-bottom:1.5rem;">
@@ -8129,14 +8188,17 @@
           </div>
 
           <!-- 카드 푸터 -->
-          <div style="padding:0.75rem 1.25rem;border-top:1px solid var(--border-light,#f0e6ea);background:rgba(0,0,0,0.015);display:flex;justify-content:space-between;align-items:center;">
+          <div style="padding:0.75rem 1.25rem;border-top:1px solid var(--border-light,#f0e6ea);background:rgba(0,0,0,0.015);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
             <span style="font-size:0.78rem;color:var(--text-muted);">총 거래 ${txns.length}건 기록됨</span>
-            ${actionBtn}
+            ${actionButtons}
           </div>
         </div>
       `;
     }).join('');
+
+    grid.innerHTML = filterBarHtml + cardsHtml;
   }
+  window.bankRenderMonthlyDashboard = bankRenderMonthlyDashboard;
 
   // 전체 월 엑셀 내보내기 헬퍼
   window.bankDownloadFullMonth = function(monthKey) {
@@ -8170,7 +8232,7 @@
     ws['!cols'] = [{ wch:12 }, { wch:28 }, { wch:14 }, { wch:14 }, { wch:14 }, { wch:16 }, { wch:16 }, { wch:16 }];
     XLSX.utils.book_append_sheet(wb, ws, '확인필요');
     XLSX.writeFile(wb, `${year}년${parseInt(mon)}월_확인필요.xlsx`);
-    UI.showToast(`${parseInt(mon)}월 확인필요 ${txns.length}건 다운로드!`, 'success');
+    UI.showToast(`${parseInt(mon)}월 확인필요 ${txns.length}건 다운로드! 수정 후 [📤 수정한 엑셀 올리기]를 눌러주세요.`, 'success');
   };
 
   // 규칙 관리 패널 렌더링 (항목, 소분류, 대분류 3단 태그 표시)
