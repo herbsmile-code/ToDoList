@@ -3870,6 +3870,17 @@
         });
       }
 
+      const expFixed = (mData.expense && mData.expense.fixed != null) ? mData.expense.fixed : fixedTotal;
+      const expVar = (mData.expense && mData.expense.variable != null) ? mData.expense.variable : variableTotal;
+      const expEtc = (mData.expense && mData.expense.etc != null) ? mData.expense.etc : 0;
+      const expTotal = (mData.expense && mData.expense.total != null) ? mData.expense.total : (fixedTotal + variableTotal);
+
+      const savCheongyak = (mData.savings && mData.savings.cheongyak != null) ? mData.savings.cheongyak : 0;
+      const savInstallment = (mData.savings && mData.savings.installment != null) ? mData.savings.installment : 0;
+      const savTotal = (mData.savings && mData.savings.total != null) ? mData.savings.total : (savCheongyak + savInstallment);
+
+      const remainingVal = (mData.remaining != null) ? mData.remaining : (incomeTotal - expTotal - savTotal);
+
       if (statTitleIncome) statTitleIncome.textContent = `💵 ${targetMonth}월 수입`;
       if (statValIncomeTotal) statValIncomeTotal.textContent = formatKRW(incomeTotal);
       if (statValIncomeSalaryYh) statValIncomeSalaryYh.textContent = formatKRW(incomeSalaryYh);
