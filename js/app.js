@@ -8100,9 +8100,10 @@
       } catch(e) {}
     }
 
-    // 2. DOM 파싱
+    // 2. DOM 파싱 & 스타일/스크립트 태그 원천 제거
     const parser = new DOMParser();
     const doc = parser.parseFromString(text, 'text/html');
+    doc.querySelectorAll('style, script, noscript, link, meta, head').forEach(el => el.remove());
 
     // 3. 거래내역 테이블 검색 (상위 15개 테이블 검사)
     const allTables = Array.from(doc.querySelectorAll('table'));
@@ -8112,12 +8113,13 @@
 
     for (const tbl of allTables) {
       const rows = Array.from(tbl.querySelectorAll('tr'));
-      for (let rIdx = 0; rIdx < Math.min(rows.length, 10); rIdx++) {
+      for (let rIdx = 0; rIdx < rows.length; rIdx++) {
         const tr = rows[rIdx];
         const cells = Array.from(tr.querySelectorAll('th, td')).map(c => c.textContent.trim().replace(/\s+/g, ' '));
-        const rowStr = cells.join(' ');
-        // 거래일자/날짜와 출금/입금/적요/잔액 등이 포함된 행 감지
-        if (/날짜|거래일|일자|거래일시/.test(rowStr) && (/출금|입금|지급/.test(rowStr) || /적요|거래내용|내용|기재내용|보낸분|받는분/.test(rowStr))) {
+        const hasDate = cells.some(c => /거래일시|거래일자|거래일|일자|날짜/.test(c));
+        const hasOut  = cells.some(c => /출금/.test(c));
+        const hasIn   = cells.some(c => /입금/.test(c));
+        if (hasDate && hasOut && hasIn && cells.length >= 4) {
           targetTable = tbl;
           headerCells = cells;
           headerRowIdx = rIdx;
@@ -8128,7 +8130,7 @@
     }
 
     // 4. 거래내역 테이블을 찾지 못한 경우: 보안메일(암호화) 여부 점검
-    if (!targetTable) {
+    if (!targetTable || headerRowIdx < 0) {
       const lowerText = text.toLowerCase();
       const isSecured = lowerText.includes('password') || lowerText.includes('xecure') || lowerText.includes('initech') || lowerText.includes('s-core') || lowerText.includes('softforum') || lowerText.includes('보안') || lowerText.includes('비밀번호');
       if (isSecured) {
@@ -8138,27 +8140,37 @@
       }
     }
 
-    // 5. 열 인덱스 식별
-    let colDate = -1, colDesc = -1, colSummary = -1, colOut = -1, colIn = -1, colBal = -1, colMemo = -1;
+    // 5. 딱 필요한 컬럼만 정밀 식별 (거래일시, 거래구분, 기재내용, 출금금액, 입금금액, 잔액, 거래점)
+    let colDate = -1, colType = -1, colDesc = -1, colOut = -1, colIn = -1, colBal = -1, colBranch = -1;
     headerCells.forEach((cText, idx) => {
       const clean = cText.replace(/\s+/g, '');
-      if (colDate < 0 && /날짜|거래일|일시|일자/.test(clean)) colDate = idx;
-      else if (/적요/.test(clean)) colSummary = idx;
-      else if (/거래내용|기재내용|내용|의뢰인|수취인|가맹점|보낸분|받는분/.test(clean)) colDesc = idx;
-      else if (/출금|지급/.test(clean)) colOut = idx;
-      else if (/입금/.test(clean)) colIn = idx;
-      else if (/잔액|잔고|거래후잔액/.test(clean)) colBal = idx;
-      else if (/송금메모|메모/.test(clean)) colMemo = idx;
+      if (colDate < 0 && /거래일시|거래일자|거래일|일자|날짜/.test(clean)) colDate = idx;
+      else if (colType < 0 && /거래구분|구분|적요/.test(clean)) colType = idx;
+      else if (colDesc < 0 && /기재내용|거래내용|내용|의뢰인|수취인|보낸분|받는분|가맹점/.test(clean)) colDesc = idx;
+      else if (colOut < 0 && /출금/.test(clean)) colOut = idx;
+      else if (colIn < 0 && /입금/.test(clean)) colIn = idx;
+      else if (colBal < 0 && /잔액|잔고|거래후잔액/.test(clean)) colBal = idx;
+      else if (colBranch < 0 && /거래점|취급점|지점/.test(clean)) colBranch = idx;
     });
 
-    if (colDesc < 0 && colSummary >= 0) colDesc = colSummary;
-
-    // 6. 원본 헤더 100% 보존 + 오른쪽에 [항목, 소분류, 대분류] 열 추가
-    const headers = [...headerCells];
-    const hasCategoryCol = headers.some(h => /항목|분류/.test(h) && !/대분류|소분류/.test(h));
-    if (!hasCategoryCol) {
-      headers.push('항목', '소분류', '대분류');
+    if (colDesc < 0 && colType >= 0) {
+      colDesc = colType;
+      colType = -1;
     }
+
+    // 딱 필요한 유효 컬럼 정의
+    const neededCols = [];
+    if (colDate >= 0)   neededCols.push({ key: 'date', label: '거래일시', idx: colDate });
+    if (colType >= 0)   neededCols.push({ key: 'type', label: '거래구분', idx: colType });
+    if (colDesc >= 0)   neededCols.push({ key: 'desc', label: '기재내용', idx: colDesc });
+    if (colOut >= 0)    neededCols.push({ key: 'out', label: '출금금액(원)', idx: colOut });
+    if (colIn >= 0)     neededCols.push({ key: 'in', label: '입금금액(원)', idx: colIn });
+    if (colBal >= 0)    neededCols.push({ key: 'bal', label: '잔액(원)', idx: colBal });
+    if (colBranch >= 0) neededCols.push({ key: 'branch', label: '거래점', idx: colBranch });
+
+    // 헤더 구성: 딱 필요한 열들 + 오른쪽에 [항목, 소분류, 대분류]
+    const finalHeaders = neededCols.map(c => c.label);
+    finalHeaders.push('항목', '소분류', '대분류');
 
     const allRows = Array.from(targetTable.querySelectorAll('tr'));
     const dataRows = [];
@@ -8170,74 +8182,72 @@
       const cells = Array.from(tr.querySelectorAll('th, td')).map(c => c.textContent.trim().replace(/[\r\n\t]+/g, ' ').trim());
       if (cells.length === 0 || cells.every(c => !c)) continue;
 
-      // 행의 열 개수를 원본 headerCells 길이에 맞춤
-      while (cells.length < headerCells.length) {
-        cells.push('');
+      // 거래일자 파싱 (예: 2026.09.10 21:50:34)
+      const rawDate = colDate >= 0 ? (cells[colDate] || '') : '';
+      const dateMatch = rawDate.match(/(20\d{2}[.\-/]?[01]\d[.\-/]?[0-3]\d)/);
+      if (!dateMatch) {
+        // 날짜 형식이 없는 행(합계 행, 계좌정보 요약 행 등)은 깔끔하게 스킵!
+        continue;
       }
 
-      // 날짜 확인
-      const rawDate = colDate >= 0 ? cells[colDate] : '';
-      const normDate = bankNormalizeDate(rawDate);
+      const normDate = bankNormalizeDate(dateMatch[1]);
+      const rawDesc = colDesc >= 0 ? (cells[colDesc] || '') : '';
+      const rawType = colType >= 0 ? (cells[colType] || '') : '';
+      const fullDesc = rawDesc || rawType || '우리은행거래';
 
-      // 거래내용 구성 (적요 + 기재내용)
-      let descText = '';
-      if (colSummary >= 0 && colDesc >= 0 && colSummary !== colDesc) {
-        const sumVal = cells[colSummary] || '';
-        const descVal = cells[colDesc] || '';
-        descText = (sumVal && descVal && sumVal !== descVal) ? `${sumVal} ${descVal}`.trim() : (descVal || sumVal);
-      } else if (colDesc >= 0) {
-        descText = cells[colDesc] || '';
-      }
+      const rawOut = colOut >= 0 ? cells[colOut] : '0';
+      const rawIn  = colIn >= 0 ? cells[colIn] : '0';
+      const rawBal = colBal >= 0 ? cells[colBal] : '0';
 
-      const outAmount = colOut >= 0 ? parseAmount(cells[colOut]) : 0;
-      const inAmount  = colIn >= 0 ? parseAmount(cells[colIn]) : 0;
-      const balAmount = colBal >= 0 ? parseAmount(cells[colBal]) : 0;
-      const memoText  = colMemo >= 0 ? cells[colMemo] : '';
+      const outAmount = parseAmount(rawOut);
+      const inAmount  = parseAmount(rawIn);
+      const balAmount = parseAmount(rawBal);
 
-      // 유효 거래 행인 경우 자동 분류 수행
-      if (normDate && (outAmount > 0 || inAmount > 0 || descText)) {
-        const rawTxn = {
-          date: normDate,
-          desc: descText || (inAmount > 0 ? '입금' : '출금'),
-          out: outAmount,
-          in: inAmount,
-          balance: balAmount,
-          memo: memoText,
-          bank: bankType,
-          owner
-        };
+      // 자동 분류용 거래 객체 생성
+      const rawTxn = {
+        date: normDate,
+        desc: fullDesc,
+        out: outAmount,
+        in: inAmount,
+        balance: balAmount,
+        memo: rawType && rawType !== fullDesc ? rawType : '',
+        bank: bankType,
+        owner
+      };
 
-        const classified = bankAutoClassify([rawTxn], bankType)[0];
-        validTxns.push(classified);
+      const classified = bankAutoClassify([rawTxn], bankType)[0];
+      validTxns.push(classified);
 
-        if (!hasCategoryCol) {
-          cells.push(classified.category || '확인필요', classified.subCategory || '', classified.mainCategory || '');
-        }
-      } else {
-        if (!hasCategoryCol) {
-          cells.push('', '', '');
-        }
-      }
+      // 딱 필요한 열의 값만 1:1로 추출 (금액은 정수 숫자로 넣어 엑셀 수식/합계 지원)
+      const rowValues = neededCols.map(col => {
+        if (col.key === 'out') return outAmount;
+        if (col.key === 'in')  return inAmount;
+        if (col.key === 'bal') return balAmount;
+        return cells[col.idx] !== undefined ? cells[col.idx] : '';
+      });
 
-      dataRows.push(cells);
+      // 오른쪽에 [항목, 소분류, 대분류] 열 값 추가
+      rowValues.push(classified.category || '확인필요', classified.subCategory || '', classified.mainCategory || '');
+
+      dataRows.push(rowValues);
     }
 
-    if (validTxns.length === 0 && dataRows.length === 0) {
+    if (validTxns.length === 0 || dataRows.length === 0) {
       throw new Error('⚠️ 유효한 거래내역 행을 추출하지 못했습니다.');
     }
 
-    // 7. 엑셀 워크북 생성 및 다운로드
-    const excelRows = [headers, ...dataRows];
+    // 7. 엑셀 워크북 생성 및 다운로드 (깨끗한 1행 헤더부터 시작!)
+    const excelRows = [finalHeaders, ...dataRows];
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(excelRows);
 
-    ws['!cols'] = headers.map((h, cIdx) => {
+    ws['!cols'] = finalHeaders.map((h, cIdx) => {
       let maxLen = (h || '').length * 2;
       for (let r = 0; r < Math.min(excelRows.length, 50); r++) {
         const val = String(excelRows[r][cIdx] || '');
         maxLen = Math.max(maxLen, val.length);
       }
-      return { wch: Math.min(Math.max(maxLen + 3, 12), 40) };
+      return { wch: Math.min(Math.max(maxLen + 4, 12), 35) };
     });
 
     const bankName = (bankType === 'woori') ? '우리은행' : ((bankType === 'shinhan') ? '신한은행' : '국민은행');
@@ -8296,13 +8306,19 @@
 
     if (colDesc < 0 && colSummary >= 0) colDesc = colSummary;
 
-    const headers = [...headerCells];
-    const hasCategoryCol = headers.some(h => /항목|분류/.test(h) && !/대분류|소분류/.test(h));
-    if (!hasCategoryCol) {
-      headers.push('항목', '소분류', '대분류');
-    }
+    const neededCols = [];
+    if (colDate >= 0)   neededCols.push({ key: 'date', label: '거래일시', idx: colDate });
+    if (colType >= 0)   neededCols.push({ key: 'type', label: '거래구분', idx: colType });
+    if (colDesc >= 0)   neededCols.push({ key: 'desc', label: '기재내용', idx: colDesc });
+    if (colOut >= 0)    neededCols.push({ key: 'out', label: '출금금액(원)', idx: colOut });
+    if (colIn >= 0)     neededCols.push({ key: 'in', label: '입금금액(원)', idx: colIn });
+    if (colBal >= 0)    neededCols.push({ key: 'bal', label: '잔액(원)', idx: colBal });
+    if (colMemo >= 0)   neededCols.push({ key: 'memo', label: '송금메모', idx: colMemo });
 
-    const dataRows = [];
+    const finalHeaders = neededCols.map(c => c.label);
+    finalHeaders.push('항목', '소분류', '대분류');
+
+    const finalDataRows = [];
     const validTxns = [];
     const owner = (bankType === 'shinhan') ? '진영' : '영호';
 
@@ -8310,64 +8326,60 @@
       const row = rows[i];
       if (!row || row.length === 0 || row.every(c => !c)) continue;
       const cells = row.map(c => String(c !== undefined && c !== null ? c : '').trim());
-      while (cells.length < headerCells.length) cells.push('');
 
-      const rawDate = colDate >= 0 ? cells[colDate] : '';
-      const normDate = bankNormalizeDate(rawDate);
+      const rawDate = colDate >= 0 ? (cells[colDate] || '') : '';
+      const dateMatch = rawDate.match(/(20\d{2}[.\-/]?[01]\d[.\-/]?[0-3]\d)/);
+      if (!dateMatch) continue;
 
-      let descText = '';
-      if (colSummary >= 0 && colDesc >= 0 && colSummary !== colDesc) {
-        const sumVal = cells[colSummary] || '';
-        const descVal = cells[colDesc] || '';
-        descText = (sumVal && descVal && sumVal !== descVal) ? `${sumVal} ${descVal}`.trim() : (descVal || sumVal);
-      } else if (colDesc >= 0) {
-        descText = cells[colDesc] || '';
-      }
+      const normDate = bankNormalizeDate(dateMatch[1]);
+      const rawDesc = colDesc >= 0 ? (cells[colDesc] || '') : '';
+      const rawType = colType >= 0 ? (cells[colType] || '') : '';
+      const fullDesc = rawDesc || rawType || '은행거래';
 
-      const outAmount = colOut >= 0 ? parseAmount(cells[colOut]) : 0;
-      const inAmount  = colIn >= 0 ? parseAmount(cells[colIn]) : 0;
-      const balAmount = colBal >= 0 ? parseAmount(cells[colBal]) : 0;
+      const outAmount = parseAmount(cells[colOut]);
+      const inAmount  = parseAmount(cells[colIn]);
+      const balAmount = parseAmount(cells[colBal]);
       const memoText  = colMemo >= 0 ? cells[colMemo] : '';
 
-      if (normDate && (outAmount > 0 || inAmount > 0 || descText)) {
-        const rawTxn = {
-          date: normDate,
-          desc: descText || (inAmount > 0 ? '입금' : '출금'),
-          out: outAmount,
-          in: inAmount,
-          balance: balAmount,
-          memo: memoText,
-          bank: bankType,
-          owner
-        };
+      const rawTxn = {
+        date: normDate,
+        desc: fullDesc,
+        out: outAmount,
+        in: inAmount,
+        balance: balAmount,
+        memo: memoText,
+        bank: bankType,
+        owner
+      };
 
-        const classified = bankAutoClassify([rawTxn], bankType)[0];
-        validTxns.push(classified);
+      const classified = bankAutoClassify([rawTxn], bankType)[0];
+      validTxns.push(classified);
 
-        if (!hasCategoryCol) {
-          cells.push(classified.category || '확인필요', classified.subCategory || '', classified.mainCategory || '');
-        }
-      } else {
-        if (!hasCategoryCol) cells.push('', '', '');
-      }
+      const rowValues = neededCols.map(col => {
+        if (col.key === 'out') return outAmount;
+        if (col.key === 'in')  return inAmount;
+        if (col.key === 'bal') return balAmount;
+        return cells[col.idx] !== undefined ? cells[col.idx] : '';
+      });
 
-      dataRows.push(cells);
+      rowValues.push(classified.category || '확인필요', classified.subCategory || '', classified.mainCategory || '');
+      finalDataRows.push(rowValues);
     }
 
-    if (validTxns.length === 0) {
+    if (validTxns.length === 0 || finalDataRows.length === 0) {
       throw new Error('⚠️ 유효한 거래내역 행을 추출하지 못했습니다.');
     }
 
-    const excelRows = [headers, ...dataRows];
+    const excelRows = [finalHeaders, ...finalDataRows];
     const outWb = XLSX.utils.book_new();
     const outWs = XLSX.utils.aoa_to_sheet(excelRows);
-    outWs['!cols'] = headers.map((h, cIdx) => {
+    outWs['!cols'] = finalHeaders.map((h, cIdx) => {
       let maxLen = (h || '').length * 2;
       for (let r = 0; r < Math.min(excelRows.length, 50); r++) {
         const val = String(excelRows[r][cIdx] || '');
         maxLen = Math.max(maxLen, val.length);
       }
-      return { wch: Math.min(Math.max(maxLen + 3, 12), 40) };
+      return { wch: Math.min(Math.max(maxLen + 4, 12), 35) };
     });
 
     const bankName = (bankType === 'woori') ? '우리은행' : ((bankType === 'shinhan') ? '신한은행' : '국민은행');
