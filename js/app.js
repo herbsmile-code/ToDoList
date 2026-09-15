@@ -207,6 +207,9 @@
     track(previous, next, meta) {
       const result = this.clone(meta), before = this.slots(previous), after = this.slots(next);
       for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+        // Equal serialized values need no SHA-256 calculation; changed values
+        // still use the original canonical hashes for outbox compatibility.
+        if (JSON.stringify(after[key]) === JSON.stringify(before[key])) continue;
         const current = this.state(after,key);
         if (current === this.state(before,key)) continue;
         const old = result.pending.find(p => p.key === key);
@@ -286,6 +289,10 @@
       this.lastSyncedRevision = localRev;
       this.isPushing = false;
       this._vaultFilesCache = null;
+      // Disposable verification cache, never a source of user data or persisted state.
+      this._idleSyncCache = null;
+      this._vaultChangeVersion = 0;
+      this._vaultWritesInFlight = 0;
     }
 
     init() {
@@ -444,7 +451,23 @@
     }
 
     async fetchLatestFromCloud(force = false) {
+      if (force) this._idleSyncCache = null;
       return this._executePushTasksToCloud();
+    }
+
+    beginVaultWrite() {
+      this._idleSyncCache = null;
+      this._vaultChangeVersion++;
+      this._vaultWritesInFlight++;
+      return () => {
+        this._vaultWritesInFlight--;
+        this._idleSyncCache = null;
+      };
+    }
+
+    vaultMetadataStamp() {
+      return JSON.stringify([localStorage.getItem('todolist_jy_vault_meta'),
+        localStorage.getItem('todolist_jy_vault_files')]);
     }
 
     async requestCloud(url, options = {}) {
@@ -527,19 +550,41 @@
         }
         // Persist unsaved mutations/outbox before ANY network request.
         // Routine checks keep the last visible status until there is work or an error.
-        if (!store.saveLocalOnly(null, null, {showPending:false})) return false;
+        if (!store.saveLocalOnly(null, null, {showPending:false, skipUnchanged:!forceWrite})) return false;
         if (forceWrite) store.setSaveStatus('syncing');
         else if (store.localSync.pending.length && store.saveStatus === 'confirmed') store.setSaveStatus('pending');
         const capturedRaw = store._lastLocalRaw;
-        const captured = LocalSyncProtocol.clone(store._committedData);
-        const meta = LocalSyncProtocol.clone(store.localSync);
-        const local = LocalSyncProtocol.select(captured);
+        const vaultVersion = this._vaultChangeVersion;
+        const vaultStamp = this.vaultMetadataStamp();
+        const cached = this._idleSyncCache;
         const response = await this.requestCloud(url, { headers: { 'X-Firebase-ETag': 'true' } });
         if (!response.ok) throw new Error('Cloud GET failed: ' + response.status);
         const etag = response.headers.get('ETag');
         if (!etag) throw new Error('Cloud ETag missing');
         const encrypted = await response.json();
         if (encrypted?.isEncrypted && (!encrypted.iv || !encrypted.payload)) throw new Error('Incomplete encrypted response');
+        if (store.localLoadFailed || store.localSyncInvalid || store.localWriteFailed || store.writerBlocked || store._lastLocalRaw !== capturedRaw) return false;
+        if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
+        const wire = JSON.stringify(encrypted);
+        if (!forceWrite && cached && this._idleSyncCache === cached &&
+            cached.target === target && cached.raw === capturedRaw && cached.etag === etag && cached.wire === wire &&
+            cached.vaultVersion === this._vaultChangeVersion && cached.vaultStamp === this.vaultMetadataStamp() &&
+            !this._vaultWritesInFlight && Date.now() >= cached.checkedAt && Date.now() - cached.checkedAt < 300000 &&
+            store.localSync.baseline.known && !store.localSync.pending.length && !store.localSync.conflicts.length) {
+          // Check durable bytes AND live Store values again after the network await.
+          // This path acknowledges no pending changes and performs no data writes.
+          if (!store.hasConfirmedLocalData()) {
+            this._idleSyncCache = null;
+            store.setSaveStatus('pending', '동기화 필요 · 변경된 로컬 데이터를 다시 확인합니다.');
+            return false;
+          }
+          this.failures = 0; this.retryAfter = 0;
+          if (store.saveStatus !== 'confirmed') store.setSaveStatus('confirmed');
+          return true;
+        }
+        const captured = LocalSyncProtocol.clone(store._committedData);
+        const meta = LocalSyncProtocol.clone(store.localSync);
+        const local = LocalSyncProtocol.select(captured);
         const decoded = encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted, sessionPin);
         if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid cloud object');
         if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed) return false;
@@ -618,6 +663,11 @@
           if (store._lastLocalRaw !== capturedRaw || store.localLoadFailed || store.writerBlocked) return false;
         }
         if (!store.commitLocal(next, acknowledged)) return false;
+        // Only a fully validated GET can seed this cache; a PUT changes its ETag.
+        // Recheck occasionally even without changes, and always after vault writes.
+        this._idleSyncCache = !shouldWrite && !this._vaultWritesInFlight && vaultVersion === this._vaultChangeVersion &&
+          vaultStamp === this.vaultMetadataStamp()
+          ? {target, raw:store._lastLocalRaw, etag, wire, vaultVersion, vaultStamp, checkedAt:Date.now()} : null;
         this.lastSyncedUpdatedAt = store.lastUpdatedAt;
         this.lastSyncedRevision = store.syncRevision;
         this.failures = 0; this.retryAfter = 0;
@@ -630,6 +680,7 @@
         }
         return true;
       } catch (e) {
+        this._idleSyncCache = null;
         this.failures = (this.failures || 0) + 1;
         this.retryAfter = Date.now() + Math.min(60000, 1000 * 2 ** Math.min(this.failures,6));
         store.setSaveStatus(store.hasConfirmedLocalData() ? 'syncFailed' : 'failed');
@@ -644,23 +695,28 @@
     startRealtimePolling() {
       if (this.syncTimer) clearInterval(this.syncTimer);
       this.syncTimer = setInterval(() => {
-        this.fetchLatestFromCloud(false);
-      }, 4000);
+        if (!document.hidden) this.fetchLatestFromCloud(false);
+      }, 30000);
 
       if (this._pollEventsBound) return;
       this._pollEventsBound = true;
-      window.addEventListener('online', () => { this.retryAfter = 0; this.fetchLatestFromCloud(false); });
+      const wake = () => {
+        if (!this.spaceId || !this.pin) return;
+        // Visibility and focus often fire together. Share one check on return.
+        const now = Date.now();
+        if (this._lastWakeSyncAt !== undefined && now - this._lastWakeSyncAt < 1000) return;
+        this._lastWakeSyncAt = now;
+        this.retryAfter = 0;
+        this.fetchLatestFromCloud(true);
+      };
+      window.addEventListener('online', wake);
 
       // 모바일 앱/화면 복귀 시 즉시 동기화
       document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && this.spaceId && this.pin) {
-          this.fetchLatestFromCloud(false);
-        }
+        if (!document.hidden) wake();
       });
       window.addEventListener('focus', () => {
-        if (this.spaceId && this.pin) {
-          this.fetchLatestFromCloud(false);
-        }
+        if (!document.hidden) wake();
       });
     }
 
@@ -901,6 +957,7 @@
     },
 
     async addFiles(newItems) {
+      const finish = cloudSync.beginVaultWrite();
       try {
         const db = await this.getDB();
         return new Promise((resolve, reject) => {
@@ -911,14 +968,16 @@
           });
           tx.oncomplete = () => resolve(true);
           tx.onerror = () => reject(tx.error);
-        });
+        }).finally(finish);
       } catch (err) {
+        finish();
         console.warn('IDB addFiles error:', err);
         return false;
       }
     },
 
     async saveAll(files) {
+      const finish = cloudSync.beginVaultWrite();
       try {
         const db = await this.getDB();
         return new Promise((resolve, reject) => {
@@ -930,14 +989,16 @@
           });
           tx.oncomplete = () => resolve(true);
           tx.onerror = () => reject(tx.error);
-        });
+        }).finally(finish);
       } catch (err) {
+        finish();
         console.warn('IDB save error:', err);
         return false;
       }
     },
 
     async delete(id) {
+      const finish = cloudSync.beginVaultWrite();
       try {
         const db = await this.getDB();
         return new Promise((resolve) => {
@@ -946,8 +1007,9 @@
           store.delete(id);
           tx.oncomplete = () => resolve(true);
           tx.onerror = () => resolve(false);
-        });
+        }).finally(finish);
       } catch (err) {
+        finish();
         return false;
       }
     }
@@ -1366,11 +1428,9 @@
 
     hasConfirmedLocalData() {
       try {
-        const committed = {...this._committedData};
-        delete committed.localSync;
         return !this.localLoadFailed && !this.localWriteFailed &&
           localStorage.getItem(STORAGE_KEY) === this._lastLocalRaw &&
-          LocalSyncProtocol.hash(this.buildLocalData()) === LocalSyncProtocol.hash(committed);
+          JSON.stringify({...this.buildLocalData(),localSync:this.localSync}) === this._lastLocalRaw;
       } catch (e) { return false; }
     }
 
@@ -1420,7 +1480,7 @@
         if (localStorage.getItem(STORAGE_KEY) !== this._lastLocalRaw) throw new Error('Another window changed local data');
         const candidate = {...LocalSyncProtocol.clone(data), localSync: LocalSyncProtocol.clone(meta)};
         const encoded = JSON.stringify(candidate);
-        localStorage.setItem(STORAGE_KEY, encoded);
+        if (encoded !== this._lastLocalRaw) localStorage.setItem(STORAGE_KEY, encoded);
         if (localStorage.getItem(STORAGE_KEY) !== encoded) throw new Error('Local save verification failed');
         this._lastLocalRaw = encoded;
         this._committedData = candidate;
@@ -1441,17 +1501,27 @@
       }
     }
 
-    saveLocalOnly(customTimestamp = null, customRevision = null, {showPending = true} = {}) {
+    saveLocalOnly(customTimestamp = null, customRevision = null, {showPending = true, skipUnchanged = false} = {}) {
       if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) return false;
       try {
         const next = this.buildLocalData();
         if (customTimestamp !== null) next.updatedAt = customTimestamp;
         if (customRevision !== null) next.syncRevision = customRevision;
-        const meta = LocalSyncProtocol.track(this._committedData || {}, next, this.localSync);
-        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
-        if (!this.commitLocal(next,meta)) return false;
+        const needsTarget = !this.localSync.targetFingerprint && cloudSync.spaceId && cloudSync.pin;
+        const unchanged = skipUnchanged && !this.localWriteFailed && this._lastLocalRaw !== null &&
+          !needsTarget && JSON.stringify({...next,localSync:this.localSync}) === this._lastLocalRaw;
+        if (unchanged) {
+          if (localStorage.getItem(STORAGE_KEY) !== this._lastLocalRaw) throw new Error('Another window changed local data');
+        } else {
+          const meta = LocalSyncProtocol.track(this._committedData || {}, next, this.localSync);
+          if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+          if (!this.commitLocal(next,meta)) return false;
+        }
         // An unrelated streak write is not allowed to turn a saved memo into failure.
-        try { localStorage.setItem(STREAK_KEY,JSON.stringify(this.streak)); } catch (e) { console.warn('Streak save failed:',e); }
+        try {
+          const streak = JSON.stringify(this.streak);
+          if (localStorage.getItem(STREAK_KEY) !== streak) localStorage.setItem(STREAK_KEY,streak);
+        } catch (e) { console.warn('Streak save failed:',e); }
         if (showPending) this.setSaveStatus('pending');
         return true;
       } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }

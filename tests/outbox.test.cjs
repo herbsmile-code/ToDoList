@@ -431,6 +431,7 @@ test('manual: PUT failure keeps local body and exact pending records, restart an
 test('manual: local quota failure blocks GET/PUT and never claims the device copy is safe', async () => {
   const s=server(),h=s.attach(harness(JSON.stringify(fixture)));h.store.addNote('D');
   const raw=h.values.get(key),{elements,toasts}=mountSyncControls(h);
+  h.store.notes[0].content='Unsaved edit requiring a real write';
   h.context.localStorage.setItem=()=>{throw Error('QuotaExceededError');};
   assert.equal(await h.context.cloudSync.requestManualSync(),false);
   assert.equal(h.values.get(key),raw);assert.equal(h.requests.length,0);
@@ -566,7 +567,7 @@ test('idle polling: repeated timer checks leave the confirmed button and detail 
   let poll,renders=0;
   const render=h.store.renderSaveStatus.bind(h.store);
   h.store.renderSaveStatus=()=>{renders++;render();};
-  h.context.setInterval=(callback,delay)=>{assert.equal(delay,4000);poll=callback;return 1;};
+  h.context.setInterval=(callback,delay)=>{assert.equal(delay,30000);poll=callback;return 1;};
   h.context.addEventListener=()=>{};h.context.document.addEventListener=()=>{};
   h.context.cloudSync.startRealtimePolling();
   for(let i=0;i<3;i++) {
@@ -625,8 +626,221 @@ test('idle polling: unresolved conflicts never flash syncing or clear pending re
 test('idle polling: local save failure still blocks all network requests and shows local failure', async () => {
   const s=server(),h=s.attach(harness(JSON.stringify(fixture)));await sync(h);
   const {elements}=mountSyncControls(h),before=h.requests.length,raw=h.values.get(key);
+  h.store.notes[0].content='Unsaved edit requiring a real write';
   h.context.localStorage.setItem=()=>{throw Error('quota');};
   assert.equal(await sync(h),false);
   assert.equal(h.requests.length,before);assert.equal(h.values.get(key),raw);
   assert.equal(elements['manual-sync-state'].textContent,'로컬 저장 실패');
+});
+
+async function cachedClient() {
+  const s=server(),h=s.attach(harness(JSON.stringify(fixture)));
+  await sync(h);await sync(h); // PUT, then one fully validated GET.
+  assert.ok(h.context.cloudSync._idleSyncCache);
+  return {s,h};
+}
+
+test('light sync: unchanged checks do no hashing of memo bodies, decrypt, merge, vault read or writes', async () => {
+  const {h}=await cachedClient(),raw=h.values.get(key),protocol=h.context.protocol;
+  h.writes.length=0;let hashes=0;
+  const hash=protocol.hash;
+  protocol.hash=function(value){hashes++;assert.ok(Array.isArray(value));return hash.call(this,value);};
+  protocol.merge=()=>{throw Error('Unexpected merge');};
+  h.context.E2EESecurityEngine.decrypt=()=>{throw Error('Unexpected decrypt');};
+  h.context.cloudSync.getAllVaultFiles=()=>{throw Error('Unexpected vault read');};
+  h.context.localStorage.setItem=()=>{throw Error('Unexpected write');};
+  for(let i=0;i<3;i++)assert.equal(await sync(h),true);
+  assert.equal(hashes,6);assert.deepEqual(h.writes,[]);assert.equal(h.values.get(key),raw);
+});
+
+test('light sync: changed cloud body with the same ETag still runs full validation', async () => {
+  const {s,h}=await cachedClient();let reads=0;
+  h.context.cloudSync.getAllVaultFiles=async()=>{reads++;return [];};
+  s.data.notes.push({id:'from-b',content:'B added this'}); // Deliberately unchanged fake ETag.
+  assert.equal(await sync(h),true);assert.equal(reads,1);
+  assert.ok(saved(h).notes.some(n=>n.id==='from-b'));
+});
+
+test('light sync: pending edits bypass cached confirmation, survive failure and then upload', async () => {
+  const {s,h}=await cachedClient();const d=h.store.addNote('D'),pending=clone(saved(h).localSync.pending);
+  s.failPUT=true;assert.equal(await sync(h),false);
+  assert.deepEqual(saved(h).localSync.pending,pending);
+  assert.equal(saved(h).notes.find(n=>n.id===d.id).content,'D');
+  s.failPUT=false;assert.equal(await sync(h),true);
+  assert.equal(s.data.notes.find(n=>n.id===d.id).content,'D');assert.equal(saved(h).localSync.pending.length,0);
+});
+
+test('light sync: direct Store mutation is saved with pending records before any network request', async () => {
+  const {s,h}=await cachedClient(),fetch=h.context.fetch;
+  h.store.notes[0].content='Live Store edit';
+  h.context.fetch=async(...args)=>{
+    assert.equal(saved(h).notes[0].content,'Live Store edit');
+    assert.ok(saved(h).localSync.pending.length);return fetch(...args);
+  };
+  assert.equal(await sync(h),true);assert.equal(s.data.notes[0].content,'Live Store edit');
+});
+
+test('light sync: a live edit during GET cannot receive the old cached acknowledgement', async () => {
+  const {s,h}=await cachedClient(),fetch=h.context.fetch;
+  h.context.fetch=async(...args)=>{const res=await fetch(...args);h.store.notes[0].content='Changed during GET';return res;};
+  assert.equal(await sync(h),false);
+  assert.equal(h.store.notes[0].content,'Changed during GET');assert.equal(h.store.saveStatus,'pending');
+  h.context.fetch=fetch;assert.equal(await sync(h),true);
+  assert.equal(s.data.notes[0].content,'Changed during GET');
+});
+
+test('light sync: externally replaced or unreadable local bytes block cached success and further writes', async () => {
+  for(const mode of ['replaced','unreadable']) {
+    const {h}=await cachedClient(),fetch=h.context.fetch,get=h.context.localStorage.getItem;
+    const replacement=JSON.stringify({...fixture,notes:[{id:'external',content:'Keep external data'}]});
+    h.context.fetch=async(...args)=>{
+      const res=await fetch(...args);
+      if(mode==='replaced')h.values.set(key,replacement);
+      else h.context.localStorage.getItem=k=>{if(k===key)throw Error('Read denied');return get(k);};
+      return res;
+    };
+    h.writes.length=0;assert.equal(await sync(h),false);assert.deepEqual(h.writes,[]);
+    const before=h.requests.length;assert.equal(await sync(h),false);assert.equal(h.requests.length,before);
+    if(mode==='replaced')assert.equal(h.values.get(key),replacement);
+  }
+});
+
+test('light sync: manual sync always performs a fresh full check and conditional PUT', async () => {
+  const {h}=await cachedClient(),before=puts(h).length;let reads=0;
+  h.context.cloudSync.getAllVaultFiles=async()=>{reads++;return [];};
+  assert.equal(await h.context.cloudSync.requestManualSync(),true);
+  assert.equal(reads,1);assert.equal(puts(h).length,before+1);
+});
+
+test('light sync: restart and verification-cache expiry each require a full check', async () => {
+  const {s,h}=await cachedClient();let reads=0;
+  h.context.cloudSync.getAllVaultFiles=async()=>{reads++;return [];};
+  h.context.Date.now=()=>1789470000000+300001;
+  assert.equal(await sync(h),true);assert.equal(reads,1);
+  const reboot=restart(h,s);assert.equal(reboot.context.cloudSync._idleSyncCache,null);
+  reboot.context.cloudSync.getAllVaultFiles=async()=>{reads++;return [];};
+  assert.equal(await sync(reboot),true);assert.equal(reads,2);
+});
+
+test('light sync: missing ETag or malformed response never reuses an older success', async () => {
+  for(const mode of ['etag','body']) {
+    const {h}=await cachedClient(),fetch=h.context.fetch,raw=h.values.get(key);
+    h.context.fetch=async(...args)=>{
+      const res=await fetch(...args);
+      if(mode==='etag')res.headers.get=()=>null;
+      else res.json=async()=>({isEncrypted:true});
+      return res;
+    };
+    assert.equal(await sync(h),false);assert.equal(h.values.get(key),raw);
+    assert.equal(h.store.saveStatus,'syncFailed');assert.equal(h.context.cloudSync._idleSyncCache,null);
+  }
+});
+
+test('light sync: changed vault metadata forces a strict file check, even with unchanged server data', async () => {
+  const {h}=await cachedClient();let reads=0;
+  h.values.set('todolist_jy_vault_meta','[{"id":"metadata-changed"}]');
+  h.context.cloudSync.getAllVaultFiles=async(force,strict)=>{assert.equal(strict,true);reads++;return [];};
+  assert.equal(await sync(h),true);assert.equal(reads,1);
+});
+
+function fakeVaultEngine(h) {
+  const {source}=require('./sync-harness.cjs'),vm=require('node:vm');
+  vm.runInContext(source.slice(source.indexOf('  // IndexedDB Vault Storage Engine'),source.indexOf('  const cloudSync ='))+
+    '\nglobalThis.fakeVault = VaultDBEngine;',h.context);
+  const transactions=[],started=deferred();
+  h.context.fakeVault.getDB=async()=>({transaction(){
+    const tx={objectStore:()=>({put(){},clear(){},delete(){}})};transactions.push(tx);started.resolve(tx);return tx;
+  }});
+  return {engine:h.context.fakeVault,transactions,started:started.promise};
+}
+
+test('light sync: all actual vault writer entry points invalidate cache until their fake transaction settles', async () => {
+  for(const method of ['addFiles','saveAll','delete']) {
+    for(const failure of [false,true]) {
+      const {h}=await cachedClient(),{engine,transactions,started}=fakeVaultEngine(h),cloud=h.context.cloudSync;
+      const version=cloud._vaultChangeVersion,work=engine[method](method==='delete'?'f':[{id:'f'}]);
+      assert.equal(cloud._idleSyncCache,null);assert.equal(cloud._vaultWritesInFlight,1);
+      assert.equal(cloud._vaultChangeVersion,version+1);await started;
+      cloud._idleSyncCache={mustBeInvalidated:true};
+      if(failure){
+        transactions[0].error=Error('fake transaction failed');transactions[0].onerror();
+        if(method==='delete')assert.equal(await work,false);else await assert.rejects(work);
+      }else{transactions[0].oncomplete();assert.equal(await work,true);}
+      assert.equal(cloud._vaultWritesInFlight,0);assert.equal(cloud._idleSyncCache,null);
+    }
+  }
+});
+
+test('light sync: opening a fake vault fails without leaving cache or a write counter stuck', async () => {
+  const {h}=await cachedClient(),{engine}=fakeVaultEngine(h);
+  engine.getDB=async()=>{throw Error('fake open failure');};
+  for(const method of ['addFiles','saveAll','delete'])assert.equal(await engine[method]([]),false);
+  assert.equal(h.context.cloudSync._vaultWritesInFlight,0);assert.equal(h.context.cloudSync._idleSyncCache,null);
+});
+
+test('light sync: a vault write during GET forces a full read and retains the new file contents', async () => {
+  const {s,h}=await cachedClient(),fetch=h.context.fetch,{engine,transactions,started}=fakeVaultEngine(h);
+  const file={id:'new-file',name:'Fixture',dataUrl:'data:fake-contents'};let reads=0;
+  h.context.fetch=async(...args)=>{
+    const res=await fetch(...args);
+    if(!args[1]?.method){const work=engine.addFiles([file]);await started;transactions.at(-1).oncomplete();await work;}
+    return res;
+  };
+  h.context.cloudSync.getAllVaultFiles=async()=>{reads++;return [file];};
+  assert.equal(await sync(h),true);assert.equal(reads,1);
+  assert.equal(s.data.vaultFiles[0].dataUrl,file.dataUrl);
+  assert.equal(h.context.cloudSync._idleSyncCache,null);
+});
+
+test('light sync: equal content with reordered properties keeps the existing hash semantics', () => {
+  const h=harness(JSON.stringify(fixture)),p=h.context.protocol;
+  const before={notes:[{id:'a',content:'Text',color:'pink'}]},after={notes:[{color:'pink',content:'Text',id:'a'}]};
+  assert.equal(p.track(before,after,p.empty()).pending.length,0);
+  after.notes[0].content='New text';const tracked=p.track(before,after,p.empty());
+  assert.equal(tracked.pending.length,1);
+  assert.equal(tracked.pending[0].localHash,p.hash(after.notes[0]));
+});
+
+test('light sync: hidden tabs skip periodic checks; save and manual sync still run, return events coalesce', async () => {
+  const {h}=await cachedClient(),handlers={},timers=[];let poll;
+  h.context.setInterval=(fn,delay)=>{assert.equal(delay,30000);poll=fn;return 1;};
+  h.context.addEventListener=(event,fn)=>{handlers[event]=fn;};
+  h.context.document.addEventListener=(event,fn)=>{handlers[event]=fn;};
+  h.context.cloudSync.startRealtimePolling();h.context.document.hidden=true;
+  const before=h.requests.length;poll();handlers.focus();assert.equal(h.requests.length,before);
+  h.context.setTimeout=(fn,delay)=>{timers.push({fn,delay});return timers.length;};
+  const d=h.store.addNote('Hidden tab saved memo');assert.ok(saved(h).notes.some(n=>n.id===d.id));
+  const auto=timers.find(t=>t.delay===350);assert.ok(auto);auto.fn();await h.context.cloudSync._syncPromise;
+  assert.ok(h.requests.length>before);assert.equal(await h.context.cloudSync.requestManualSync(),true);
+  h.context.document.hidden=false;const resumed=h.requests.length;
+  handlers.visibilitychange();handlers.focus();await h.context.cloudSync._syncPromise;
+  assert.equal(h.requests.length,resumed+1);
+  h.context.cloudSync._lastWakeSyncAt=undefined;h.context.cloudSync.retryAfter=h.context.Date.now()+60000;
+  handlers.online();await h.context.cloudSync._syncPromise;assert.equal(h.context.cloudSync.retryAfter,0);
+});
+
+test('light sync: offline pending data is bound to the login target before the first network request', async () => {
+  const h=harness(JSON.stringify(fixture),{extras:{todolist_jy_space_id:'',todolist_jy_pin:''}});
+  h.store.addNote('Created before login');assert.equal(saved(h).localSync.targetFingerprint,null);
+  const cloud=h.context.cloudSync;cloud.spaceId='fixture-user';cloud.pin='fixture-pin';
+  h.context.fetch=async()=>{
+    assert.equal(saved(h).localSync.targetFingerprint,h.context.protocol.hash([cloud.activeUrl,cloud.getStorageKey()]));
+    throw Error('Offline');
+  };
+  assert.equal(await sync(h),false);assert.ok(saved(h).localSync.pending.length);
+  assert.ok(saved(h).notes.some(n=>n.content==='Created before login'));
+});
+
+test('light sync: losing write permission during GET blocks cached success', async () => {
+  const {h}=await cachedClient(),fetch=h.context.fetch,raw=h.values.get(key);
+  h.context.fetch=async(...args)=>{const res=await fetch(...args);h.store.writerBlocked=true;return res;};
+  assert.equal(await sync(h),false);assert.equal(h.values.get(key),raw);
+});
+
+test('light sync: a vault write already in progress prevents seeding a new verification cache', async () => {
+  const {h}=await cachedClient(),{engine,started}=fakeVaultEngine(h),cloud=h.context.cloudSync;
+  const work=engine.addFiles([{id:'pending-file'}]),tx=await started;
+  assert.equal(cloud._vaultWritesInFlight,1);
+  assert.equal(await sync(h),true);assert.equal(cloud._idleSyncCache,null);
+  tx.oncomplete();await work;assert.equal(cloud._vaultWritesInFlight,0);
 });
