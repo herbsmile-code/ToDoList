@@ -557,3 +557,76 @@ test('manual: signed-out and changed-account requests do not send device data', 
     assert.equal(h.requests.length,0);assert.deepEqual(saved(h).localSync.pending,pending);
   }
 });
+
+test('idle polling: repeated timer checks leave the confirmed button and detail untouched', async () => {
+  const s=server(),h=s.attach(harness(JSON.stringify(fixture)));
+  const {elements,toasts}=mountSyncControls(h);
+  await h.context.cloudSync.requestManualSync();
+  const detail=elements['local-save-status'].textContent,raw=h.values.get(key),before=puts(h).length;
+  let poll,renders=0;
+  const render=h.store.renderSaveStatus.bind(h.store);
+  h.store.renderSaveStatus=()=>{renders++;render();};
+  h.context.setInterval=(callback,delay)=>{assert.equal(delay,4000);poll=callback;return 1;};
+  h.context.addEventListener=()=>{};h.context.document.addEventListener=()=>{};
+  h.context.cloudSync.startRealtimePolling();
+  for(let i=0;i<3;i++) {
+    poll();await h.context.cloudSync._syncPromise;
+    assert.equal(elements['manual-sync-state'].textContent,'동기화 완료');
+    assert.equal(elements['local-save-status'].textContent,detail);
+  }
+  assert.equal(renders,0);
+  assert.equal(puts(h).length,before);
+  assert.equal(h.values.get(key),raw);
+  assert.equal(toasts.length,1);
+});
+
+test('idle polling: a held GET keeps completed status, but a failed GET is shown immediately', async () => {
+  const s=server(),h=s.attach(harness(JSON.stringify(fixture)));await sync(h);
+  const {elements}=mountSyncControls(h),fetch=h.context.fetch,entered=deferred(),release=deferred();
+  h.context.fetch=async(...args)=>{entered.resolve();await release.promise;return fetch(...args);};
+  const work=h.context.cloudSync.fetchLatestFromCloud();await entered.promise;
+  assert.equal(elements['manual-sync-state'].textContent,'동기화 완료');
+  assert.equal(elements['btn-manual-sync'].attributes['aria-busy'],'false');
+  s.failGET=true;release.resolve();assert.equal(await work,false);
+  assert.equal(elements['manual-sync-state'].textContent,'동기화 실패');
+  assert.match(elements['local-save-status'].textContent,/이 기기에는 안전하게 저장/);
+  h.context.fetch=fetch;s.failGET=false;
+  assert.equal(await sync(h),true);
+  assert.equal(elements['manual-sync-state'].textContent,'동기화 완료');
+});
+
+test('automatic upload: a saved change shows pending, then syncing until the PUT acknowledgement', async () => {
+  const s=server(),h=s.attach(harness(JSON.stringify(fixture)));await sync(h);
+  const {elements}=mountSyncControls(h),entered=deferred(),release=deferred();
+  const note=h.store.addNote('New pending memo');
+  assert.equal(elements['manual-sync-state'].textContent,'동기화 필요');
+  s.beforePUT=async()=>{entered.resolve();await release.promise;};
+  const work=sync(h);await entered.promise;
+  assert.equal(elements['manual-sync-state'].textContent,'동기화 중');
+  assert.ok(saved(h).localSync.pending.length);
+  release.resolve();assert.equal(await work,true);
+  assert.equal(elements['manual-sync-state'].textContent,'동기화 완료');
+  assert.equal(s.data.notes.find(n=>n.id===note.id).content,'New pending memo');
+});
+
+test('idle polling: unresolved conflicts never flash syncing or clear pending records', async () => {
+  const s=server(),a=s.attach(harness(JSON.stringify(fixture)));await sync(a);
+  const b=restart(a,s);a.store.updateNote('user-note',{content:'A'});
+  b.store.updateNote('user-note',{content:'B'});await sync(b);await sync(a);
+  const {elements}=mountSyncControls(a),pending=clone(saved(a).localSync.pending),states=[];
+  const render=a.store.renderSaveStatus.bind(a.store);
+  a.store.renderSaveStatus=()=>{render();states.push(elements['manual-sync-state'].textContent);};
+  assert.equal(await sync(a),false);
+  assert.ok(states.every(state=>state==='동기화 필요'));
+  assert.deepEqual(saved(a).localSync.pending,pending);
+  assert.equal(saved(a).notes.find(n=>n.id==='user-note').content,'A');
+});
+
+test('idle polling: local save failure still blocks all network requests and shows local failure', async () => {
+  const s=server(),h=s.attach(harness(JSON.stringify(fixture)));await sync(h);
+  const {elements}=mountSyncControls(h),before=h.requests.length,raw=h.values.get(key);
+  h.context.localStorage.setItem=()=>{throw Error('quota');};
+  assert.equal(await sync(h),false);
+  assert.equal(h.requests.length,before);assert.equal(h.values.get(key),raw);
+  assert.equal(elements['manual-sync-state'].textContent,'로컬 저장 실패');
+});

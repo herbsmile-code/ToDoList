@@ -526,8 +526,10 @@
           store.setSaveStatus('conflict'); return false;
         }
         // Persist unsaved mutations/outbox before ANY network request.
-        if (!store.saveLocalOnly()) return false;
-        store.setSaveStatus('syncing');
+        // Routine checks keep the last visible status until there is work or an error.
+        if (!store.saveLocalOnly(null, null, {showPending:false})) return false;
+        if (forceWrite) store.setSaveStatus('syncing');
+        else if (store.localSync.pending.length && store.saveStatus === 'confirmed') store.setSaveStatus('pending');
         const capturedRaw = store._lastLocalRaw;
         const captured = LocalSyncProtocol.clone(store._committedData);
         const meta = LocalSyncProtocol.clone(store.localSync);
@@ -574,6 +576,7 @@
           LocalSyncProtocol.hash({...result.data, vaultFiles});
         const shouldWrite = changed || forceWrite;
         if (shouldWrite) {
+          store.setSaveStatus('syncing');
           const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, sessionPin);
           if (!encryptedBody?.isEncrypted || !encryptedBody.payload || !encryptedBody.iv) throw new Error('Encryption failed; plaintext upload blocked');
           if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked) return false;
@@ -618,7 +621,9 @@
         this.lastSyncedUpdatedAt = store.lastUpdatedAt;
         this.lastSyncedRevision = store.syncRevision;
         this.failures = 0; this.retryAfter = 0;
-        store.setSaveStatus('confirmed', forceWrite ? '동기화 성공' : undefined);
+        if (store.saveStatus !== 'confirmed' || forceWrite) {
+          store.setSaveStatus('confirmed', forceWrite ? '동기화 성공' : undefined);
+        }
         // Do not render hidden ledger views: their renderer currently saves data.
         if (typeof UI !== 'undefined' && LocalSyncProtocol.hash(local) !== LocalSyncProtocol.hash(result.data)) {
           UI.renderTasks(); UI.renderSidebar();
@@ -1436,7 +1441,7 @@
       }
     }
 
-    saveLocalOnly(customTimestamp = null, customRevision = null) {
+    saveLocalOnly(customTimestamp = null, customRevision = null, {showPending = true} = {}) {
       if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) return false;
       try {
         const next = this.buildLocalData();
@@ -1447,7 +1452,7 @@
         if (!this.commitLocal(next,meta)) return false;
         // An unrelated streak write is not allowed to turn a saved memo into failure.
         try { localStorage.setItem(STREAK_KEY,JSON.stringify(this.streak)); } catch (e) { console.warn('Streak save failed:',e); }
-        this.setSaveStatus('pending');
+        if (showPending) this.setSaveStatus('pending');
         return true;
       } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
     }
