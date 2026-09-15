@@ -20,7 +20,7 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- CSS Stylesheets -->
-  <link rel="stylesheet" href="css/style.css?v=20260915_mobile2">
+  <link rel="stylesheet" href="css/style.css?v=20260915_ledger1">
   <link rel="stylesheet" href="css/animations.css?v=20260912_v152">
 
   <!-- Global Error Logger (스크립트 오류 실시간 화면 감지) -->
@@ -840,6 +840,7 @@
 
           <!-- TAB 1: 💍 2026 신혼 가계부 (엑셀 분석 & 통계) -->
           <div id="ledger-tab-budget" style="display: flex; flex-direction: column; gap: 1.35rem;">
+            <p id="ledger-month-data-status" class="ledger-month-data-status" role="status" hidden></p>
             <!-- Honeymoon 4 Core Stats Cards -->
             <div class="ledger-stats-banner">
               <!-- [박스 1] N월 수입 -->
@@ -913,7 +914,7 @@
                 <div class="stat-card-header">
                   <span class="stat-card-title" id="stat-title-remaining">💰 6월 남은돈(기타)</span>
                 </div>
-                <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; flex:1; padding:0.25rem 0;">
+                <div class="stat-remaining-values" style="display:flex; flex-direction:column; justify-content:center; align-items:center; flex:1; padding:0.25rem 0;">
                   <span class="stat-card-total" id="stat-val-remaining-total" style="font-size:1.35rem; font-weight:800;">0원</span>
                   <span style="font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem; white-space:nowrap;" id="stat-sub-remaining-desc">수입 - 지출 - 저축</span>
                 </div>
@@ -2978,7 +2979,7 @@
   <script src="js/utils/helpers.js?v=20260912_v152"></script>
   <script src="js/services/crypto.js?v=20260912_v152"></script>
   <script src="js/memo-transfer.js?v=20260915_transfer1"></script>
-  <script src="js/app.js?v=20260915_mobile1"></script>
+  <script src="js/app.js?v=20260915_ledger1"></script>
   <script src="js/treasure.js?v=20260912_v152"></script>
 </body>
 </html>

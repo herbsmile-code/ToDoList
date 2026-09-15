@@ -3982,6 +3982,15 @@
     // =======================================================================
     // 💍 2026년 신혼 가계부 & 🔄 구독관리 Engine
     // =======================================================================
+    getLedgerAvailableMonths(data) {
+      return Array.from({length:12}, (_,i) => i + 1).filter(month => {
+        const entry = data?.[month];
+        return entry && (entry.hasData === true || ['income','expense','fixed','variable','savings'].some(key =>
+          (Number(entry[key]?.total) !== 0 && Number.isFinite(Number(entry[key]?.total))) ||
+          (Array.isArray(entry[key]?.items) && entry[key].items.length > 0)));
+      });
+    },
+
     renderLedger() {
       const activeSubtab = store.activeLedgerSubtab || 'budget';
       const budgetTabPanel = document.getElementById('ledger-tab-budget');
@@ -4018,13 +4027,23 @@
       if (openLedgerBtn) openLedgerBtn.style.display = 'inline-flex';
       if (openSubBtn) openSubBtn.style.display = 'none';
 
-      // 은행 거래내역 ➡️ 상단 신혼 가계부 대시보드 실시간 동기화
-      if (typeof window.syncBankToHoneymoonData === 'function') {
-        try { window.syncBankToHoneymoonData(); } catch (e) { console.warn('syncBankToHoneymoonData error:', e); }
-      }
-
+      // Viewing a device must never recalculate synced totals from its local-only bank files.
       const data = store.honeymoonData || INITIAL_HONEYMOON_DATA;
+      const availableMonths = this.getLedgerAvailableMonths(data);
+      if (!this.ledgerMonthInitialized && availableMonths.length) {
+        if (!availableMonths.includes(store.selectedLedgerMonth)) {
+          store.selectedLedgerMonth = availableMonths[availableMonths.length - 1];
+        }
+        this.ledgerMonthInitialized = true;
+      }
       const targetMonth = store.selectedLedgerMonth || 7;
+      const monthStatus = document.getElementById('ledger-month-data-status');
+      if (monthStatus) {
+        monthStatus.textContent = availableMonths.includes(targetMonth) ? '' : availableMonths.length
+          ? `${targetMonth}월에는 저장된 내역이 없습니다. 내역이 있는 월: ${availableMonths.join(', ')}월. 아래 월 버튼으로 선택해 주세요.`
+          : '동기화된 월별 가계부 내역이 아직 없습니다. PC의 저장 상태와 상단 동기화 상태를 확인해 주세요.';
+        monthStatus.hidden = !monthStatus.textContent;
+      }
       const mData = data[targetMonth] || { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } };
 
       const incomeTotal = mData.income ? mData.income.total : 0;
@@ -7715,15 +7734,13 @@
       const raw = JSON.parse(localStorage.getItem(BANK_DATA_KEY) || '[]');
       if (!Array.isArray(raw) || raw.length === 0) return [];
 
-      let hasCorruptedData = false;
       const seen = new Set();
       const deduped = [];
       raw.forEach(tx => {
         if (!tx) return;
         const d = (typeof bankNormalizeDate === 'function') ? bankNormalizeDate(tx.date) : (tx.date || '');
-        // 1. 유효한 거래일자가 없는 행(계좌번호, 메타데이터 행 오염)은 영구 제거
+        // 1. 유효한 거래일자가 없는 행은 이번 읽기에서만 제외하고 저장 원본은 유지
         if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-          hasCorruptedData = true;
           return;
         }
 
@@ -7732,9 +7749,8 @@
         const bal = tx.balance || 0;
         const desc = String(tx.desc || '').trim();
 
-        // 2. 비정상 초거대 금액(10억 이상 계좌번호 오인식 데이터나 desc === '12009')은 영구 제거
+        // 2. 계좌번호로 의심되는 금액/내용은 이번 읽기에서만 제외하고 원본은 유지
         if (out >= 1000000000 || inn >= 1000000000 || desc === '12009') {
-          hasCorruptedData = true;
           return;
         }
 
@@ -7746,11 +7762,7 @@
         }
       });
 
-      // 오염된 데이터가 걸러졌다면 로컬스토리지도 깨끗하게 자동 갱신
-      if (hasCorruptedData) {
-        localStorage.setItem(BANK_DATA_KEY, JSON.stringify(deduped));
-      }
-
+      // Filter only this view. A read must never rewrite the original bank file data.
       return deduped;
     } catch(e) { return []; }
   }
@@ -9195,6 +9207,7 @@
   // 3. 출금액은 항목별/대분류별 집계, 입금액은 항목별 수입 집계
   function syncBankToHoneymoonData() {
     if (!window.store) return;
+    if (store.localLoadFailed || store.localSyncInvalid || store.localWriteFailed || store.writerBlocked) return;
     const statements = (typeof bankLoadStatements === 'function') ? bankLoadStatements() : [];
     if (!statements || statements.length === 0) return;
     const rules = (typeof bankLoadRules === 'function') ? bankLoadRules() : [];
@@ -9531,19 +9544,8 @@
           remaining: remainingTotal
         };
         updated = true;
-      } else {
-        // [중요]: 2, 3월 등 엑셀 데이터가 없는 월은 깨끗하게 0원 초기화 상태 유지
-        store.honeymoonData[m] = {
-          hasData: false,
-          income: { total: 0, salary: 0, extra: 0, items: [] },
-          expense: { total: 0, fixed: 0, variable: 0, etc: 0 },
-          fixed: { total: 0, items: [] },
-          variable: { total: 0, items: [] },
-          savings: { total: 0, cheongyak: 0, installment: 0, stockExtra: 0 },
-          remaining: 0
-        };
-        updated = true;
       }
+      // No local transactions for this month is not a deletion of synced totals.
     }
 
     if (updated && typeof store.save === 'function') {
@@ -9565,7 +9567,8 @@
 
     if (statements.length === 0) {
       grid.innerHTML = `<div style="text-align:center;padding:2.5rem;color:var(--text-muted);font-size:0.88rem;background:var(--card-bg,#fff);border-radius:16px;border:1px dashed var(--border-light,#f0e6ea);">
-        📄 아직 업로드된 거래내역이 없어요.<br>상단 <strong>+ 신혼 가계부 등록</strong> 버튼에서 PDF 또는 엑셀을 업로드하세요!
+        이 기기에는 은행 거래 원본이 없습니다.<br>동기화된 월별 금액과 항목은 위에 표시됩니다.<br>
+        <span style="font-size:0.8rem;">은행별 거래 상세는 파일을 등록한 기기에만 보관됩니다.</span>
       </div>`;
       return;
     }
@@ -10564,7 +10567,7 @@
       });
     }
 
-    if (typeof syncBankToHoneymoonData === 'function') syncBankToHoneymoonData();
+    // Startup only renders. Recalculation belongs to explicit imports/rule edits.
     bankRenderMonthlyDashboard();
   }
 
@@ -11068,6 +11071,7 @@
       // Ledger Month Tab Click
       const lMonthTab = e.target.closest('.l-m-tab');
       if (lMonthTab && lMonthTab.dataset.lMonth) {
+        UI.ledgerMonthInitialized = true;
         store.selectedLedgerMonth = Number(lMonthTab.dataset.lMonth);
         UI.renderLedger();
       }
@@ -11075,6 +11079,7 @@
       // Ledger Bar Column Click
       const lBarCol = e.target.closest('.ledger-bar-col');
       if (lBarCol && lBarCol.dataset.lMonth) {
+        UI.ledgerMonthInitialized = true;
         store.selectedLedgerMonth = Number(lBarCol.dataset.lMonth);
         UI.renderLedger();
       }

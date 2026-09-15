@@ -3814,11 +3814,60 @@ body::after {
   color: var(--text-muted);
 }
 
-/* Mobile ledger: one readable list, without the desktop dashboard. */
+.ledger-month-data-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+/* Mobile ledger: compact totals and a single readable detail list. */
 @media (max-width: 992px) {
-  #ledger-tab-budget .ledger-stats-banner,
   #ledger-tab-budget .ledger-chart-card {
     display: none;
+  }
+
+  #ledger-tab-budget .ledger-stats-banner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: .4rem;
+  }
+
+  #ledger-tab-budget .ledger-stat-card {
+    padding: .65rem .75rem;
+    border-radius: 10px;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  #ledger-tab-budget .stat-card-header {
+    flex-wrap: wrap;
+    border: 0;
+    padding: 0;
+  }
+
+  #ledger-tab-budget .stat-card-list,
+  #ledger-tab-budget #stat-sub-remaining-desc {
+    display: none;
+  }
+
+  #ledger-tab-budget .ledger-stat-remaining {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  #ledger-tab-budget .stat-remaining-values {
+    display: contents !important;
+  }
+
+  #ledger-tab-budget .stat-card-total {
+    min-width: 0;
+    margin-left: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 1rem !important;
+    font-variant-numeric: tabular-nums;
   }
 
   #ledger-tab-budget,
