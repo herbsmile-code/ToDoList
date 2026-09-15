@@ -120,6 +120,144 @@
   // =========================================================================
   // 3. Multi-Region Cloud Sync Manager
   // =========================================================================
+  // Local-only outbox. All business data still belongs to the single Store.
+  const LocalSyncProtocol = {
+    fields: ['tasks', 'categories', 'sidebarMenuOrder', 'wishlist', 'photos', 'notes',
+      'vaultFolders', 'deletedItemIds', 'honeymoonData', 'ledgerFiles', 'vacations',
+      'totalVacationDays', 'sites', 'siteFolders', 'healthNotes', 'healthFolders',
+      'hobbyNotes', 'hobbyFolders', 'aiStudyNotes', 'subscriptions', 'projects',
+      'customMenuNames', 'customTheme'],
+    lists: ['tasks', 'categories', 'wishlist', 'photos', 'notes', 'vaultFolders',
+      'ledgerFiles', 'vacations', 'sites', 'siteFolders', 'healthNotes', 'healthFolders',
+      'hobbyNotes', 'hobbyFolders', 'aiStudyNotes', 'subscriptions', 'projects'],
+    clone(value) { return JSON.parse(JSON.stringify(value)); },
+    canonical(value) {
+      if (Array.isArray(value)) return '[' + value.map(v => this.canonical(v)).join(',') + ']';
+      if (value && typeof value === 'object') return '{' + Object.keys(value).sort()
+        .map(k => JSON.stringify(k) + ':' + this.canonical(value[k])).join(',') + '}';
+      return JSON.stringify(value);
+    },
+    // Synchronous SHA-256 permits data + outbox to use ONE localStorage write.
+    hash(value) {
+      const bytes = new TextEncoder().encode(this.canonical(value));
+      const k = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+      const h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+      const padded = new Uint8Array(Math.ceil((bytes.length + 9) / 64) * 64);
+      padded.set(bytes); padded[bytes.length] = 128;
+      const view = new DataView(padded.buffer);
+      view.setUint32(padded.length - 8, Math.floor(bytes.length / 0x20000000));
+      view.setUint32(padded.length - 4, (bytes.length * 8) >>> 0);
+      const rotate = (x, n) => (x >>> n) | (x << (32 - n));
+      const w = new Uint32Array(64);
+      for (let offset = 0; offset < padded.length; offset += 64) {
+        for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
+        for (let i = 16; i < 64; i++) {
+          const x = w[i - 15], y = w[i - 2];
+          w[i] = (w[i - 16] + (rotate(x,7)^rotate(x,18)^(x>>>3)) + w[i - 7] + (rotate(y,17)^rotate(y,19)^(y>>>10))) >>> 0;
+        }
+        let [a,b,c,d,e,f,g,z] = h;
+        for (let i = 0; i < 64; i++) {
+          const t = (z + (rotate(e,6)^rotate(e,11)^rotate(e,25)) + ((e&f)^(~e&g)) + k[i] + w[i]) >>> 0;
+          const u = ((rotate(a,2)^rotate(a,13)^rotate(a,22)) + ((a&b)^(a&c)^(b&c))) >>> 0;
+          z=g; g=f; f=e; e=(d+t)>>>0; d=c; c=b; b=a; a=(t+u)>>>0;
+        }
+        [a,b,c,d,e,f,g,z].forEach((v,i) => { h[i] = (h[i]+v)>>>0; });
+      }
+      return h.map(v => v.toString(16).padStart(8,'0')).join('');
+    },
+    select(data) {
+      const result = {};
+      for (const field of this.fields) if (Object.prototype.hasOwnProperty.call(data, field)) result[field] = this.clone(data[field]);
+      return result;
+    },
+    slots(data) {
+      const slots = {};
+      for (const [field, value] of Object.entries(this.select(data))) {
+        if (this.lists.includes(field)) {
+          if (!Array.isArray(value)) throw new Error('Invalid sync list: ' + field);
+          const seen = new Set();
+          value.forEach(item => {
+            if (!item || typeof item.id !== 'string' || !item.id || seen.has(item.id)) throw new Error('Invalid sync item: ' + field);
+            seen.add(item.id);
+            if (item.id === '$order') throw new Error('Reserved sync item id');
+            slots[JSON.stringify([field,item.id])] = item;
+          });
+          slots[JSON.stringify([field,'$order'])] = value.map(item => item.id);
+        } else slots[JSON.stringify([field,null])] = value;
+      }
+      return slots;
+    },
+    state(slots, key) { return Object.hasOwn(slots,key) ? this.hash(slots[key]) : 'absent'; },
+    baseline(data) {
+      const hashes = {};
+      for (const [key,value] of Object.entries(this.slots(data))) hashes[key] = this.hash(value);
+      return { known: true, itemHashes: hashes };
+    },
+    empty() { return { version: 1, targetFingerprint: null, baseline: { known: false, itemHashes: {} }, pending: [], conflicts: [] }; },
+    valid(meta) {
+      const hash = v => v === 'absent' || /^[a-f0-9]{64}$/.test(v);
+      const slot = k => { try { const [f,id] = JSON.parse(k); return this.fields.includes(f) && (id === null || typeof id === 'string'); } catch { return false; } };
+      return !!meta && meta.version === 1 && (meta.targetFingerprint === null || /^[a-f0-9]{64}$/.test(meta.targetFingerprint)) &&
+        meta.baseline && typeof meta.baseline.known === 'boolean' && meta.baseline.itemHashes && !Array.isArray(meta.baseline.itemHashes) &&
+        typeof meta.baseline.itemHashes === 'object' && Object.entries(meta.baseline.itemHashes).every(([k,v]) => slot(k) && hash(v)) &&
+        Array.isArray(meta.pending) && new Set(meta.pending.map(p => p?.key)).size === meta.pending.length &&
+        meta.pending.every(p => p && slot(p.key) && typeof p.changeId === 'string' && (p.base === 'unknown' || hash(p.base)) && hash(p.localHash)) &&
+        Array.isArray(meta.conflicts);
+    },
+    track(previous, next, meta) {
+      const result = this.clone(meta), before = this.slots(previous), after = this.slots(next);
+      for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+        const current = this.state(after,key);
+        if (current === this.state(before,key)) continue;
+        const old = result.pending.find(p => p.key === key);
+        const base = old ? old.base : result.baseline.known ? (result.baseline.itemHashes[key] || 'absent') : 'unknown';
+        result.pending = result.pending.filter(p => p.key !== key);
+        result.pending.push({ key, changeId: 'change-' + Date.now() + '-' + Math.random().toString(36).slice(2), base, localHash: current });
+      }
+      return result;
+    },
+    merge(local, remote, meta) {
+      const l = this.slots(local), r = this.slots(remote), merged = this.clone(r), conflicts = [];
+      const pending = new Map(meta.pending.map(p => [p.key,p]));
+      const deleted = new Set([...(local.deletedItemIds || []), ...(remote.deletedItemIds || [])]);
+      for (const key of new Set([...Object.keys(l), ...Object.keys(r), ...Object.keys(meta.baseline.itemHashes)])) {
+        const [field,id] = JSON.parse(key);
+        if (id === '$order') continue;
+        const lh = this.state(l,key), rh = this.state(r,key), p = pending.get(key);
+        const base = p ? p.base : meta.baseline.known ? (meta.baseline.itemHashes[key] || 'absent') : 'unknown';
+        if (field === 'deletedItemIds') { merged[key] = Array.from(deleted); continue; }
+        if (lh === rh) continue;
+        if (!p && base !== 'unknown' && lh === base) {
+          // Absence alone is not a deletion instruction, even after a prior ack.
+          if (rh === 'absent' && lh !== 'absent' && !deleted.has(id)) merged[key] = this.clone(l[key]);
+          continue;
+        }
+        // A locally present legacy item missing remotely is retained, never inferred deleted.
+        const canApply = rh === base || (rh === 'absent' && lh !== 'absent' && !deleted.has(id));
+        if (canApply && !(id && deleted.has(id) && lh !== 'absent')) {
+          if (lh === 'absent') delete merged[key]; else merged[key] = this.clone(l[key]);
+        } else if (lh === 'absent' && base === 'unknown' && !p) {
+          // No local copy is not an instruction to delete an older server item.
+        } else conflicts.push({ key, base, localHash: lh, remoteHash: rh, remote: Object.hasOwn(r,key) ? this.clone(r[key]) : null });
+      }
+      const data = {};
+      for (const field of this.fields) {
+        if (this.lists.includes(field)) {
+          const orderKey = JSON.stringify([field,'$order']);
+          const order = pending.has(orderKey) ? [...(l[orderKey] || []), ...(r[orderKey] || [])] : [...(r[orderKey] || []), ...(l[orderKey] || [])];
+          const ids = [...new Set(order)];
+          const rows = ids.filter(id => Object.hasOwn(merged,JSON.stringify([field,id])))
+            .map(id => merged[JSON.stringify([field,id])]);
+          if (Object.hasOwn(local,field) || Object.hasOwn(remote,field)) data[field] = rows;
+        } else {
+          const key = JSON.stringify([field,null]);
+          if (Object.hasOwn(merged,key)) data[field] = merged[key];
+        }
+      }
+      return { data, conflicts };
+    }
+  };
+
   class CloudSyncManager {
     constructor() {
       this.spaceId = localStorage.getItem('todolist_jy_space_id') || '';
@@ -277,7 +415,7 @@
 
       if (isLogged) {
         if (statusIcon) statusIcon.textContent = '🔒';
-        if (statusText) statusText.textContent = '종단간 암호화 동기화 중';
+        if (statusText) statusText.textContent = '암호화 연결';
         if (banner) banner.style.display = 'flex';
         if (displayKey) displayKey.textContent = 'on3257 (E2EE AES-256)';
         if (lockedScreen) lockedScreen.style.display = 'none';
@@ -306,410 +444,195 @@
     }
 
     async fetchLatestFromCloud(force = false) {
-      if (!this.spaceId || !this.pin) return;
-      if (this.isPushing) return; // Prevent race conditions while local mutation is uploading
-      const key = this.getStorageKey();
+      return this._executePushTasksToCloud();
+    }
 
+    async requestCloud(url, options = {}) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
       try {
-        const url = `${this.activeUrl}/spaces/${key}.json`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const rawResponse = await res.json();
-          if (rawResponse && typeof rawResponse === 'object') {
-            let data = null;
-            try {
-              // Decrypt E2EE AES-GCM or handle legacy plain data
-              data = await E2EESecurityEngine.decrypt(rawResponse, this.pin);
-            } catch (decryptErr) {
-              console.warn('E2EE Decryption failed (invalid PIN or corrupted data):', decryptErr);
-              return;
-            }
-
-            if (data && typeof data === 'object') {
-              const remoteUpdated = Number(data.updatedAt) || 0;
-              const remoteRevision = Number(data.revision) || 0;
-              const localUpdated = Number(this.lastSyncedUpdatedAt) || Number(store.lastUpdatedAt) || 0;
-              const localRevision = Number(this.lastSyncedRevision) || Number(store.syncRevision) || 0;
-
-              // Import and merge all tombstones from cloud into local store so deleted items NEVER resurrect
-              if (Array.isArray(data.deletedItemIds)) {
-                if (!store.deletedItemIds) store.deletedItemIds = new Set();
-                data.deletedItemIds.forEach(id => {
-                  if (id) store.deletedItemIds.add(String(id).trim());
-                });
-              }
-
-              const isRemoteNewer = (remoteRevision > localRevision) || (remoteUpdated > localUpdated);
-              const shouldAcceptCloud = force || 
-                                        isRemoteNewer || 
-                                        (store.photos.length === 0 && Array.isArray(data.photos) && data.photos.length > 0) ||
-                                        (store.tasks.length === 0 && Array.isArray(data.tasks) && data.tasks.length > 0);
-
-              if (shouldAcceptCloud) {
-                this.lastSyncedUpdatedAt = Math.max(remoteUpdated, localUpdated);
-                this.lastSyncedRevision = Math.max(remoteRevision, localRevision);
-                store.lastUpdatedAt = this.lastSyncedUpdatedAt;
-                store.syncRevision = this.lastSyncedRevision;
-
-                const deletedIds = store.deletedItemIds || new Set();
-
-                if (data.tasks !== undefined) {
-                  const cloudTasks = normalizeArray(data.tasks).filter(t => t && t.id && !MOCK_DEMO_IDS.has(t.id) && !deletedIds.has(t.id));
-                  store.tasks = cloudTasks;
-                  store.tasks.forEach(t => {
-                    if (!t.category || (t.category !== 'personal' && t.category !== 'work')) {
-                      t.category = 'personal';
-                    }
-                  });
-                }
-                if (data.categories !== undefined && normalizeArray(data.categories).length) {
-                  let cats = normalizeArray(data.categories).filter(c => c && c.id && (c.id === 'personal' || c.id === 'work' || c.id === 'schedule'));
-                  cats = cats.map(c => {
-                    if (c.id === 'personal' || c.id === 'schedule') return { id: 'personal', name: '개인 🌸', color: '#f06595' };
-                    if (c.id === 'work') return { id: 'work', name: '업무 💼', color: '#868e96' };
-                    return null;
-                  }).filter(Boolean);
-                  const seen = new Set();
-                  cats = cats.filter(c => {
-                    if (seen.has(c.id)) return false;
-                    seen.add(c.id);
-                    return true;
-                  });
-                  DEFAULT_CATEGORIES.forEach(def => {
-                    if (!cats.some(c => c.id === def.id)) cats.push(def);
-                  });
-                  store.categories = cats;
-                }
-                if (data.wishlist !== undefined) {
-                  store.wishlist = normalizeArray(data.wishlist).filter(w => w && w.id && !MOCK_DEMO_IDS.has(w.id) && !deletedIds.has(w.id));
-                }
-                if (data.photos !== undefined) {
-                  store.photos = normalizeArray(data.photos).filter(p => p && p.id && !deletedIds.has(p.id));
-                }
-                if (data.notes !== undefined) {
-                  store.notes = normalizeArray(data.notes).filter(n => n && n.id && !MOCK_DEMO_IDS.has(n.id) && !deletedIds.has(n.id));
-                }
-                if (data.honeymoonData !== undefined) store.honeymoonData = data.honeymoonData;
-                if (data.ledgerFiles !== undefined) store.ledgerFiles = normalizeArray(data.ledgerFiles).filter(f => f && f.id && !MOCK_DEMO_IDS.has(f.id) && !deletedIds.has(f.id));
-                if (data.vacations !== undefined) store.vacations = normalizeArray(data.vacations).filter(v => v && v.id && !deletedIds.has(v.id));
-                if (typeof data.totalVacationDays === 'number') store.totalVacationDays = data.totalVacationDays;
-                if (data.sites !== undefined) store.sites = normalizeArray(data.sites).filter(s => s && s.id && !deletedIds.has(s.id));
-                if (data.healthNotes !== undefined) {
-                  store.healthNotes = normalizeArray(data.healthNotes).filter(n => n && n.id && !deletedIds.has(n.id));
-                }
-                if (data.healthFolders !== undefined && Array.isArray(data.healthFolders)) {
-                  let hFolders = data.healthFolders.slice();
-                  DEFAULT_HEALTH_FOLDERS.forEach(defF => {
-                    if (!hFolders.some(f => f && f.id === defF.id)) {
-                      const genIdx = hFolders.findIndex(f => f && f.id === 'general');
-                      if (genIdx !== -1) hFolders.splice(genIdx, 0, Object.assign({}, defF));
-                      else hFolders.push(Object.assign({}, defF));
-                    }
-                  });
-                  store.healthFolders = hFolders;
-                }
-                if (data.hobbyNotes !== undefined) {
-                  store.hobbyNotes = normalizeArray(data.hobbyNotes).filter(n => n && n.id && !deletedIds.has(n.id));
-                }
-                if (data.hobbyFolders !== undefined && Array.isArray(data.hobbyFolders)) {
-                  let hbFolders = data.hobbyFolders.slice();
-                  DEFAULT_HOBBY_FOLDERS.forEach(defF => {
-                    if (!hbFolders.some(f => f && f.id === defF.id)) {
-                      const genIdx = hbFolders.findIndex(f => f && f.id === 'general');
-                      if (genIdx !== -1) hbFolders.splice(genIdx, 0, Object.assign({}, defF));
-                      else hbFolders.push(Object.assign({}, defF));
-                    }
-                  });
-                  store.hobbyFolders = hbFolders;
-                }
-                if (data.sites !== undefined) {
-                  store.sites = normalizeArray(data.sites).filter(s => s && s.id && !deletedIds.has(s.id));
-                }
-                if (data.siteFolders !== undefined && Array.isArray(data.siteFolders)) {
-                  let sFolders = data.siteFolders.slice();
-                  DEFAULT_SITE_FOLDERS.forEach(defF => {
-                    if (!sFolders.some(f => f && f.id === defF.id)) {
-                      sFolders.push(Object.assign({}, defF));
-                    }
-                  });
-                  store.siteFolders = sFolders;
-                }
-                if (data.vaultFolders !== undefined && Array.isArray(data.vaultFolders)) {
-                  let vFolders = data.vaultFolders.slice();
-                  DEFAULT_VAULT_FOLDERS.forEach(defF => {
-                    if (!vFolders.some(f => f && f.id === defF.id)) {
-                      const genIdx = vFolders.findIndex(f => f && f.id === 'general');
-                      if (genIdx !== -1) vFolders.splice(genIdx, 0, Object.assign({}, defF));
-                      else vFolders.push(Object.assign({}, defF));
-                    }
-                  });
-                  store.vaultFolders = vFolders;
-                }
-                if (data.projects !== undefined && Array.isArray(data.projects)) {
-                  const cloudProjects = data.projects.filter(p => p && p.id && !store.deletedItemIds.has(p.id));
-                  if (cloudProjects.length > 0) {
-                    const pMap = new Map();
-                    cloudProjects.forEach(p => { if (p && p.id) pMap.set(p.id, p); });
-                    (store.projects || []).forEach(lp => {
-                      if (lp && lp.id && !pMap.has(lp.id) && !store.deletedItemIds.has(lp.id)) pMap.set(lp.id, lp);
-                    });
-                    store.projects = Array.from(pMap.values());
-                  } else if (data.projects.length === 0) {
-                    store.projects = (store.projects || []).filter(p => p && p.id && !store.deletedItemIds.has(p.id));
-                  }
-                }
-                if (data.aiStudyNotes !== undefined) {
-                  const cloudAiStudyNotes = normalizeArray(data.aiStudyNotes).filter(n => n && n.id && !deletedIds.has(n.id));
-                  const collaborationNote = DEFAULT_AI_STUDY_NOTES.find(note => note.id === 'ai-antigravity-codex-collaboration');
-
-                  // Keep Firebase's existing notes intact and add only the new
-                  // default note when it has not already been saved or deleted.
-                  if (collaborationNote && !deletedIds.has(collaborationNote.id) && !cloudAiStudyNotes.some(note => note.id === collaborationNote.id)) {
-                    cloudAiStudyNotes.unshift(JSON.parse(JSON.stringify(collaborationNote)));
-                  }
-
-                  store.aiStudyNotes = cloudAiStudyNotes;
-                }
-                if (data.subscriptions !== undefined) {
-                  const cloudSubs = normalizeArray(data.subscriptions).filter(s => s && s.id && !deletedIds.has(s.id));
-                  if (cloudSubs.length > 0) {
-                    const sMap = new Map();
-                    cloudSubs.forEach(s => { if (s && s.id) sMap.set(s.id, s); });
-                    (store.subscriptions || []).forEach(ls => {
-                      if (ls && ls.id && !sMap.has(ls.id) && !deletedIds.has(ls.id)) {
-                        sMap.set(ls.id, ls);
-                      }
-                    });
-                    store.subscriptions = Array.from(sMap.values());
-                  } else {
-                    store.subscriptions = (store.subscriptions || []).filter(s => s && s.id && !deletedIds.has(s.id));
-                  }
-                }
-                if (data.sidebarMenuOrder !== undefined && Array.isArray(data.sidebarMenuOrder)) {
-                  const defaultOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'aistudy', 'devlog', 'vault'];
-                  let order = data.sidebarMenuOrder.slice();
-                  if (!order.includes('project')) {
-                    const d1Idx = order.indexOf('divider-1');
-                    if (d1Idx !== -1) order.splice(d1Idx + 1, 0, 'project');
-                    else {
-                      const wIdx = order.indexOf('work');
-                      if (wIdx !== -1) order.splice(wIdx + 1, 0, 'project');
-                      else order.push('project');
-                    }
-                  }
-                  if (!order.includes('hobby')) {
-                    const healthIdx = order.indexOf('health');
-                    if (healthIdx !== -1) order.splice(healthIdx, 0, 'hobby');
-                    else {
-                      const vacIdx = order.indexOf('vacation');
-                      if (vacIdx !== -1) order.splice(vacIdx, 0, 'hobby');
-                      else order.push('hobby');
-                    }
-                  }
-                  if (!order.includes('health')) {
-                    const vacIdx = order.indexOf('vacation');
-                    if (vacIdx !== -1) order.splice(vacIdx, 0, 'health');
-                    else order.push('health');
-                  }
-                  if (!order.includes('aistudy')) {
-                    const devIdx = order.indexOf('devlog');
-                    if (devIdx !== -1) order.splice(devIdx, 0, 'aistudy');
-                    else {
-                      const vaultIdx = order.indexOf('vault');
-                      if (vaultIdx !== -1) order.splice(vaultIdx, 0, 'aistudy');
-                      else order.push('aistudy');
-                    }
-                  }
-                  if (!order.includes('devlog')) {
-                    const vaultIdx = order.indexOf('vault');
-                    if (vaultIdx !== -1) order.splice(vaultIdx, 0, 'devlog');
-                    else order.push('devlog');
-                  }
-                  if (!order.includes('divider-vacation')) {
-                    const vacIdx = order.indexOf('vacation');
-                    if (vacIdx !== -1) order.splice(vacIdx + 1, 0, 'divider-vacation');
-                    else order.push('divider-vacation');
-                  }
-                  defaultOrder.forEach(id => {
-                    if (!order.includes(id)) order.push(id);
-                  });
-
-                  // 1. Ensure divider-1 is positioned RIGHT AFTER work (업무 메뉴 아래에 구분선)
-                  const d1Idx = order.indexOf('divider-1');
-                  const wIdx = order.indexOf('work');
-                  if (d1Idx !== -1 && wIdx !== -1 && d1Idx !== wIdx + 1) {
-                    order.splice(d1Idx, 1);
-                    const newWIdx = order.indexOf('work');
-                    order.splice(newWIdx + 1, 0, 'divider-1');
-                  }
-
-                  // 2. Ensure project is positioned RIGHT AFTER divider-1
-                  const prIdx = order.indexOf('project');
-                  const newD1Idx = order.indexOf('divider-1');
-                  if (prIdx !== -1 && newD1Idx !== -1 && prIdx !== newD1Idx + 1) {
-                    order.splice(prIdx, 1);
-                    const curD1 = order.indexOf('divider-1');
-                    order.splice(curD1 + 1, 0, 'project');
-                  }
-
-                  // 3. Ensure hobby is positioned RIGHT AFTER project
-                  const hbIdx = order.indexOf('hobby');
-                  const curPr = order.indexOf('project');
-                  if (hbIdx !== -1 && curPr !== -1 && hbIdx !== curPr + 1) {
-                    order.splice(hbIdx, 1);
-                    const latestPr = order.indexOf('project');
-                    order.splice(latestPr + 1, 0, 'hobby');
-                  }
-
-                  // 4. Ensure divider-vacation is positioned RIGHT AFTER vacation
-                  const dvIdx = order.indexOf('divider-vacation');
-                  const vIdx = order.indexOf('vacation');
-                  if (dvIdx !== -1 && vIdx !== -1 && dvIdx !== vIdx + 1) {
-                    order.splice(dvIdx, 1);
-                    const newVIdx = order.indexOf('vacation');
-                    order.splice(newVIdx + 1, 0, 'divider-vacation');
-                  }
-
-                  store.sidebarMenuOrder = order;
-                }
-                if (Array.isArray(data.vaultFiles)) {
-                  const localVault = await VaultDBEngine.getAll();
-                  // Clean Smart Merge: Preserve local dataUrl if cloud copy is lightweight metadata
-                  const mergedFiles = data.vaultFiles.filter(f => f && f.id && !deletedIds.has(f.id)).map(cloudF => {
-                    const localMatch = (localVault || []).find(l => l && l.id === cloudF.id);
-                    if (localMatch && localMatch.dataUrl && !cloudF.dataUrl) {
-                      return Object.assign({}, cloudF, { dataUrl: localMatch.dataUrl });
-                    }
-                    return cloudF;
-                  });
-                  // Save strictly the synchronized list (deleted items in cloud are safely pruned locally)
-                  await this.saveVaultFiles(mergedFiles);
-                  try { UI.renderFilesVault(); } catch (e) {}
-                }
-
-                if (data.customMenuNames && typeof data.customMenuNames === 'object') {
-                  store.customMenuNames = Object.assign({}, store.customMenuNames, data.customMenuNames);
-                }
-                if (data.customTheme) {
-                  store.customTheme = data.customTheme;
-                  store.applyThemeToDOM(data.customTheme);
-                }
-                
-                store.saveLocalOnly(this.lastSyncedUpdatedAt, this.lastSyncedRevision);
-                this.renderAllViews();
-
-                // If cloud data was in legacy plain format, auto-upgrade to encrypted format
-                if (!rawResponse.isEncrypted) {
-                  await this.pushTasksToCloud();
-                }
-              } else if (localRevision > remoteRevision || localUpdated > remoteUpdated) {
-                // Local is genuinely newer through user mutation
-                await this.pushTasksToCloud(true);
-              }
-            }
-          } else if (!rawResponse) {
-            // 클라우드가 비어있다면 현재 로컬 데이터를 즉시 클라우드로 암호화 업로드
-            const vFiles = await this.getAllVaultFiles();
-            if (store.tasks.length > 0 || store.notes.length > 0 || store.photos.length > 0 || store.wishlist.length > 0 || vFiles.length > 0 || (store.projects && store.projects.length > 0)) {
-              await this.pushTasksToCloud(true);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('RTDB sync fetch error:', e);
+        const response = await fetch(url, {...options, signal:controller.signal});
+        const body = await response.json();
+        return {ok:response.ok,status:response.status,headers:response.headers,json:async () => body};
       }
+      finally { clearTimeout(timer); }
     }
 
     async pushTasksToCloud(immediate = false) {
-      if (!this.spaceId || !this.pin) return;
-      
-      if (this.pushDebounceTimer) {
-        clearTimeout(this.pushDebounceTimer);
+      if (store.localLoadFailed || store.localSyncInvalid || store.localWriteFailed) return false;
+      if (this.pushDebounceTimer) clearTimeout(this.pushDebounceTimer);
+      this.pushDebounceTimer = null;
+      if (immediate) return this._executePushTasksToCloud();
+      this.pushDebounceTimer = setTimeout(() => {
         this.pushDebounceTimer = null;
-      }
-
-      if (immediate) {
-        await this._executePushTasksToCloud();
-      } else {
-        this.pushDebounceTimer = setTimeout(() => {
-          this._executePushTasksToCloud();
-        }, 350);
-      }
+        this._executePushTasksToCloud();
+      }, 350);
+      return false; // Scheduling is not a server acknowledgement.
     }
 
-    async _executePushTasksToCloud() {
-      if (!this.spaceId || !this.pin) return;
-      this.isPushing = true;
-      const key = this.getStorageKey();
-      const vaultFiles = await this.getAllVaultFiles();
-      
-      // Sanitize vault files for cloud RTDB (strip huge dataUrls > 500KB to prevent HTTP 413 Payload Too Large)
-      const sanitizedVaultFiles = (vaultFiles || []).map(f => {
-        if (f.dataUrl && f.dataUrl.length > 500 * 1024) {
-          const clone = Object.assign({}, f);
-          delete clone.dataUrl;
-          return clone;
+    requestManualSync() {
+      if (this._manualPromise) return this._manualPromise;
+      if (this.pushDebounceTimer) clearTimeout(this.pushDebounceTimer);
+      this.pushDebounceTimer = null;
+      // Join an existing automatic request, then send the latest snapshot once.
+      // Rapid clicks and the settings button share this same promise.
+      this._manualPromise = Promise.resolve().then(async () => {
+        if (this._syncPromise) await this._syncPromise;
+        this.retryAfter = 0;
+        const acknowledged = await this._executePushTasksToCloud({manual:true, forceWrite:true});
+        const ok = acknowledged && store.saveStatus === 'confirmed' &&
+          !store.localSync.pending.length && store.hasConfirmedLocalData();
+        if (acknowledged && !ok && store.saveStatus === 'confirmed') store.setSaveStatus('failed');
+        if (typeof UI !== 'undefined' && UI.showToast) {
+          UI.showToast(ok ? '동기화 성공' : store.saveMessage, ok ? 'success' : 'warning');
         }
-        return f;
+        return ok;
+      }).finally(() => {
+        this._manualPromise = null;
+        store.renderSaveStatus();
       });
+      store.renderSaveStatus();
+      return this._manualPromise;
+    }
 
-      // Strict Monotonic Timestamp & Revision guarantees that multi-device clocks never conflict
-      const nowTs = Math.max(Date.now(), (this.lastSyncedUpdatedAt || 0) + 1000, (store.lastUpdatedAt || 0));
-      const nextRevision = Math.max((this.lastSyncedRevision || 0) + 1, (store.syncRevision || 0) + 1);
-      this.lastSyncedUpdatedAt = nowTs;
-      this.lastSyncedRevision = nextRevision;
-      store.lastUpdatedAt = nowTs;
-      store.syncRevision = nextRevision;
+    _executePushTasksToCloud(options = {}) {
+      if (this._syncPromise) return this._syncPromise;
+      // The queued manual request owns the next turn; polling must not overtake it.
+      if (this._manualPromise && !options.manual) return Promise.resolve(false);
+      const work = this._syncOnce(options);
+      this._syncPromise = work;
+      const release = () => { if (this._syncPromise === work) this._syncPromise = null; };
+      work.then(release, release);
+      return work;
+    }
 
-      // Filter out any tombstone deleted items before pushing
-      const deletedIds = store.deletedItemIds || new Set();
-
-      const rawPayload = {
-        tasks: (store.tasks || []).filter(t => t && t.id && !deletedIds.has(t.id)),
-        categories: store.categories,
-        sidebarMenuOrder: store.sidebarMenuOrder,
-        wishlist: (store.wishlist || []).filter(w => w && w.id && !deletedIds.has(w.id)),
-        photos: (store.photos || []).filter(p => p && p.id && !deletedIds.has(p.id)),
-        notes: (store.notes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
-        vaultFiles: sanitizedVaultFiles,
-        vaultFolders: store.vaultFolders,
-        deletedItemIds: Array.from(deletedIds).slice(-500),
-        honeymoonData: store.honeymoonData,
-        ledgerFiles: (store.ledgerFiles || []).filter(f => f && f.id && !deletedIds.has(f.id)),
-        vacations: (store.vacations || []).filter(v => v && v.id && !deletedIds.has(v.id)),
-        totalVacationDays: store.totalVacationDays,
-        sites: (store.sites || []).filter(s => s && s.id && !deletedIds.has(s.id)),
-        siteFolders: store.siteFolders,
-        healthNotes: (store.healthNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
-        healthFolders: store.healthFolders,
-        hobbyNotes: (store.hobbyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
-        hobbyFolders: store.hobbyFolders,
-        aiStudyNotes: (store.aiStudyNotes || []).filter(n => n && n.id && !deletedIds.has(n.id)),
-        subscriptions: (store.subscriptions || []).filter(s => s && s.id && !deletedIds.has(s.id)),
-        projects: (store.projects || []).filter(p => p && p.id && !deletedIds.has(p.id)),
-        customMenuNames: store.customMenuNames,
-        customTheme: store.customTheme,
-        revision: nextRevision,
-        updatedAt: nowTs
-      };
-
+    async _syncOnce({forceWrite = false} = {}) {
+      if (store.localLoadFailed || store.localSyncInvalid || store.writerBlocked) {
+        store.setSaveStatus('conflict', '저장 데이터 또는 편집 권한을 확인해야 합니다. 기존 데이터를 유지하며 동기화를 중단했습니다.');
+        return false;
+      }
+      if (store.localWriteFailed) { store.setSaveStatus('failed'); return false; }
+      if (!this.spaceId || !this.pin) {
+        store.setSaveStatus('login', '동기화 필요 · 클라우드에 로그인해 주세요.');
+        return false;
+      }
+      if (this.retryAfter && Date.now() < this.retryAfter) return false;
+      this.isPushing = true;
+      const target = LocalSyncProtocol.hash([this.activeUrl, this.getStorageKey()]);
+      const sessionPin = this.pin;
+      const url = this.activeUrl + '/spaces/' + this.getStorageKey() + '.json';
       try {
-        // Zero-Knowledge E2EE AES-GCM 256-bit Encryption (cached key for 0.01ms speed)
-        const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, this.pin);
-
-        const url = `${this.activeUrl}/spaces/${key}.json`;
-        await fetch(url, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(encryptedBody)
+        if (store.localSync.targetFingerprint && store.localSync.targetFingerprint !== target) {
+          store.setSaveStatus('conflict'); return false;
+        }
+        // Persist unsaved mutations/outbox before ANY network request.
+        if (!store.saveLocalOnly()) return false;
+        store.setSaveStatus('syncing');
+        const capturedRaw = store._lastLocalRaw;
+        const captured = LocalSyncProtocol.clone(store._committedData);
+        const meta = LocalSyncProtocol.clone(store.localSync);
+        const local = LocalSyncProtocol.select(captured);
+        const response = await this.requestCloud(url, { headers: { 'X-Firebase-ETag': 'true' } });
+        if (!response.ok) throw new Error('Cloud GET failed: ' + response.status);
+        const etag = response.headers.get('ETag');
+        if (!etag) throw new Error('Cloud ETag missing');
+        const encrypted = await response.json();
+        if (encrypted?.isEncrypted && (!encrypted.iv || !encrypted.payload)) throw new Error('Incomplete encrypted response');
+        const decoded = encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted, sessionPin);
+        if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid cloud object');
+        if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed) return false;
+        const remote = LocalSyncProtocol.select(decoded); // NEVER import remote.localSync.
+        const result = LocalSyncProtocol.merge(local, remote, meta);
+        if (result.conflicts.length) {
+          meta.conflicts = result.conflicts;
+          if (!store.commitLocal(captured, meta)) return false;
+          store.setSaveStatus('conflict');
+          return false;
+        }
+        // Vault original bytes stay coordinated with IndexedDB. Never replace them
+        // with a cloud metadata-only list. Existing file helpers own IDB writes.
+        const localVault = await this.getAllVaultFiles(true, true);
+        if (store._lastLocalRaw !== capturedRaw || store.localLoadFailed) return false;
+        const vaultMap = new Map((Array.isArray(decoded.vaultFiles) ? decoded.vaultFiles : []).map(f => [f.id,f]));
+        for (const f of localVault) {
+          if (!f || !f.id) continue;
+          const previous = vaultMap.get(f.id);
+          if (!previous) vaultMap.set(f.id,f);
+          else if (LocalSyncProtocol.hash({...previous, dataUrl:null}) !== LocalSyncProtocol.hash({...f, dataUrl:null})) {
+            store.setSaveStatus('conflict'); return false;
+          } else if (!previous.dataUrl && f.dataUrl) vaultMap.set(f.id,f);
+        }
+        const vaultFiles = [...vaultMap.values()].filter(f => !(result.data.deletedItemIds || []).includes(f.id)).map(f => {
+          const copy = {...f};
+          if (copy.dataUrl && copy.dataUrl.length > 500 * 1024) delete copy.dataUrl;
+          return copy;
         });
-
-        // Also persist updated monotonic timestamps locally
-        store.saveLocalOnly(nowTs, nextRevision);
+        const rawPayload = {...LocalSyncProtocol.select(result.data), vaultFiles,
+          revision: Math.max(Number(decoded.revision)||0, store.syncRevision||0) + 1,
+          updatedAt: Math.max(Date.now(), (Number(decoded.updatedAt)||0)+1, store.lastUpdatedAt||0)};
+        const changed = LocalSyncProtocol.hash({...remote, vaultFiles:decoded.vaultFiles || []}) !==
+          LocalSyncProtocol.hash({...result.data, vaultFiles});
+        const shouldWrite = changed || forceWrite;
+        if (shouldWrite) {
+          const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, sessionPin);
+          if (!encryptedBody?.isEncrypted || !encryptedBody.payload || !encryptedBody.iv) throw new Error('Encryption failed; plaintext upload blocked');
+          if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked) return false;
+          if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) {
+            store.setSaveStatus('conflict', '동기화 계정이 변경되어 전송을 중단했습니다. 기존 데이터를 유지합니다.');
+            return false;
+          }
+          const put = await this.requestCloud(url, { method:'PUT', headers:{'Content-Type':'application/json','if-match':etag}, body:JSON.stringify(encryptedBody) });
+          if (!put.ok) throw new Error('Cloud PUT failed: ' + put.status);
+        }
+        // A GET matching our contents also confirms a previously lost PUT response.
+        // An older response must never clear a newer edit's outbox.
+        if (store.localLoadFailed || store.localWriteFailed) return false;
+        if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) {
+          store.setSaveStatus('conflict', '동기화 계정이 변경되어 완료 처리를 중단했습니다. 미전송 기록을 유지합니다.');
+          return false;
+        }
+        if (store._lastLocalRaw !== capturedRaw) {
+          // The acknowledged snapshot is older than a local edit. Keep that edit
+          // pending, but advance its comparison base to the version just accepted.
+          const latestMeta = LocalSyncProtocol.clone(store.localSync);
+          const confirmedSlots = LocalSyncProtocol.slots(result.data);
+          for (const p of latestMeta.pending) {
+            const sent = meta.pending.find(old => old.key === p.key);
+            if (sent) p.base = LocalSyncProtocol.state(confirmedSlots,p.key);
+          }
+          if (!store.commitLocal(store._committedData,latestMeta)) return false;
+          store.setSaveStatus('pending', '동기화 필요 · 전송 중 추가된 변경이 있습니다. 최신 데이터는 이 기기에 저장되어 있습니다.');
+          return false;
+        }
+        const confirmed = shouldWrite ? rawPayload : {...result.data, updatedAt:decoded.updatedAt, revision:decoded.revision};
+        const next = {...captured, ...result.data,
+          updatedAt:Number(confirmed.updatedAt)||captured.updatedAt,
+          syncRevision:Number(confirmed.revision)||captured.syncRevision};
+        const acknowledged = {version:1,targetFingerprint:target,baseline:LocalSyncProtocol.baseline(result.data),pending:[],conflicts:[]};
+        const mergedVault = [...vaultMap.values()].filter(f => !(result.data.deletedItemIds || []).includes(f.id));
+        if (LocalSyncProtocol.hash(localVault) !== LocalSyncProtocol.hash(mergedVault)) {
+          await this.saveVaultFiles(mergedVault, true);
+          if (store._lastLocalRaw !== capturedRaw || store.localLoadFailed || store.writerBlocked) return false;
+        }
+        if (!store.commitLocal(next, acknowledged)) return false;
+        this.lastSyncedUpdatedAt = store.lastUpdatedAt;
+        this.lastSyncedRevision = store.syncRevision;
+        this.failures = 0; this.retryAfter = 0;
+        store.setSaveStatus('confirmed', forceWrite ? '동기화 성공' : undefined);
+        // Do not render hidden ledger views: their renderer currently saves data.
+        if (typeof UI !== 'undefined' && LocalSyncProtocol.hash(local) !== LocalSyncProtocol.hash(result.data)) {
+          UI.renderTasks(); UI.renderSidebar();
+        }
+        return true;
       } catch (e) {
-        console.warn('RTDB sync push error:', e);
+        this.failures = (this.failures || 0) + 1;
+        this.retryAfter = Date.now() + Math.min(60000, 1000 * 2 ** Math.min(this.failures,6));
+        store.setSaveStatus(store.hasConfirmedLocalData() ? 'syncFailed' : 'failed');
+        console.warn('Cloud sync deferred:', e);
+        return false;
       } finally {
         this.isPushing = false;
+        if (store.saveStatus === 'syncing') store.setSaveStatus('pending');
       }
     }
 
@@ -718,6 +641,10 @@
       this.syncTimer = setInterval(() => {
         this.fetchLatestFromCloud(false);
       }, 4000);
+
+      if (this._pollEventsBound) return;
+      this._pollEventsBound = true;
+      window.addEventListener('online', () => { this.retryAfter = 0; this.fetchLatestFromCloud(false); });
 
       // 모바일 앱/화면 복귀 시 즉시 동기화
       document.addEventListener('visibilitychange', () => {
@@ -762,12 +689,13 @@
       });
     }
 
-    async getAllVaultFiles(forceRefresh = false) {
+    async getAllVaultFiles(forceRefresh = false, strict = false) {
       if (!forceRefresh && Array.isArray(this._vaultFilesCache)) {
         return this._vaultFilesCache;
       }
       try {
-        const idbFiles = await VaultDBEngine.getAll();
+        const idbFiles = await VaultDBEngine.getAll(strict);
+        if (strict) return idbFiles; // Never start legacy migration during a sync read.
         // Return indexedDB files directly (if empty, it means 0 files)
         if (Array.isArray(idbFiles) && idbFiles.length > 0) {
           this._vaultFilesCache = idbFiles;
@@ -790,6 +718,7 @@
         return [];
       } catch (e) {
         console.warn('getAllVaultFiles error:', e);
+        if (strict) throw e;
         return this._vaultFilesCache || [];
       }
     }
@@ -808,10 +737,11 @@
       }
     }
 
-    async saveVaultFiles(files) {
-      this._vaultFilesCache = Array.isArray(files) ? files.slice() : [];
+    async saveVaultFiles(files, strict = false) {
       try {
-        await VaultDBEngine.saveAll(files || []);
+        const saved = await VaultDBEngine.saveAll(files || []);
+        if (saved !== true) throw new Error('Vault save failed');
+        this._vaultFilesCache = Array.isArray(files) ? files.slice() : [];
         const metaOnly = (files || []).map(f => ({
           id: f.id,
           name: f.name,
@@ -825,11 +755,14 @@
         localStorage.setItem('todolist_jy_vault_files', JSON.stringify(metaOnly));
       } catch (e) {
         console.warn('saveVaultFiles error:', e);
+        if (strict) throw e;
       }
     }
 
     async deleteVaultFile(fileId) {
       try {
+        store.deletedItemIds.add(fileId);
+        if (!store.saveLocalOnly()) return;
         await VaultDBEngine.delete(fileId);
         if (this._vaultFilesCache) {
           this._vaultFilesCache = this._vaultFilesCache.filter(f => f && f.id !== fileId);
@@ -883,6 +816,8 @@
     async deleteVaultFilesBatch(fileIds) {
       if (!Array.isArray(fileIds) || !fileIds.length) return 0;
       try {
+        fileIds.forEach(id => store.deletedItemIds.add(id));
+        if (!store.saveLocalOnly()) return 0;
         for (const fId of fileIds) {
           await VaultDBEngine.delete(fId);
         }
@@ -938,10 +873,10 @@
       return this.dbPromise;
     },
 
-    async getAll() {
+    async getAll(strict = false) {
       try {
         const db = await this.getDB();
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
           const tx = db.transaction(this.storeName, 'readonly');
           const store = tx.objectStore(this.storeName);
           const req = store.getAll();
@@ -950,10 +885,12 @@
             list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
             resolve(list);
           };
-          req.onerror = () => resolve([]);
+          req.onerror = () => strict ? reject(req.error || new Error('Vault read failed')) : resolve([]);
+          tx.onabort = () => strict ? reject(tx.error || new Error('Vault read aborted')) : resolve([]);
         });
       } catch (err) {
         console.warn('IDB get error:', err);
+        if (strict) throw err;
         return [];
       }
     },
@@ -1075,16 +1012,38 @@
       this.currentWeeklyDate = new Date();
       this.lastUpdatedAt = 0;
 
-      this.loadLocalOnly();
+      // Memory-only safety latch: never serialize this into user data.
+      this.localLoadFailed = true;
+      this.writerBlocked = !!window.navigator;
+      try {
+        this.loadLocalOnly();
+      } catch (e) {
+        console.error('Store load failed; saving and sync are blocked:', e);
+      }
     }
 
     loadLocalOnly() {
+      this.localLoadFailed = true;
       let savedData = null;
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) savedData = JSON.parse(raw);
-      } catch (e) {
-        console.error('Store load error:', e);
+      const raw = localStorage.getItem(STORAGE_KEY);
+      // Only a missing key means a new user. Empty/invalid content is not empty data.
+      if (raw !== null) {
+        savedData = JSON.parse(raw);
+        if (!savedData || typeof savedData !== 'object' || Array.isArray(savedData)) {
+          throw new Error('Invalid local data object');
+        }
+        const arrayFields = [
+          'tasks', 'categories', 'wishlist', 'photos', 'notes', 'ledgerFiles',
+          'vacations', 'sites', 'siteFolders', 'healthNotes', 'healthFolders',
+          'hobbyNotes', 'hobbyFolders', 'vaultFolders', 'projects',
+          'aiStudyNotes', 'subscriptions', 'sidebarMenuOrder', 'deletedItemIds'
+        ];
+        for (const field of arrayFields) {
+          // Older snapshots may omit fields; present but unreadable lists must survive.
+          if (Object.prototype.hasOwnProperty.call(savedData, field) && !Array.isArray(savedData[field])) {
+            throw new Error('Invalid local data list: ' + field);
+          }
+        }
       }
 
       this.deletedItemIds = new Set(Array.isArray(savedData?.deletedItemIds) ? savedData.deletedItemIds : []);
@@ -1355,54 +1314,171 @@
         if (streakRaw) this.streak = JSON.parse(streakRaw);
       } catch (e) {}
 
-      // Save migrated clean data without bumping timestamp to Date.now()!
-      this.saveLocalOnly(this.lastUpdatedAt, this.syncRevision);
+      // Preserve existing user fields exactly; startup normalization must not become
+      // an implicit local edit or destroy data while establishing an outbox baseline.
+      if (savedData) {
+        for (const field of LocalSyncProtocol.fields) {
+          if (field === 'deletedItemIds') continue;
+          if (Object.prototype.hasOwnProperty.call(savedData,field)) this[field] = LocalSyncProtocol.clone(savedData[field]);
+        }
+      }
+      this._lastLocalRaw = raw;
+      this._committedData = savedData ? LocalSyncProtocol.clone(savedData) : this.buildLocalData();
+      this.localSyncInvalid = savedData && Object.hasOwn(savedData,'localSync') && !LocalSyncProtocol.valid(savedData.localSync);
+      this.localSync = this.localSyncInvalid ? savedData.localSync : savedData?.localSync || LocalSyncProtocol.empty();
+      // A brand-new browser's templates are not unsent user edits.
+      if (!savedData) this.localSync.baseline = LocalSyncProtocol.baseline(this._committedData);
+      if (!this.localSyncInvalid && savedData?.localSync) {
+        try {
+          const slots = LocalSyncProtocol.slots(savedData);
+          if (this.localSync.pending.some(p => p.localHash !== LocalSyncProtocol.state(slots,p.key))) this.localSyncInvalid = true;
+          if (this.localSync.baseline.known) {
+            const pendingKeys = new Set(this.localSync.pending.map(p => p.key));
+            for (const key of new Set([...Object.keys(slots), ...Object.keys(this.localSync.baseline.itemHashes)])) {
+              if (!pendingKeys.has(key) && LocalSyncProtocol.state(slots,key) !== (this.localSync.baseline.itemHashes[key] || 'absent')) this.localSyncInvalid = true;
+            }
+          }
+        } catch (e) { this.localSyncInvalid = true; }
+      }
+      this.localWriteFailed = false;
+      this.localLoadFailed = false;
+      this.setSaveStatus(this.localSyncInvalid ? 'conflict' : 'pending');
+      // Missing metadata means unconfirmed, not safe to replace with cloud data.
+      if (!savedData) this.saveLocalOnly(this.lastUpdatedAt, this.syncRevision);
+    }
+
+    buildLocalData() {
+      const data = {...(this._committedData || {})};
+      delete data.localSync;
+      for (const field of LocalSyncProtocol.fields) {
+        if (field === 'deletedItemIds') data[field] = Array.from(this.deletedItemIds || []);
+        else if (this[field] !== undefined) data[field] = LocalSyncProtocol.clone(this[field]);
+      }
+      data.updatedAt = this.lastUpdatedAt || 0;
+      data.syncRevision = this.syncRevision || 0;
+      return data;
+    }
+
+    hasConfirmedLocalData() {
+      try {
+        const committed = {...this._committedData};
+        delete committed.localSync;
+        return !this.localLoadFailed && !this.localWriteFailed &&
+          localStorage.getItem(STORAGE_KEY) === this._lastLocalRaw &&
+          LocalSyncProtocol.hash(this.buildLocalData()) === LocalSyncProtocol.hash(committed);
+      } catch (e) { return false; }
+    }
+
+    setSaveStatus(status, message) {
+      this.saveStatus = status;
+      const messages = {
+        failed: '이 기기에 저장하지 못했습니다. 입력 내용을 유지합니다.',
+        pending: '이 기기에 저장됨 · 클라우드 확인/전송 대기',
+        syncing: '동기화 중 · Firebase 저장 응답을 기다리고 있습니다.',
+        syncFailed: '동기화 실패 · 이 기기에는 안전하게 저장되어 있습니다',
+        confirmed: '현재 데이터의 클라우드 저장을 확인했습니다.',
+        conflict: '동기화 필요 · 서로 다른 변경을 확인해야 합니다. 로컬 데이터는 보존 중입니다.',
+        login: '동기화 필요 · 클라우드에 로그인해 주세요.'
+      };
+      this.saveMessage = message || messages[status];
+      this.renderSaveStatus();
+    }
+
+    renderSaveStatus() {
+      let el = document.getElementById('local-save-status');
+      if (!el && document.body) {
+        el = document.createElement('div'); el.id = 'local-save-status';
+        el.setAttribute('role','status'); el.setAttribute('aria-live','polite');
+        el.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:99999;max-width:90vw;padding:10px 14px;border-radius:10px;background:#fff4cc;color:#342d1c;font-size:13px;box-shadow:0 2px 8px #0002;pointer-events:none';
+        document.body.appendChild(el);
+      }
+      if (el) el.textContent = this.saveMessage;
+      const button = document.getElementById('btn-manual-sync');
+      const label = document.getElementById('manual-sync-state');
+      const queued = !!cloudSync._manualPromise;
+      const state = queued ? 'syncing' : this.saveStatus;
+      const labels = {confirmed:'동기화 완료', pending:'동기화 필요', syncing:'동기화 중',
+        syncFailed:'동기화 실패', failed:'로컬 저장 실패', conflict:'동기화 필요', login:'동기화 필요'};
+      if (label) label.textContent = labels[state] || '동기화 필요';
+      if (button) {
+        button.disabled = queued;
+        button.setAttribute('data-state', state || 'pending');
+        button.setAttribute('aria-busy', String(queued || this.saveStatus === 'syncing'));
+        button.title = queued ? '진행 중인 동기화가 끝나면 최신 데이터를 전송합니다.' : this.saveMessage;
+      }
+    }
+
+    commitLocal(data, meta) {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) return false;
+      try {
+        // Detect a stale tab before overwriting another tab's persisted changes.
+        if (localStorage.getItem(STORAGE_KEY) !== this._lastLocalRaw) throw new Error('Another window changed local data');
+        const candidate = {...LocalSyncProtocol.clone(data), localSync: LocalSyncProtocol.clone(meta)};
+        const encoded = JSON.stringify(candidate);
+        localStorage.setItem(STORAGE_KEY, encoded);
+        if (localStorage.getItem(STORAGE_KEY) !== encoded) throw new Error('Local save verification failed');
+        this._lastLocalRaw = encoded;
+        this._committedData = candidate;
+        this.localSync = candidate.localSync;
+        for (const field of LocalSyncProtocol.fields) {
+          if (field === 'deletedItemIds') this.deletedItemIds = new Set(candidate.deletedItemIds || []);
+          else if (Object.hasOwn(candidate,field)) this[field] = LocalSyncProtocol.clone(candidate[field]);
+        }
+        this.lastUpdatedAt = candidate.updatedAt;
+        this.syncRevision = candidate.syncRevision;
+        this.localWriteFailed = false;
+        return true;
+      } catch (e) {
+        this.localWriteFailed = true;
+        this.setSaveStatus('failed');
+        console.warn('Local save was not confirmed:', e);
+        return false;
+      }
     }
 
     saveLocalOnly(customTimestamp = null, customRevision = null) {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) return false;
       try {
-        const ts = customTimestamp !== null ? customTimestamp : (this.lastUpdatedAt || Date.now());
-        const rev = customRevision !== null ? customRevision : (this.syncRevision || 0);
-        this.lastUpdatedAt = ts;
-        this.syncRevision = rev;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          tasks: this.tasks,
-          categories: this.categories,
-          sidebarMenuOrder: this.sidebarMenuOrder,
-          wishlist: this.wishlist,
-          photos: this.photos,
-          notes: this.notes,
-          deletedItemIds: Array.from(this.deletedItemIds || []).slice(-500),
-          honeymoonData: this.honeymoonData,
-          ledgerFiles: this.ledgerFiles,
-          vacations: this.vacations,
-          totalVacationDays: this.totalVacationDays,
-          sites: this.sites,
-          siteFolders: this.siteFolders,
-          healthNotes: this.healthNotes,
-          healthFolders: this.healthFolders,
-          hobbyNotes: this.hobbyNotes,
-          hobbyFolders: this.hobbyFolders,
-          vaultFolders: this.vaultFolders,
-          projects: this.projects,
-          aiStudyNotes: this.aiStudyNotes,
-          subscriptions: this.subscriptions,
-          customMenuNames: this.customMenuNames,
-          customTheme: this.customTheme,
-          syncRevision: rev,
-          updatedAt: ts
-        }));
-        localStorage.setItem(STREAK_KEY, JSON.stringify(this.streak));
-      } catch (e) {}
+        const next = this.buildLocalData();
+        if (customTimestamp !== null) next.updatedAt = customTimestamp;
+        if (customRevision !== null) next.syncRevision = customRevision;
+        const meta = LocalSyncProtocol.track(this._committedData || {}, next, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(next,meta)) return false;
+        // An unrelated streak write is not allowed to turn a saved memo into failure.
+        try { localStorage.setItem(STREAK_KEY,JSON.stringify(this.streak)); } catch (e) { console.warn('Streak save failed:',e); }
+        this.setSaveStatus('pending');
+        return true;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
     }
 
     save(immediate = false) {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) return false;
       const nowTs = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
       const nextRev = (this.syncRevision || 0) + 1;
-      this.lastUpdatedAt = nowTs;
-      this.syncRevision = nextRev;
-      this.saveLocalOnly(nowTs, nextRev);
+      if (!this.saveLocalOnly(nowTs,nextRev)) return false;
       cloudSync.pushTasksToCloud(immediate);
+      return true;
+    }
+
+    commitMemo(collection, item, immediate = false) {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return null; }
+      const before = this[collection];
+      const index = before.findIndex(n => n.id === item.id);
+      const next = before.slice();
+      if (index === -1) next.unshift(item); else next[index] = item;
+      // Candidate is not published to Store until the combined write succeeds.
+      const data = this.buildLocalData(); data[collection] = next;
+      data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0)+1);
+      data.syncRevision = (this.syncRevision || 0)+1;
+      try {
+        const meta = LocalSyncProtocol.track(this._committedData || {},data,this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data,meta)) return null;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud(immediate);
+        return item;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return null; }
     }
 
     // --- Task Methods ---
@@ -1521,17 +1597,13 @@
         color: color || 'pink',
         createdAt: Date.now()
       };
-      this.notes.unshift(newNote);
-      this.save();
-      return newNote;
+      return this.commitMemo('notes', newNote);
     }
 
     updateNote(id, updates) {
       const note = this.notes.find(n => n.id === id);
       if (!note) return null;
-      Object.assign(note, updates, { updatedAt: Date.now() });
-      this.save();
-      return note;
+      return this.commitMemo('notes', {...note, ...updates, updatedAt: Date.now()});
     }
 
     deleteNote(id) {
@@ -2003,14 +2075,14 @@
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
-      this.aiStudyNotes.unshift(newNote);
-      this.save(true);
-      return newNote;
+      return this.commitMemo('aiStudyNotes', newNote, true);
     }
 
     updateAiStudyNote(id, updates) {
-      const note = this.aiStudyNotes.find(n => n.id === id);
-      if (!note) return null;
+      const original = this.aiStudyNotes.find(n => n.id === id);
+      if (!original) return null;
+      const note = {...original};
+      updates = {...updates};
       if (updates.tags !== undefined) {
         if (Array.isArray(updates.tags)) {
           note.tags = updates.tags;
@@ -2020,8 +2092,7 @@
         delete updates.tags;
       }
       Object.assign(note, updates, { updatedAt: Date.now() });
-      this.save(true);
-      return note;
+      return this.commitMemo('aiStudyNotes', note, true);
     }
 
     deleteAiStudyNote(id) {
@@ -10413,7 +10484,7 @@
     const checkedColorInput = document.querySelector('input[name="note-color"]:checked');
     const color = checkedColorInput ? checkedColorInput.value : 'pink';
 
-    store.addNote(content, color);
+    if (!store.addNote(content, color)) return;
     textarea.value = '';
     sounds.playAdd();
     UI.showToast('새로운 생각이 끄적여졌어요! 📝✨', 'success');
@@ -13269,7 +13340,7 @@
 
         if (!content) return;
 
-        store.updateNote(noteId, { content, color });
+        if (!store.updateNote(noteId, { content, color })) return;
         UI.closeEditNoteModal();
         UI.showToast('메모가 수정되었어요! 📝✨', 'info');
         UI.renderNotes();
@@ -13429,14 +13500,14 @@
         }
 
         if (editId) {
-          store.updateAiStudyNote(editId, {
+          if (!store.updateAiStudyNote(editId, {
             title, category, summary, content, codeSnippet, snippetLang, tags, refUrl, pinned
-          });
+          })) return;
           UI.showToast('AI 스터디 노트가 수정되었어요! ✨', 'info');
         } else {
-          store.addAiStudyNote({
+          if (!store.addAiStudyNote({
             title, category, summary, content, codeSnippet, snippetLang, tags, refUrl, pinned
-          });
+          })) return;
           sounds.playAdd();
           if (window.confetti && window.confetti.burst) {
             window.confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 20);
@@ -13554,23 +13625,10 @@
       }
     });
 
-    // Settings: Immediate Cloud Backup & Upload to Firebase
-    const exportBtn = document.getElementById('btn-export-data');
-    if (exportBtn) {
-      exportBtn.addEventListener('click', async () => {
-        try {
-          store.saveLocalOnly();
-          await cloudSync.pushTasksToCloud();
-          sounds.playComplete();
-          if (window.confetti && window.confetti.burst) {
-            window.confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
-          }
-          UI.showToast('모든 데이터가 Firebase 클라우드에 안전하게 즉시 백업/업로드되었어요! ☁️💖✨', 'success');
-          UI.renderSidebar();
-        } catch (err) {
-          UI.showToast('Firebase 백업 중 오류가 발생했어요. 동기화 키를 확인해주세요.', 'danger');
-        }
-      });
+    // Both entry points use the central queue and require a conditional PUT acknowledgement.
+    for (const id of ['btn-manual-sync', 'btn-export-data']) {
+      const button = document.getElementById(id);
+      if (button) button.addEventListener('click', () => cloudSync.requestManualSync());
     }
 
     const importInput = document.getElementById('import-file-input');
@@ -13630,6 +13688,42 @@
   // =========================================================================
   function initApp() {
     try {
+      if (store.localLoadFailed) {
+        document.body.inert = true;
+        throw new Error('기존 데이터를 불러오지 못해 입력·저장·동기화를 중단했습니다. 기존 저장 데이터는 유지됩니다. 초기화하거나 덮어쓰지 말고 데이터 점검을 요청해 주세요.');
+      }
+      if (window.navigator && !store.writerLockHeld) {
+        store.writerBlocked = true;
+        if (!window.navigator.locks) {
+          document.body.inert = true;
+          throw new Error('이 브라우저에서는 안전한 단일 창 저장을 지원하지 않습니다. 최신 브라우저에서 열어 주세요. 기존 데이터는 유지됩니다.');
+        }
+        if (store.writerLockRequested) return;
+        store.writerLockRequested = true;
+        window.navigator.locks.request('todolist_jy_data_v39_writer', {ifAvailable:true}, async lock => {
+          if (!lock) {
+            document.body.inert = true;
+            store.setSaveStatus('conflict');
+            const status = document.getElementById('local-save-status');
+            if (status) status.textContent = '다른 창에서 편집 중입니다. 기존 창을 닫고 이 창을 새로고침해 주세요.';
+            return;
+          }
+          store.writerLockHeld = true; store.writerBlocked = false;
+          initApp();
+          await new Promise(resolve => window.addEventListener('pagehide', () => {
+            store.writerBlocked = true; store.writerLockHeld = false; resolve();
+          }, {once:true}));
+        }).catch(() => { document.body.inert = true; store.setSaveStatus('conflict'); });
+        window.addEventListener('pageshow', event => {
+          if (event.persisted && !store.writerLockHeld) {
+            document.body.inert = true;
+            store.setSaveStatus('conflict');
+            const status = document.getElementById('local-save-status');
+            if (status) status.textContent = '저장 권한을 다시 확인하려면 새로고침해 주세요. 기존 데이터는 유지됩니다.';
+          }
+        });
+        return;
+      }
       const savedTheme = localStorage.getItem('todolist_jy_theme') || 'light';
       document.documentElement.setAttribute('data-theme', savedTheme);
       const icon = document.getElementById('theme-toggle-icon');
@@ -13654,7 +13748,7 @@
         (document.body || document.documentElement).appendChild(el);
         return el;
       })();
-      box.innerHTML = '⚠️ 앱 초기화 오류: ' + (err.message || err);
+      box.textContent = '⚠️ 앱 초기화 오류: ' + (err.message || err);
     }
   }
 

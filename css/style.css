@@ -305,6 +305,27 @@ body::after {
   transform: scale(0.96);
 }
 
+.manual-sync-button {
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+#manual-sync-state { font-size: 0.65rem; }
+.manual-sync-button[data-state="confirmed"] { color: #18734b; background: #e4f7ec; }
+.manual-sync-button[data-state="syncing"] { color: #3b53a1; background: #eaf0ff; }
+.manual-sync-button[data-state="syncFailed"],
+.manual-sync-button[data-state="failed"] { color: #a12d39; background: #fff0f1; }
+.manual-sync-button:disabled { cursor: wait; }
+.manual-sync-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
 .btn-primary {
   background: linear-gradient(135deg, #ff8fa3, #ff6b8b);
   color: #ffffff;
@@ -2172,10 +2193,17 @@ body::after {
     font-size: 0.74rem;
   }
 
+  #cloud-status-text { display: none; }
+  .manual-sync-button { padding: 0.3rem 0.45rem; font-size: 0.72rem; }
+
   .form-row {
     grid-template-columns: 1fr;
     gap: 0.65rem;
   }
+}
+
+@media (max-width: 380px) {
+  .app-header .brand-name { display: none; }
 }
 
 /* --- Locked Privacy Screen (For Logged Out State) --- */
