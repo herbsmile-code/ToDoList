@@ -494,6 +494,7 @@
     }
 
     requestManualSync() {
+      if (this._transferPromise) return Promise.resolve(false);
       if (this._manualPromise) return this._manualPromise;
       if (this.pushDebounceTimer) clearTimeout(this.pushDebounceTimer);
       this.pushDebounceTimer = null;
@@ -520,6 +521,7 @@
 
     _executePushTasksToCloud(options = {}) {
       if (this._syncPromise) return this._syncPromise;
+      if (this._transferPromise && !options.manual) return Promise.resolve(false);
       // The queued manual request owns the next turn; polling must not overtake it.
       if (this._manualPromise && !options.manual) return Promise.resolve(false);
       const work = this._syncOnce(options);
@@ -527,6 +529,69 @@
       const release = () => { if (this._syncPromise === work) this._syncPromise = null; };
       work.then(release, release);
       return work;
+    }
+
+    requestMemoTransfer(sourceFile, saveProtectionFile) {
+      if (this._transferPromise) return this._transferPromise;
+      // Share the central synchronization boundary; this preparation only GETs.
+      // The existing manual sync performs encryption and conditional PUT later.
+      this._transferPromise = Promise.resolve().then(async () => {
+        if (this._manualPromise) await this._manualPromise;
+        if (this._syncPromise) await this._syncPromise;
+        const p = LocalSyncProtocol;
+        const parsed = window.MemoTransfer.parseFile(sourceFile,p);
+        if (window.location?.protocol !== 'https:' || window.location.hostname !== 'herbsmile-code.github.io' || !window.location.pathname.startsWith('/ToDoList/')) {
+          throw new Error('가져오기는 GitHub 웹사이트에서 진행해 주세요. 로컬 원본은 변경하지 않습니다.');
+        }
+        if (!this.spaceId || !this.pin) throw new Error('웹사이트에서 기존 계정으로 로그인해 주세요.');
+        const target = p.hash([this.activeUrl,this.getStorageKey()]);
+        if ([parsed.bundle.targetFingerprint,parsed.data.localSync?.targetFingerprint,store.localSync?.targetFingerprint]
+            .some(value => value && value !== target)) throw new Error('백업과 웹의 동기화 계정이 다릅니다. 이전을 중단했습니다.');
+        const raw = store._lastLocalRaw;
+        const live = store.buildLocalData();
+        const liveText = JSON.stringify(live), metaText = JSON.stringify(store.localSync);
+        const vaultVersion = this._vaultChangeVersion;
+        const check = () => {
+          if (store.localLoadFailed || store.localWriteFailed || store.localSyncInvalid || store.writerBlocked ||
+              this._vaultWritesInFlight || this._vaultChangeVersion !== vaultVersion ||
+              store._lastLocalRaw !== raw || localStorage.getItem(STORAGE_KEY) !== raw ||
+              JSON.stringify(store.buildLocalData()) !== liveText || JSON.stringify(store.localSync) !== metaText ||
+              p.hash([this.activeUrl,this.getStorageKey()]) !== target) {
+            throw new Error('데이터 또는 편집 상태가 달라져 이전을 중단했습니다. 최신 상태에서 다시 시도해 주세요.');
+          }
+        };
+        check();
+        const pin = this.pin;
+        const response = await this.requestCloud(this.activeUrl + '/spaces/' + this.getStorageKey() + '.json',
+          {headers:{'X-Firebase-ETag':'true'}});
+        if (!response.ok || !response.headers.get('ETag')) throw new Error('서버 원본을 확인하지 못해 이전을 중단했습니다. 잠시 후 다시 시도해 주세요.');
+        const encrypted = await response.json();
+        if (encrypted?.isEncrypted && (!encrypted.iv || !encrypted.payload)) throw new Error('서버 암호화 데이터가 불완전합니다.');
+        const decoded = encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted,pin);
+        if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('서버 원본을 해독하지 못했습니다.');
+        check();
+        const remote = p.select(decoded);
+        const plan = window.MemoTransfer.plan(live,remote,parsed.data,store.localSync,p);
+        const protection = {format:'todolist-before-memo-transfer',version:1,createdAt:new Date().toISOString(),
+          source:parsed.bundle,webRaw:raw,webLive:live,
+          server:{encrypted,decoded,etag:response.headers.get('ETag')},summary:plan.summary};
+        const proof = await saveProtectionFile(protection);
+        if (proof !== p.hash(JSON.stringify(protection,null,2))) throw new Error('보호 백업 저장을 확인하지 못해 이전을 중단했습니다.');
+        check();
+        const next = {...live,...plan.data,
+          updatedAt:Math.max(Date.now(),(Number(live.updatedAt)||0)+1,(Number(decoded.updatedAt)||0)+1),
+          syncRevision:Math.max(Number(live.syncRevision)||0,Number(decoded.revision)||0)+1};
+        // A real GET supplies the comparison base. All differences remain pending
+        // until the ordinary sync sees a matching base and receives a PUT ack.
+        const base = {...p.empty(),targetFingerprint:target,baseline:p.baseline(remote)};
+        const pending = p.track(remote,p.select(next),base);
+        if (!store.commitLocal(next,pending)) throw new Error('웹 브라우저 저장 성공을 확인하지 못했습니다. 보호 백업을 보관해 주세요.');
+        this._idleSyncCache = null;
+        store.setSaveStatus('pending');
+        return {summary:plan.summary};
+      }).finally(() => { this._transferPromise = null; store.renderSaveStatus(); });
+      store.renderSaveStatus();
+      return this._transferPromise;
     }
 
     async _syncOnce({forceWrite = false} = {}) {
@@ -1465,7 +1530,7 @@
       }
       const button = document.getElementById('btn-manual-sync');
       const label = document.getElementById('manual-sync-state');
-      const queued = !!cloudSync._manualPromise;
+      const queued = !!(cloudSync._manualPromise || cloudSync._transferPromise);
       const state = queued ? 'syncing' : this.saveStatus;
       const labels = {confirmed:'동기화 완료', pending:'동기화 필요', syncing:'동기화 중',
         syncFailed:'동기화 실패', failed:'로컬 저장 실패', conflict:'동기화 필요', login:'동기화 필요'};
@@ -13710,6 +13775,8 @@
       const button = document.getElementById(id);
       if (button) button.addEventListener('click', () => cloudSync.requestManualSync());
     }
+
+    if (window.MemoTransfer) window.MemoTransfer.bind({store,cloud:cloudSync,p:LocalSyncProtocol,key:STORAGE_KEY});
 
     const importInput = document.getElementById('import-file-input');
     if (importInput) {

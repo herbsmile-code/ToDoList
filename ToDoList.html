@@ -1907,6 +1907,16 @@
         <button class="modal-close-btn" data-close-modal>✕</button>
       </div>
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <section aria-labelledby="memo-transfer-heading" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 12px;">
+          <h4 id="memo-transfer-heading" style="margin-bottom: .5rem;">메모를 로컬에서 웹으로 옮기기</h4>
+          <p style="font-size: .8rem; line-height: 1.6;">로컬 HTML에서 백업 파일을 저장한 뒤, 웹사이트에서 가져오세요. 메모·AI 스터디·건강·취미 기록·사이트를 옮깁니다. 내용이 다른 메모는 각각 남깁니다.</p>
+          <button type="button" id="btn-memo-file-export" class="btn" style="width: 100%; margin: .5rem 0;">① 메모 백업 파일 저장</button>
+          <label for="memo-transfer-input" style="display: block; font-size: .85rem;">② 웹에서 로컬 백업 파일 선택</label>
+          <input type="file" id="memo-transfer-input" accept=".json,application/json" style="width: 100%; margin: .5rem 0;">
+          <button type="button" id="btn-memo-file-apply" class="btn btn-primary" style="width: 100%;" disabled>③ 원본 보호 백업 후 메모 가져오기</button>
+          <p style="font-size: .75rem; line-height: 1.5; margin-top: .5rem;">PC의 Edge·Chrome에서 진행해 주세요. 가져오기 전에 웹·서버 원본을 별도 파일로 저장하고 다시 읽어 확인합니다. 백업에는 원문이 들어 있으므로 개인적으로 보관하세요. 파일 보관함의 첨부파일은 이 이전 대상에 포함되지 않습니다.</p>
+          <p id="memo-transfer-status" role="status" aria-live="polite" style="font-size: .85rem; line-height: 1.6; overflow-wrap: anywhere;"></p>
+        </section>
         <div>
           <h4 style="font-size: 0.95rem; margin-bottom: 0.35rem;">☁️ Firebase 클라우드 즉시 백업 & 업로드</h4>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">내 모든 일정, 끄적끄적 메모, 가계부, 위시리스트, 사진, 연차 데이터를 Firebase 클라우드에 1초 만에 안전하게 즉시 백업/업로드합니다.</p>
@@ -2967,7 +2977,8 @@
   <script src="js/utils/constants.js?v=20260912_v158"></script>
   <script src="js/utils/helpers.js?v=20260912_v152"></script>
   <script src="js/services/crypto.js?v=20260912_v152"></script>
-  <script src="js/app.js?v=20260915_sync4"></script>
+  <script src="js/memo-transfer.js?v=20260915_transfer1"></script>
+  <script src="js/app.js?v=20260915_transfer1"></script>
   <script src="js/treasure.js?v=20260912_v152"></script>
 </body>
 </html>
