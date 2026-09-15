@@ -1519,7 +1519,7 @@
       if (!el && document.body) {
         el = document.createElement('div'); el.id = 'local-save-status';
         el.setAttribute('role','status'); el.setAttribute('aria-live','polite');
-        el.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:99999;max-width:90vw;padding:10px 14px;border-radius:10px;background:#fff4cc;color:#342d1c;font-size:13px;box-shadow:0 2px 8px #0002;pointer-events:none';
+        el.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:99999;max-width:90vw;padding:10px 14px;color:var(--text-main);font-size:13px;pointer-events:none';
         document.body.appendChild(el);
       }
       if (el) {
@@ -1527,6 +1527,7 @@
         const syncNotice = ['pending', 'syncing', 'syncFailed', 'confirmed', 'conflict', 'login'].includes(this.saveStatus);
         const blocked = this.localLoadFailed || this.localWriteFailed || this.localSyncInvalid || this.writerBlocked;
         el.setAttribute('data-sync-notice', String(syncNotice && !blocked));
+        el.setAttribute('data-save-status', this.saveStatus || 'pending');
       }
       const button = document.getElementById('btn-manual-sync');
       const label = document.getElementById('manual-sync-state');
@@ -3005,14 +3006,9 @@
           items: [
             { id: 'all', name: '모든 할 일', icon: '📋' },
             { id: 'personal', name: '개인 할일', icon: '🌸' },
-            { id: 'work', name: '업무 할일', icon: '💼' },
-            { id: 'calendar-month', name: '월별 달력', icon: '🗓️' },
-            { id: 'upcoming', name: '다가오는 일정', icon: '⏰' },
-            { id: 'pinned', name: '중요 표시', icon: '💖' }
+            { id: 'work', name: '업무 할일', icon: '💼' }
           ],
-          actions: [
-            { id: 'action-new-task', name: '+ 새 일정/할일 등록', icon: '💖', onClickName: 'openTaskModal' }
-          ]
+          actions: []
         },
         life: {
           title: '라이프 & 플랜',
@@ -3035,7 +3031,7 @@
           items: [
             { id: 'notes', name: '끄적끄적 메모', icon: '📝' },
             { id: 'photos', name: '기록 (사진첩)', icon: '📸' },
-            { id: 'treasure', name: '보물 지식함', icon: '💎', isSpecial: 'treasure' }
+            { id: 'sites', name: '유용한 사이트', icon: '🌐' }
           ],
           actions: [
             { id: 'action-new-note', name: '+ 끄적 메모 작성', icon: '✏️', onClickName: 'focusNoteComposer' },
@@ -3043,13 +3039,12 @@
           ]
         },
         finance: {
-          title: '가계부 & 위시 & 사이트',
+          title: '가계부 & 위시',
           icon: '💰',
           defaultFilter: 'ledger',
           items: [
             { id: 'ledger', name: '신혼 가계부', icon: '💰' },
-            { id: 'wishlist', name: '위시리스트', icon: '🎁' },
-            { id: 'sites', name: '유용한 사이트', icon: '🌐' }
+            { id: 'wishlist', name: '위시리스트', icon: '🎁' }
           ],
           actions: [
             { id: 'action-new-wish', name: '+ 새 위시 담기 💖', icon: '🎁', onClickName: 'openWishlistModal' }
@@ -3188,8 +3183,8 @@
       const groupFilterMap = {
         todo: ['all', 'personal', 'work', 'calendar-month', 'calendar-week', 'upcoming', 'pinned', 'completed'],
         life: ['project', 'hobby', 'health', 'vacation'],
-        record: ['photos', 'notes', 'treasure'],
-        finance: ['ledger', 'wishlist', 'sites'],
+        record: ['photos', 'notes', 'sites'],
+        finance: ['ledger', 'wishlist'],
         vault: ['vault', 'devlog']
       };
 

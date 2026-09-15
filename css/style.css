@@ -3814,6 +3814,80 @@ body::after {
   color: var(--text-muted);
 }
 
+/* Mobile ledger: one readable list, without the desktop dashboard. */
+@media (max-width: 992px) {
+  #ledger-tab-budget .ledger-stats-banner,
+  #ledger-tab-budget .ledger-chart-card {
+    display: none;
+  }
+
+  #ledger-tab-budget,
+  #ledger-tab-budget .ledger-col-box {
+    min-width: 0;
+  }
+
+  #ledger-tab-budget .ledger-breakdown-card {
+    padding: .85rem;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  #ledger-tab-budget .ledger-columns-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: .75rem;
+  }
+
+  #ledger-tab-budget .ledger-col-box {
+    padding: .75rem;
+  }
+
+  #ledger-tab-budget .ledger-col-header {
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  #ledger-tab-budget .ledger-items-list {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  #ledger-tab-budget .ledger-item-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: .35rem;
+    min-width: 0;
+  }
+
+  #ledger-tab-budget .ledger-item-name,
+  #ledger-tab-budget .ledger-item-amount,
+  #ledger-tab-budget .col-total {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  #ledger-tab-budget .ledger-item-amount {
+    text-align: right;
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+#local-save-status {
+  background: transparent;
+  box-shadow: none;
+}
+
+#local-save-status[data-save-status="confirmed"][data-sync-notice="true"] {
+  animation: save-notice-dismiss 3s forwards;
+}
+
+@keyframes save-notice-dismiss {
+  0%, 80% { opacity: 1; visibility: visible; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
 .note-card-body {
   font-size: 0.92rem;
   line-height: 1.6;
