@@ -1457,7 +1457,12 @@
         el.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:99999;max-width:90vw;padding:10px 14px;border-radius:10px;background:#fff4cc;color:#342d1c;font-size:13px;box-shadow:0 2px 8px #0002;pointer-events:none';
         document.body.appendChild(el);
       }
-      if (el) el.textContent = this.saveMessage;
+      if (el) {
+        el.textContent = this.saveMessage;
+        const syncNotice = ['pending', 'syncing', 'syncFailed', 'confirmed', 'conflict', 'login'].includes(this.saveStatus);
+        const blocked = this.localLoadFailed || this.localWriteFailed || this.localSyncInvalid || this.writerBlocked;
+        el.setAttribute('data-sync-notice', String(syncNotice && !blocked));
+      }
       const button = document.getElementById('btn-manual-sync');
       const label = document.getElementById('manual-sync-state');
       const queued = !!cloudSync._manualPromise;

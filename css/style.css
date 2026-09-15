@@ -2139,6 +2139,11 @@ body::after {
 }
 
 @media (max-width: 640px) {
+  /* The header already shows sync state; keep storage/blocked-editor errors visible. */
+  #local-save-status[data-sync-notice="true"] {
+    display: none;
+  }
+
   .app-header {
     padding: 0 0.75rem;
     height: 56px;
