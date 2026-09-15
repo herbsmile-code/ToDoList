@@ -1331,6 +1331,7 @@
       if (collaborationNote && !this.deletedItemIds.has(collaborationNote.id) && !cleanAiStudy.some(note => note.id === collaborationNote.id)) {
         cleanAiStudy.unshift(JSON.parse(JSON.stringify(collaborationNote)));
       }
+      this.aiStudyNotes = cleanAiStudy; // ✅ Fix: assign cleanAiStudy to this.aiStudyNotes (was missing, causing data loss on every load)
       // 3. Initial 1-time Subscription migration / seeding flag
       const SUB_SEED_KEY = 'todolist_jy_subscriptions_seeded_v1';
       const isSubSeeded = localStorage.getItem(SUB_SEED_KEY) === 'true';
