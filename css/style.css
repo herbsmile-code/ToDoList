@@ -3939,7 +3939,7 @@ body::after {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 
-#local-save-status[data-save-status="confirmed"][data-sync-notice="true"] {
+#local-save-status[data-sync-notice="true"] {
   animation: save-notice-dismiss 3s forwards;
 }
 

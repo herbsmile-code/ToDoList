@@ -260,8 +260,8 @@
       return { data, conflicts };
     },
     receiveNewMemos(local, remote, meta) {
-      // During a conflict, receive only new standalone memos. Existing bodies,
-      // deletions, settings and vault metadata stay untouched until resolution.
+      // During a conflict, receive new memos and an unchanged local ledger only.
+      // Conflicting originals, pending edits and vault files remain untouched.
       const data = this.clone(local), nextMeta = this.clone(meta);
       const deleted = new Set([...(local.deletedItemIds || []), ...(remote.deletedItemIds || [])]);
       const blocked = new Set([...meta.pending.map(p => p.key), ...meta.conflicts.map(c => c.key)]);
@@ -286,6 +286,19 @@
         if (nextMeta.baseline.known) {
           for (const item of additions) nextMeta.baseline.itemHashes[JSON.stringify([field,item.id])] = this.hash(item);
           if (!pendingOrder) nextMeta.baseline.itemHashes[orderKey] = orderHash;
+        }
+      }
+      const ledgerKey = JSON.stringify(['honeymoonData', null]);
+      if (Object.hasOwn(remote, 'honeymoonData') && !blocked.has(ledgerKey)) {
+        const localHash = Object.hasOwn(local, 'honeymoonData') ? this.hash(local.honeymoonData) : 'absent';
+        const base = meta.baseline.itemHashes[ledgerKey] || 'absent';
+        const remoteHash = this.hash(remote.honeymoonData);
+        if (remote.honeymoonData && typeof remote.honeymoonData === 'object' &&
+            !Array.isArray(remote.honeymoonData) && localHash !== remoteHash &&
+            ((meta.baseline.known && localHash === base) || (!meta.baseline.known && localHash === 'absent'))) {
+          data.honeymoonData = this.clone(remote.honeymoonData);
+          if (nextMeta.baseline.known) nextMeta.baseline.itemHashes[ledgerKey] = remoteHash;
+          received++;
         }
       }
       return {data, meta:nextMeta, received};
@@ -688,7 +701,7 @@
           meta.conflicts = result.conflicts;
           const incoming = LocalSyncProtocol.receiveNewMemos(captured, remote, meta);
           if (!store.commitLocal(incoming.data, incoming.meta)) return false;
-          store.setSaveStatus('conflict', '동기화 필요 · 서로 다른 변경을 보존 중입니다. 충돌하지 않는 새 메모는 받아옵니다.');
+          store.setSaveStatus('conflict', '동기화 필요 · 서로 다른 변경을 보존 중입니다. 안전하게 받을 수 있는 메모·가계부는 받아옵니다.');
           if (incoming.received && typeof UI !== 'undefined') {
             UI.renderTasks(); UI.renderSidebar();
           }
@@ -1516,6 +1529,10 @@
       const data = {...(this._committedData || {})};
       delete data.localSync;
       for (const field of LocalSyncProtocol.fields) {
+        // Missing legacy ledger defaults are display placeholders, not edits.
+        if (field === 'honeymoonData' && this._committedData &&
+            !Object.hasOwn(this._committedData, field) &&
+            LocalSyncProtocol.canonical(this.honeymoonData) === LocalSyncProtocol.canonical(INITIAL_HONEYMOON_DATA)) continue;
         if (field === 'deletedItemIds') data[field] = Array.from(this.deletedItemIds || []);
         else if (this[field] !== undefined) data[field] = LocalSyncProtocol.clone(this[field]);
       }
