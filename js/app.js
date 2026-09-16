@@ -258,6 +258,37 @@
         }
       }
       return { data, conflicts };
+    },
+    receiveNewMemos(local, remote, meta) {
+      // During a conflict, receive only new standalone memos. Existing bodies,
+      // deletions, settings and vault metadata stay untouched until resolution.
+      const data = this.clone(local), nextMeta = this.clone(meta);
+      const deleted = new Set([...(local.deletedItemIds || []), ...(remote.deletedItemIds || [])]);
+      const blocked = new Set([...meta.pending.map(p => p.key), ...meta.conflicts.map(c => c.key)]);
+      let received = 0;
+      for (const field of ['notes', 'aiStudyNotes']) {
+        const existing = local[field] || [], ids = new Set(existing.map(item => item.id));
+        const additions = (remote[field] || []).filter(item => {
+          const key = JSON.stringify([field,item.id]);
+          const base = meta.baseline.itemHashes[key];
+          return !ids.has(item.id) && !deleted.has(item.id) && !blocked.has(key) &&
+            (!meta.baseline.known || !base || base === 'absent');
+        });
+        if (!additions.length) continue;
+        data[field] = [...existing, ...this.clone(additions)];
+        received += additions.length;
+        const orderKey = JSON.stringify([field,'$order']);
+        const orderHash = this.hash(data[field].map(item => item.id));
+        const pendingOrder = nextMeta.pending.find(p => p.key === orderKey);
+        // Keep the pending order's identity/base; include newly received IDs in
+        // its local fingerprint so restart validation still protects every edit.
+        if (pendingOrder) pendingOrder.localHash = orderHash;
+        if (nextMeta.baseline.known) {
+          for (const item of additions) nextMeta.baseline.itemHashes[JSON.stringify([field,item.id])] = this.hash(item);
+          if (!pendingOrder) nextMeta.baseline.itemHashes[orderKey] = orderHash;
+        }
+      }
+      return {data, meta:nextMeta, received};
     }
   };
 
@@ -341,21 +372,21 @@
 
       // 1. Cloud Auth Registry Check (중앙 클라우드 실시간 검증)
       const authUrl = `${this.activeUrl}/auth_registry/${sKey}.json`;
-      let cloudRegistered = null;
-      let cloudSuccess = false;
-
+      let cloudRegistered, authEtag;
       try {
-        const res = await fetch(authUrl);
-        if (res.ok) {
-          cloudRegistered = await res.json();
-          cloudSuccess = true;
-        }
+        const res = await this.requestCloud(authUrl, {headers:{'X-Firebase-ETag':'true'}});
+        if (!res.ok) throw new Error('Account verification failed');
+        cloudRegistered = await res.json();
+        authEtag = res.headers.get('ETag');
+        if (cloudRegistered !== null && (typeof cloudRegistered !== 'object' ||
+            typeof cloudRegistered.pinHash !== 'string' || !cloudRegistered.pinHash)) throw new Error('Invalid account record');
       } catch (err) {
         console.warn('Cloud Auth check warning:', err);
+        return {success:false, message:'계정 확인 서버에 연결하지 못했습니다. 기존 계정과 데이터를 유지합니다. 잠시 후 다시 로그인해 주세요.'};
       }
 
       // 2. 검증 분기
-      if (cloudSuccess && cloudRegistered && cloudRegistered.pinHash) {
+      if (cloudRegistered) {
         // 이미 클라우드에 등록된 비밀번호가 있는 경우 엄격하게 비교
         if (cloudRegistered.pinHash !== hashed) {
           return { 
@@ -364,20 +395,22 @@
           };
         }
       } else {
-        // 클라우드에 아직 등록되지 않은 경우 (최초 등록 or 초기화 상태):
-        // 지금 입력한 비밀번호를 새로운 마스터 비밀번호로 클라우드에 영구 등록!
+        // Only a successful, empty response can permit first registration.
         try {
-          await fetch(authUrl, {
+          if (!authEtag) throw new Error('Account version missing');
+          const registered = await this.requestCloud(authUrl, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'if-match':authEtag },
             body: JSON.stringify({
               spaceId: 'on3257',
               pinHash: hashed,
               registeredAt: Date.now()
             })
           });
+          if (!registered.ok) throw new Error('Account registration not confirmed');
         } catch (e) {
           console.warn('Failed to register initial pin on cloud:', e);
+          return {success:false, message:'계정 등록을 확인하지 못했습니다. 기존 데이터를 유지합니다. 다시 로그인해 주세요.'};
         }
       }
 
@@ -389,11 +422,14 @@
       localStorage.setItem('todolist_jy_pin', cleanPin);
 
       this.updateUIStatus();
-      // 1. First fetch latest data from cloud (force=true) so remote data is authoritatively downloaded to this PC
-      await this.fetchLatestFromCloud(true);
+      // Login and data synchronization are separate outcomes.
+      this.retryAfter = 0;
+      const synced = await this.fetchLatestFromCloud(true);
       // 2. Start realtime polling
       this.startRealtimePolling();
-      return { success: true, message: '🎉 로그인 및 실시간 동기화 연결 완료!' };
+      return { success:true, synced:!!synced, message:synced
+        ? '로그인 및 데이터 동기화가 완료되었습니다.'
+        : '로그인은 완료됐지만 데이터 동기화는 아직 완료되지 않았습니다. 상단 동기화 상태를 확인해 주세요.' };
     }
 
     sanitizeKey(str) {
@@ -652,13 +688,19 @@
         const local = LocalSyncProtocol.select(captured);
         const decoded = encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted, sessionPin);
         if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid cloud object');
-        if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed) return false;
+        if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked ||
+            LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
         const remote = LocalSyncProtocol.select(decoded); // NEVER import remote.localSync.
         const result = LocalSyncProtocol.merge(local, remote, meta);
         if (result.conflicts.length) {
+          this._idleSyncCache = null;
           meta.conflicts = result.conflicts;
-          if (!store.commitLocal(captured, meta)) return false;
-          store.setSaveStatus('conflict');
+          const incoming = LocalSyncProtocol.receiveNewMemos(captured, remote, meta);
+          if (!store.commitLocal(incoming.data, incoming.meta)) return false;
+          store.setSaveStatus('conflict', '동기화 필요 · 서로 다른 변경을 보존 중입니다. 충돌하지 않는 새 메모는 받아옵니다.');
+          if (incoming.received && typeof UI !== 'undefined') {
+            UI.renderTasks(); UI.renderSidebar();
+          }
           return false;
         }
         // Vault original bytes stay coordinated with IndexedDB. Never replace them
@@ -1512,6 +1554,9 @@
       };
       this.saveMessage = message || messages[status];
       this.renderSaveStatus();
+      if (this.activeFilter === 'aistudy' && typeof window.UI?.renderAiStudyEmptyState === 'function') {
+        window.UI.renderAiStudyEmptyState();
+      }
     }
 
     renderSaveStatus() {
@@ -6711,6 +6756,21 @@
     // =========================================================================
     // 🤖 AI 스터디 & 지식 노트 (AI Study Hub UI Engine)
     // =========================================================================
+    renderAiStudyEmptyState() {
+      const empty = document.getElementById('aistudy-empty-state');
+      if (!empty || empty.style.display !== 'flex') return;
+      const title = document.getElementById('aistudy-empty-title');
+      const description = document.getElementById('aistudy-empty-description');
+      const filtered = (store.activeAiStudyCategory || 'all') !== 'all' || !!store.aiStudySearchQuery?.trim();
+      const unconfirmed = store.saveStatus !== 'confirmed';
+      if (title) title.textContent = filtered ? '검색 조건에 맞는 AI 노트가 없어요'
+        : unconfirmed ? 'AI 노트의 동기화 확인이 필요해요' : '등록된 AI 스터디 노트가 없어요';
+      if (description) description.textContent = filtered
+        ? '전체 탭을 선택하거나 검색어를 지우면 다른 노트를 확인할 수 있습니다.'
+        : unconfirmed ? '서버 확인이 완료되지 않아 노트가 없는 것으로 단정할 수 없습니다. 상단 동기화 상태를 확인하고 다시 시도해 주세요.'
+        : '자주 쓰는 프롬프트, AI 팁, 코드 스니펫을 첫 번째 노트로 기록해보세요 ✨';
+    },
+
     renderAiStudy() {
       const tabsBar = document.getElementById('aistudy-category-tabs');
       const gridContainer = document.getElementById('aistudy-grid-container');
@@ -6755,6 +6815,7 @@
       if (filteredNotes.length === 0) {
         if (gridContainer) gridContainer.innerHTML = '';
         if (emptyState) emptyState.style.display = 'flex';
+        this.renderAiStudyEmptyState();
         return;
       }
 
@@ -13527,9 +13588,11 @@
           UI.closeCloudModal();
 
           try { sounds.playAdd(); } catch (err) {}
-          try { confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50); } catch (err) {}
+          if (result.synced) {
+            try { confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 50); } catch (err) {}
+          }
 
-          UI.showToast('동기화 로그인 성공! 최신 클라우드 데이터와 연결되었어요 💖', 'success');
+          UI.showToast(result.message, result.synced ? 'success' : 'warning');
           cloudSync.renderAllViews();
         } catch (err) {
           console.error('syncForm submit error:', err);
