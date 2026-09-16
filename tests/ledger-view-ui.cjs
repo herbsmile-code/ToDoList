@@ -80,6 +80,21 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
       assert.equal(await page.locator('#ledger-month-data-status').isVisible(), false);
       assert.deepEqual(await page.evaluate(() => store.honeymoonData), data);
       assert.deepEqual(await page.evaluate(() => testWrites), []);
+      // A legacy device may have a pending empty ledger and a preserved remote
+      // conflict. The visible numbers must use that copy without writing data.
+      await page.evaluate(data => {
+        store.honeymoonData = {};
+        store.localSync = {pending:[{key:'["honeymoonData",null]',changeId:'keep-me'}],
+          conflicts:[{key:'["honeymoonData",null]',remote:structuredClone(data)}]};
+        UI.ledgerMonthInitialized = false;
+        UI.renderLedger();
+      }, data);
+      assert.equal(await page.locator('#stat-val-income-total').textContent(), '8,000,000원');
+      assert.equal(await page.locator('#stat-val-expense-total').textContent(), '775,000원');
+      assert.match(await page.locator('#ledger-month-data-status').textContent(), /보존된 서버 금액/);
+      assert.deepEqual(await page.evaluate(() => store.honeymoonData), {});
+      assert.equal(await page.evaluate(() => store.localSync.pending[0].changeId), 'keep-me');
+      assert.deepEqual(await page.evaluate(() => testWrites), []);
     }
     assert.deepEqual(errors, []);
     console.log(`PASS: ${cases} full-layout cases, synced totals without bank raw data, month clicks, no storage/network writes`);

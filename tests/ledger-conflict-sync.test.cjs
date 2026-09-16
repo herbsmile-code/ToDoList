@@ -55,3 +55,39 @@ test('local persistence failure cannot replace the in-memory or durable ledger',
   assert.equal(h.values.get(key), raw);
   assert.deepEqual(clone(h.store.honeymoonData), before);
 });
+
+test('old pending zero template previews preserved server amounts without changing originals or outbox', async () => {
+  const h = ledgerHarness({months: {}});
+  const vm = require('node:vm');
+  h.store.honeymoonData = vm.runInContext('JSON.parse(JSON.stringify(INITIAL_HONEYMOON_DATA))', h.context);
+  h.store.saveLocalOnly();
+  const s = server({...saved(h), honeymoonData: data}); delete s.data.localSync; s.attach(h);
+  const local = clone(saved(h).honeymoonData), pending = clone(saved(h).localSync.pending);
+  h.store.activeFilter = 'ledger';
+  h.context.UI.renderTasks = () => h.context.UI.renderLedger();
+  assert.equal(await sync(h), false);
+  assert.equal(h.elements.get('stat-val-income-total').textContent, '8,000,000원');
+  const before = h.values.get(key), requests = h.requests.length;
+  h.context.UI.renderLedger();
+  assert.equal(h.elements.get('stat-val-income-total').textContent, '8,000,000원');
+  assert.match(h.elements.get('ledger-month-data-status').textContent, /보존된 서버 금액/);
+  assert.deepEqual(saved(h).honeymoonData, local);
+  assert.deepEqual(saved(h).localSync.pending, pending);
+  assert.equal(h.values.get(key), before);
+  assert.equal(h.requests.length, requests);
+  assert.equal(h.store.saveStatus, 'conflict');
+  // Already saved metadata is sufficient after reopening, with no server call.
+  h.store.localSync = clone(saved(h).localSync);
+  h.context.UI.ledgerMonthInitialized = false;
+  h.context.UI.renderLedger();
+  assert.equal(h.elements.get('stat-val-expense-total').textContent, '775,000원');
+});
+
+test('server preview never hides actual local records, including recorded zero amounts', () => {
+  for (const months of [data, {9:{hasData:true,income:{total:0,items:[]}}}]) {
+    const h = ledgerHarness({months});
+    h.store.localSync.conflicts = [{key:'["honeymoonData",null]',remote:data}];
+    assert.equal(h.context.UI.getLedgerDisplayData().serverPreview, false);
+    assert.deepEqual(clone(h.context.UI.getLedgerDisplayData().data), months);
+  }
+});

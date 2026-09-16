@@ -698,11 +698,13 @@
         const result = LocalSyncProtocol.merge(local, remote, meta);
         if (result.conflicts.length) {
           this._idleSyncCache = null;
+          const ledgerConflictChanged = JSON.stringify(meta.conflicts.find(c => c?.key === '["honeymoonData",null]')) !==
+            JSON.stringify(result.conflicts.find(c => c.key === '["honeymoonData",null]'));
           meta.conflicts = result.conflicts;
           const incoming = LocalSyncProtocol.receiveNewMemos(captured, remote, meta);
           if (!store.commitLocal(incoming.data, incoming.meta)) return false;
           store.setSaveStatus('conflict', '동기화 필요 · 서로 다른 변경을 보존 중입니다. 안전하게 받을 수 있는 메모·가계부는 받아옵니다.');
-          if (incoming.received && typeof UI !== 'undefined') {
+          if ((incoming.received || (ledgerConflictChanged && store.activeFilter === 'ledger')) && typeof UI !== 'undefined') {
             UI.renderTasks(); UI.renderSidebar();
           }
           return false;
@@ -4051,6 +4053,21 @@
       });
     },
 
+    getLedgerDisplayData() {
+      const local = store.honeymoonData || INITIAL_HONEYMOON_DATA;
+      // Old clients could persist the empty template as a pending edit. Keep
+      // that original/outbox intact and only preview the preserved server copy.
+      const emptyTemplate = Object.keys(local).length === 0 ||
+        JSON.stringify(local) === JSON.stringify(INITIAL_HONEYMOON_DATA);
+      const conflict = store.localSync?.conflicts?.find(c => c?.key === '["honeymoonData",null]');
+      const remote = conflict?.remote;
+      if (!store.localSyncInvalid && emptyTemplate && remote && typeof remote === 'object' &&
+          !Array.isArray(remote) && this.getLedgerAvailableMonths(remote).length) {
+        return {data: remote, serverPreview: true};
+      }
+      return {data: local, serverPreview: false};
+    },
+
     renderLedger() {
       const activeSubtab = store.activeLedgerSubtab || 'budget';
       const budgetTabPanel = document.getElementById('ledger-tab-budget');
@@ -4088,7 +4105,7 @@
       if (openSubBtn) openSubBtn.style.display = 'none';
 
       // Viewing a device must never recalculate synced totals from its local-only bank files.
-      const data = store.honeymoonData || INITIAL_HONEYMOON_DATA;
+      const {data, serverPreview} = this.getLedgerDisplayData();
       const availableMonths = this.getLedgerAvailableMonths(data);
       if (!this.ledgerMonthInitialized && availableMonths.length) {
         if (!availableMonths.includes(store.selectedLedgerMonth)) {
@@ -4102,6 +4119,7 @@
         monthStatus.textContent = availableMonths.includes(targetMonth) ? '' : availableMonths.length
           ? `${targetMonth}월에는 저장된 내역이 없습니다. 내역이 있는 월: ${availableMonths.join(', ')}월. 아래 월 버튼으로 선택해 주세요.`
           : '동기화된 월별 가계부 내역이 아직 없습니다. PC의 저장 상태와 상단 동기화 상태를 확인해 주세요.';
+        if (serverPreview) monthStatus.textContent = '충돌로 보존된 서버 금액을 표시합니다. 이 기기의 원본·미전송 기록은 유지됩니다. ' + monthStatus.textContent;
         monthStatus.hidden = !monthStatus.textContent;
       }
       const mData = data[targetMonth] || { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } };
