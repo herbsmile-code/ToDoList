@@ -1966,7 +1966,7 @@
 
   <!-- Modal: Dev Log Detail Popup (달력 클릭 및 개발기록 상세 보기) -->
   <div id="devlog-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" style="display: none;">
-    <div class="modal-card" style="max-width: 540px;">
+    <div class="modal-card" style="max-width: 840px; width: 92vw; max-height: 88vh; display: flex; flex-direction: column;">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 0.5rem;">
           <span id="devlog-modal-version-badge" class="badge" style="background: var(--primary); color: #fff; font-weight: 800; padding: 4px 10px; border-radius: 8px; font-size: 0.82rem;">v1.1</span>
@@ -1974,7 +1974,7 @@
         </div>
         <button class="modal-close-btn" data-close-devlog-modal title="닫기 (Esc)">✕</button>
       </div>
-      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 0.25rem;">
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 0.5rem; overflow-y: auto; max-height: calc(88vh - 150px);">
         <div style="font-size: 0.82rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem;">
           <span>📅 개발 일자:</span>
           <strong id="devlog-modal-date" style="color: var(--text-main);">2026년 8월 30일</strong>
@@ -1984,7 +1984,7 @@
         </div>
         <div>
           <h4 style="font-size: 0.92rem; font-weight: 800; margin-bottom: 0.6rem; color: var(--text-main);">✨ 주요 개발 및 개선 내역</h4>
-          <ul id="devlog-modal-details-list" class="devlog-details-list" style="margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.85rem; color: var(--text-main); line-height: 1.5;">
+          <ul id="devlog-modal-details-list" class="devlog-details-list" style="margin: 0; padding: 0.85rem 1rem 0.85rem 1.8rem; display: flex; flex-direction: column; gap: 0.85rem; font-size: 0.88rem; color: var(--text-main); line-height: 1.65; background: rgba(0, 0, 0, 0.02); border-radius: 12px; border: 1px solid var(--border-color);">
             <!-- Details li items -->
           </ul>
         </div>
@@ -2975,7 +2975,7 @@
   <script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';</script>
 
   <!-- Application Logic Scripts (Phase 1 Modularization) -->
-  <script src="js/utils/constants.js?v=20260916_v15_1"></script>
+  <script src="js/utils/constants.js?v=20260916_v15_2"></script>
   <script src="js/utils/helpers.js?v=20260912_v152"></script>
   <script src="js/services/crypto.js?v=20260912_v152"></script>
   <script src="js/memo-transfer.js?v=20260915_transfer1"></script>

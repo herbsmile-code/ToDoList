@@ -34,13 +34,13 @@
       badgeColor: '#20c997',
       summary: '전역 규칙(공통 6대 원칙)과 프로젝트 전용 규칙의 역할 분리, 1~5번 개발 라이프사이클 V2 개편, 새 프로젝트 및 타 PC 환경 세팅 가이드 완비',
       details: [
-        '🌐 [전역 규칙 일원화] "요청 관련 코드 우선", "명백한 위험 사전 알림", "기존 데이터·주석 보존", "대규모 변경 승인", "위험도별 최소 검증", "심층 분석 지양" 6대 공통 개발 원칙 확립',
-        '📂 [AGENTS.md vs GEMINI.md 역할 분리] AGENTS.md는 에이전트 행동 및 작업 수칙(How to work)을 전담하고, GEMINI.md는 ToDoList 핵심 데이터·키·암호화(What to protect)를 전담하여 규칙 중복과 충돌 원천 해결',
-        '🎯 [정량적 검증 기준 정립] LOW(*.css, *.md 단순 화면 확인), NORMAL(UI 렌더링, 이벤트 흐름), HIGH(저장소, Firebase, 암호화, 데이터 모델), FULL(대규모 리팩터링)로 검증 수준을 파일·로직별로 명확화',
-        '🌿 [Git 커밋 vs 배포 버전 분리] 안전한 복구 지점을 위해 단위 작업마다 Git 커밋(/commit)을 수시 수행하고, 배포 버전(?v=...)은 배포 및 일일 마무리 시점에만 상승시키는 분리 원칙 적용',
-        '🛠️ [1~5번 셋업 워크플로 완전 정복] 1번(/setup-project: 환경 구축) ➔ 2번(/design-api: 사전 설계) ➔ 코딩 ➔ 3번(/setup-skill: 도구 제작) ➔ 4번(/verify: 자동 검증) ➔ 5번(/commit: 최종 커밋/백업) 순서로 직관적 통일',
-        '🌱 [새 프로젝트 시작 순서] 새 폴더 생성 ➔ "1번 셋업 시작해줘" 실행 (스택 자동 감지 및 표준 AGENTS.md 자동 생성) ➔ 2번 설계(/design-api) ➔ 기능 구현 ➔ 4번 검증(/verify) ➔ 5번 커밋(/commit)',
-        '💻 [다른 PC 작업 세팅 가이드] ① 기존 프로젝트: Git에 AGENTS.md가 포함되어 있어 git clone 시 100% 자동 적용 / ② 새 프로젝트: 새 PC의 IDE 설정에 전역 규칙을 넣고 ~/.gemini/config/skills 복사 시 동일 워크플로 사용 가능'
+        '🌐 <strong>[전역 규칙 일원화] 6대 공통 개발 원칙 확립</strong><br>• 요청 관련 코드만 집중 확인 (토큰 소모 및 무의미한 전체 반복 분석 차단)<br>• 작업 범위 내 명백한 버그·보안 위험 발견 시 능동적 사전 알림<br>• 기존 데이터·설정·주석 임의 삭제 금지 & 대규모 변경 사전 승인 필수<br>• 위험도별 최소 충분 검증 & 전체 심층 분석은 사용자 요청 시에만 수행',
+        '📂 <strong>[AGENTS.md vs GEMINI.md 역할 분리]</strong><br>• <strong>AGENTS.md</strong>: 에이전트 행동 및 작업 수칙(How to work) 전담<br>• <strong>GEMINI.md</strong>: ToDoList 핵심 데이터·키·암호화(What to protect) 전담<br>• 규칙 중복과 에이전트 판단 혼선을 원천 차단',
+        '🎯 <strong>[정량적 검증 기준 정립]</strong> 파일·로직별 검증 레벨 명확화<br>• 🟢 <strong>LOW</strong>: *.css, *.md, 단순 HTML ➔ 변경된 화면 스타일 확인<br>• 🟡 <strong>NORMAL</strong>: 화면 렌더링(render*), 버튼 이벤트 ➔ 연결 흐름 검증<br>• 🔴 <strong>HIGH</strong>: 로컬 저장소, Firebase, 암호화, 데이터 모델 ➔ 저장/복원 철저 검증<br>• 🟣 <strong>FULL</strong>: 대규모 리팩터링 또는 명시적 /verify-full 요청 시',
+        '🌿 <strong>[Git 커밋 vs 배포 버전 분리 원칙]</strong><br>• <strong>Git 커밋 (/commit)</strong>: 안전한 복구 지점을 위해 작업 단위마다 수시 수행<br>• <strong>배포 버전 (?v=...)</strong>: 실제 배포 시점 또는 1일 마무리 시점에만 상승',
+        '🛠️ <strong>[올바른 1~5번 워크플로 순서]</strong> 직관적인 개발 라이프사이클<br>• <strong>1번 (/setup-project)</strong>: 환경 준비 & 스택 맞춤 AGENTS.md 세팅<br>• <strong>2번 (/design-api)</strong>: 코딩 전 데이터 구조 & API 사전 설계<br>• <strong>3번 (/setup-skill)</strong>: 필요 시 자동화 도구/스킬 제작<br>• <strong>4번 (/verify)</strong>: 위험도(LOW~HIGH)에 맞춘 코드 자동 검증<br>• <strong>5번 (/commit)</strong>: 안정화된 코드 Git 커밋 & 원격 백업',
+        '🌱 <strong>[새 프로젝트 시작 순서 한눈에 보기]</strong><br>새 폴더 생성 ➔ <strong>1번 셋업</strong>(/setup-project) ➔ <strong>2번 설계</strong>(/design-api) ➔ <strong>기능 구현</strong> ➔ <strong>4번 검증</strong>(/verify) ➔ <strong>5번 커밋</strong>(/commit)',
+        '💻 <strong>[다른 PC 작업 세팅 가이드]</strong><br>• <strong>기존 프로젝트</strong>: Git에 AGENTS.md가 포함되어 있어 git clone 시 100% 자동 적용<br>• <strong>새 프로젝트</strong>: 새 PC의 IDE 설정에 전역 규칙 등록 + ~/.gemini/config/skills 복사 시 동일 워크플로 완벽 지원'
       ]
     },
     {
