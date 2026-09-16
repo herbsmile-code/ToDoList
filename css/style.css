@@ -2139,9 +2139,17 @@ body::after {
 }
 
 @media (max-width: 640px) {
-  /* The header already shows sync state; keep storage/blocked-editor errors visible. */
+  /* Keep mobile sync notices below the header and clear of bottom navigation. */
   #local-save-status[data-sync-notice="true"] {
-    display: none;
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    bottom: auto !important;
+  }
+
+  #toast-container {
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    left: 12px;
+    right: 12px;
   }
 
   .app-header {

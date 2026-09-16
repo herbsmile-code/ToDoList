@@ -3100,9 +3100,8 @@
           defaultFilter: 'vault',
           items: [
             { id: 'vault', name: '파일 보관함', icon: '📁' },
-            { id: 'devlog', name: '개발 기록', icon: '🚀' },
-            { id: 'sync', name: '클라우드 동기화', icon: '🔄', isSpecial: 'sync' },
-            { id: 'theme', name: '화면 테마 변경', icon: '🌓', isSpecial: 'theme' }
+            { id: 'aistudy', name: 'AI 스터디', icon: '🤖' },
+            { id: 'sync', name: '클라우드 동기화', icon: '🔄', isSpecial: 'sync' }
           ],
           actions: [
             { id: 'action-upload-vault', name: '+ 파일 보관하기', icon: '📁', onClickName: 'triggerVaultUpload' }
