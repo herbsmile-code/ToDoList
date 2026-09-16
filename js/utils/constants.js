@@ -29,20 +29,17 @@
       "version": "v1.6",
       "date": "2026-09-17",
       "dateFormatted": "2026년 9월 17일 (목)",
-      "title": "📚 AI 공통·프로젝트 규칙 정리와 적용 방식 학습 (v1.6)",
+      "title": "📂 AI 규칙 파일, 두 곳에서 간단하게 관리하기 (v1.6)",
       "badge": "최신 버전 ✨",
       "badgeColor": "#20c997",
-      "summary": "v1.5의 규칙 계층 설명을 검증·정정하고, 공통 AGENTS.md와 PROJECT_RULES.md 분리 및 폴더·다른 PC 관리 방법 정리",
+      "summary": "공통 규칙과 TodoList 전용 규칙을 나눴습니다. 어떤 파일을 고치고, 다른 PC에서는 어떻게 쓰는지 정리했습니다.",
       "details": [
-        "🏛️ <strong>[v1.5에서 옮겨 검토한 내용]</strong><br>상위 폴더 탐색·공유 경로와 상하위 규칙 병합 두 항목을 오늘의 학습 기록으로 이동했습니다. 부모 폴더에 파일을 두면 두 도구가 모든 프로젝트에 영구 자동 적용한다는 설명은 과도한 일반화였습니다. 파일의 위치, 도구별 탐색 범위, 연결 지침과 실제 로딩을 구분해야 합니다.",
-        "🔎 <strong>[Codex의 규칙 탐색]</strong><br>기본 전역 위치는 <code>~/.codex/AGENTS.md</code>이며 <code>CODEX_HOME</code> 설정에 따라 달라집니다. 프로젝트 규칙은 프로젝트 루트(보통 Git 루트)부터 작업 폴더까지 탐색합니다. Git 루트 밖의 부모 <code>vibe_coding/AGENTS.md</code>까지 자동 탐색한다고 가정하지 않고, 현재는 Codex 연결 파일에서 그 원본을 읽도록 명시했습니다. <a href=\"https://learn.chatgpt.com/docs/agent-configuration/agents-md\" target=\"_blank\" rel=\"noopener noreferrer\">공식 AGENTS.md 안내</a>",
-        "🔄 <strong>[병합과 Override의 범위]</strong><br>Codex는 실제로 발견한 전역·프로젝트 지침을 결합하며, 프로젝트 경로에서 작업 위치에 가까운 지침이 앞선 지침과 충돌하는 부분을 우선합니다. 같은 위치의 <code>AGENTS.override.md</code>는 <code>AGENTS.md</code>보다 먼저 선택됩니다. 이는 임의의 모든 상위 폴더를 읽는다는 의미도, 상위 시스템·도구 권한을 무시할 수 있다는 의미도 아닙니다.",
-        "🤖 <strong>[Antigravity는 별도로 확인]</strong><br>공식 Rules 안내의 전역 위치는 <code>~/.gemini/GEMINI.md</code>, 워크스페이스 규칙 위치는 <code>.agents/rules</code>입니다. Always On 등 활성화 방식도 있습니다. Codex와 동일한 자동 탐색을 전제로 삼지 않습니다. 현재 프로젝트의 <code>GEMINI.md</code>에는 두 원본을 읽는 연결문을 마련했지만, 사용하는 IDE·CLI의 실제 로딩은 별도 확인 대상입니다. <a href=\"https://antigravity.google/docs/rules-workflows\" target=\"_blank\" rel=\"noopener noreferrer\">Antigravity 공식 Rules 안내</a>",
-        "📂 <strong>[규칙 본문은 두 곳에서 관리]</strong><br>공통 원본: <code>C:/Users/JY/Desktop/vibe_coding/AGENTS.md</code><br>프로젝트 원본: <code>ToDoList/PROJECT_RULES.md</code><br>공통 규칙의 초안 이름 <code>GLOBAL_RULES.md</code>를 최종적으로 <code>AGENTS.md</code>로 변경했습니다. 프로젝트의 <code>AGENTS.md</code>·<code>GEMINI.md</code>는 원본의 위치를 안내하는 짧은 연결 파일입니다.",
-        "🗂️ <strong>[현재 폴더 관리 지도]</strong><pre style=\"white-space:pre-wrap;overflow-wrap:anywhere;\">vibe_coding/\n├─ AGENTS.md                 공통 작업 규칙\n├─ README.md                 사용 안내\n└─ ToDoList/\n   ├─ PROJECT_RULES.md       TodoList 전용 규칙\n   ├─ AGENTS.md              Codex 연결문\n   └─ GEMINI.md              Gemini 연결문</pre>Codex 전역 연결문은 <code>C:/Users/JY/.codex/AGENTS.md</code>에 있습니다. 공통 작업 방식을 바꿀 때는 부모 AGENTS.md만, 저장·테스트·배포 조건을 바꿀 때는 PROJECT_RULES.md만 수정합니다.",
-        "🛠️ <strong>[이번에 보강한 공통·프로젝트 원칙]</strong><br>공통: 승인된 작업을 끝까지 수행, 최소 조사·변경, 재현과 반복 오류 재검토, 검증과 실제 해결의 구분, 실전 팁·아키텍처 인사이트의 능동적 제안.<br>TodoList: 기존 저장 키·메모 형식·암호화 유지, localSync 업로드 제외, 미전송·삭제·충돌 원문 보호, 가계부 0원·모바일 재발 조건과 관련 테스트 명시. 이전의 무조건 승인 대기·서버 시각 우선·자동 배포 지시는 연결문으로 정리했습니다.",
-        "🧹 <strong>[중복 파일과 토큰 관리]</strong><br>docs/rules의 검토용 초안과 옛 규칙 백업을 정리했습니다. 짧은 연결문에 본문을 다시 복사하지 않고, 이미 읽은 파일은 바뀌지 않았다면 반복해서 읽지 않도록 안내합니다. 안전성 2배·토큰 50% 절약·상위 1% 아키텍처는 측정된 사실이 아니므로 성과 수치로 사용하지 않습니다. 좋은 규칙도 테스트와 백업을 대신하지 않습니다.",
-        "💻 <strong>[새 프로젝트·다른 PC에서 사용하는 순서]</strong><br>① 공통 AGENTS.md를 준비합니다.<br>② 새 프로젝트에는 해당 기술·데이터·검증·배포 조건에 맞는 PROJECT_RULES.md를 둡니다.<br>③ 도구가 읽는 연결 파일의 상대 경로와 전역 경로를 맞춥니다.<br>④ 새 세션에서 실제 적용된 파일 경로를 확인합니다.<br>프로젝트 규칙은 Git에 포함해야 clone/pull로 전달됩니다. Git 밖의 공통 원본과 기기별 도구 설정은 별도로 준비해야 하므로, clone만으로 모든 규칙이 100% 적용된다고 보장하지 않습니다."
+        "✏️ <strong>규칙을 바꿀 때는 이 두 파일만!</strong><br>• <code>vibe_coding/AGENTS.md</code>: 모든 프로젝트에서 AI가 일하는 방법<br>• <code>ToDoList/PROJECT_RULES.md</code>: TodoList의 메모 보호·테스트·배포 규칙<br>예: “답변은 짧게”는 공통 규칙에, “미전송 메모를 지우지 말 것”은 프로젝트 규칙에 적습니다. 공통 규칙의 이름은 GLOBAL_RULES.md에서 AGENTS.md로 바꿨습니다.",
+        "🗂️ <strong>폴더는 이렇게 관리합니다</strong><pre style=\"white-space:pre-wrap;overflow-wrap:anywhere;\">vibe_coding/\n├─ AGENTS.md          공통 규칙\n├─ README.md          사용 안내\n└─ ToDoList/\n   ├─ PROJECT_RULES.md  TodoList 규칙\n   ├─ AGENTS.md         Codex용 길 안내\n   └─ GEMINI.md         Gemini용 길 안내</pre>프로젝트 안의 AGENTS.md·GEMINI.md는 “위 두 규칙을 읽으세요”라고 알려주는 파일입니다. 규칙 내용을 여기에 다시 복사할 필요는 없습니다. Codex 개인 설정 폴더의 AGENTS.md도 같은 공통 규칙을 읽도록 바꿨습니다.",
+        "🛠️ <strong>이번에 좋아진 점</strong><br>• 승인받은 일은 설명만 하지 않고 끝까지 처리하기<br>• 같은 오류가 반복되면 원인부터 다시 확인하기<br>• 메모와 아직 전송되지 않은 내용을 먼저 보호하기<br>• 도움이 되는 실전 팁과 더 나은 코드 구성 방법을 먼저 제안하기<br>중복된 초안도 정리해, 같은 규칙을 여러 곳에서 고치는 일을 줄였습니다.",
+        "🔎 <strong>폴더에 넣기만 하면 자동 적용될까요?</strong><br>모든 AI가 똑같이 읽지는 않습니다. 그래서 규칙 위치를 알려주는 파일을 둡니다. 새 대화에서는 “지금 읽은 규칙 파일 경로를 알려줘”라고 확인하세요. 특히 Gemini가 실제로 읽었는지는 별도 확인이 필요합니다.<br>Codex는 읽어들인 규칙끼리 충돌하면 작업 폴더에 더 가까운 규칙을 우선합니다.<br><small>자세한 설정: <a href=\"https://learn.chatgpt.com/docs/agent-configuration/agents-md\" target=\"_blank\" rel=\"noopener noreferrer\">Codex 공식 안내</a> · <a href=\"https://antigravity.google/docs/rules-workflows\" target=\"_blank\" rel=\"noopener noreferrer\">Antigravity 공식 안내</a></small>",
+        "💻 <strong>새 프로젝트·다른 PC에서는?</strong><br>① 공통 AGENTS.md를 준비합니다.<br>② 프로젝트 폴더에 그 프로젝트에 맞는 PROJECT_RULES.md를 둡니다.<br>③ Codex·Gemini가 이 두 파일을 읽도록 경로를 연결하고 확인합니다.<br>GitHub에서 프로젝트만 내려받으면, 프로젝트 폴더 밖의 공통 규칙과 PC별 AI 설정은 따라오지 않습니다. 따로 준비해야 합니다.",
+        "📌 <strong>오늘 공부한 핵심</strong><br>v1.5의 “상위 폴더 규칙을 공유하는 방법”을 이 기록으로 옮겨 정리했습니다.<br><strong>규칙 본문은 두 곳에만, AI에는 그 위치를 안내하기.</strong><br>단, 규칙을 잘 써도 메모가 자동 백업되는 것은 아닙니다. 실제 저장 확인·테스트·백업은 계속 필요합니다."
       ]
     },
     {
