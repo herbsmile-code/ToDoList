@@ -472,17 +472,8 @@
     }
 
     renderAllViews() {
+      // renderTasks dispatches to the active screen; hidden views render on entry.
       try { UI.renderTasks(); } catch (e) {}
-      try { UI.renderPhotos(); } catch (e) {}
-      try { UI.renderNotes(); } catch (e) {}
-      try { UI.renderWishlist(); } catch (e) {}
-      try { UI.renderLedger(); } catch (e) {}
-      try { UI.renderSubscriptions(); } catch (e) {}
-      try { UI.renderCalendarMonth(); } catch (e) {}
-      try { UI.renderCalendarWeek(); } catch (e) {}
-      try { UI.renderVacation(); } catch (e) {}
-      try { UI.renderSites(); } catch (e) {}
-      try { UI.renderAiStudy(); } catch (e) {}
       try { UI.renderSidebar(); } catch (e) {}
     }
 
@@ -2855,7 +2846,22 @@
       return { label: '보통 🌸', class: 'badge-priority-medium' };
     },
 
-    async renderSidebar() {
+    renderSidebar() {
+      this._sidebarRenderRequested = true;
+      if (this._sidebarRenderPromise) return this._sidebarRenderPromise;
+      // Coalesce synchronous callers, and repeat if state changes during the read.
+      this._sidebarRenderPromise = Promise.resolve().then(async () => {
+        try {
+          do {
+            this._sidebarRenderRequested = false;
+            await this.renderSidebarNow();
+          } while (this._sidebarRenderRequested);
+        } finally { this._sidebarRenderPromise = null; }
+      });
+      return this._sidebarRenderPromise;
+    },
+
+    async renderSidebarNow() {
       const stats = store.getStats();
       const counts = {
         all: store.tasks.filter(t => t.status !== 'completed').length,
@@ -2885,8 +2891,9 @@
       }
 
       // Update Vault files count
+      let vaultFiles = [];
       try {
-        const vaultFiles = await cloudSync.getAllVaultFiles();
+        vaultFiles = await cloudSync.getAllVaultFiles();
         const vCount = document.getElementById('nav-count-vault');
         if (vCount) vCount.textContent = vaultFiles.length;
       } catch (e) {}
@@ -2901,11 +2908,7 @@
 
         // Estimate total JSON & Photo/Vault data size
         const rawJsonBytes = new TextEncoder().encode(localStorage.getItem(STORAGE_KEY) || '').length;
-        let totalVaultBytes = 0;
-        try {
-          const vFiles = await cloudSync.getAllVaultFiles();
-          totalVaultBytes = vFiles.reduce((sum, f) => sum + (f.size || 0), 0);
-        } catch (e) {}
+        const totalVaultBytes = vaultFiles.reduce((sum, f) => sum + (f.size || 0), 0);
 
         const totalMB = Math.max(0.15, (rawJsonBytes + totalVaultBytes) / (1024 * 1024));
         const maxQuotaMB = 1024; // 1 GB free quota
@@ -2950,11 +2953,7 @@
       }
 
       if (catContainer) {
-        let vaultCount = 0;
-        try {
-          const vaultFiles = await cloudSync.getAllVaultFiles();
-          vaultCount = vaultFiles.length;
-        } catch (e) {}
+        const vaultCount = vaultFiles.length;
 
         const customNames = store.customMenuNames || {};
         const itemMeta = {
@@ -6822,51 +6821,12 @@
       if (emptyState) emptyState.style.display = 'none';
 
       // 3. Render Cards
+      const dateFormatter = new Intl.DateTimeFormat('ko-KR', {year:'numeric', month:'short', day:'numeric'});
       gridContainer.innerHTML = filteredNotes.map(note => {
         const catObj = categories.find(c => c.id === note.category) || categories[1];
-        const dateStr = new Date(note.updatedAt || note.createdAt || Date.now()).toLocaleDateString('ko-KR', {
-          year: 'numeric', month: 'short', day: 'numeric'
-        });
-
-        // Code/Prompt snippet box
-        let codeHtml = '';
-        if (note.codeSnippet && note.codeSnippet.trim()) {
-          const langLabel = note.snippetLang || 'Code';
-          codeHtml = `
-            <div class="aistudy-code-box">
-              <div class="aistudy-code-header">
-                <span class="aistudy-lang-badge">${escapeHTML(langLabel)}</span>
-                <button type="button" class="aistudy-copy-btn" data-action="copy-ai-snippet" data-id="${note.id}" title="프롬프트/코드 복사">
-                  <span>📋</span>
-                  <span>복사</span>
-                </button>
-              </div>
-              <pre class="aistudy-code-content"><code>${escapeHTML(note.codeSnippet)}</code></pre>
-            </div>
-          `;
-        }
-
-        // Tags
-        let tagsHtml = '';
-        if (Array.isArray(note.tags) && note.tags.length > 0) {
-          tagsHtml = `
-            <div class="aistudy-tags-row">
-              ${note.tags.map(t => `<span class="aistudy-tag-chip">${escapeHTML(t)}</span>`).join('')}
-            </div>
-          `;
-        }
-
-        // Reference link button
-        let refLinkHtml = '';
-        if (note.refUrl && note.refUrl.trim()) {
-          const safeUrl = escapeHTML(note.refUrl.trim());
-          refLinkHtml = `
-            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="aistudy-ref-link" title="참고 링크 열기">
-              <span>🔗</span>
-              <span>참고 문서</span>
-            </a>
-          `;
-        }
+        const date = new Date(note.updatedAt || note.createdAt || Date.now());
+        const dateStr = Number.isNaN(date.getTime()) ? 'Invalid Date' : dateFormatter.format(date);
+        // Full code, tags and source links are rendered only in the detail modal.
 
         return `
           <div class="aistudy-card ${note.pinned ? 'is-pinned' : ''}" data-aistudy-id="${note.id}" role="button" tabindex="0" aria-label="${escapeHTML(note.title)} 상세 보기">
