@@ -230,17 +230,18 @@
         const base = p ? p.base : meta.baseline.known ? (meta.baseline.itemHashes[key] || 'absent') : 'unknown';
         // Folder IDs such as "work" also exist in other collections. Scope only
         // their deletion marker; keep existing item tombstones compatible.
-        const isDeleted = deleted.has(id) || (field === 'siteFolders' && deleted.has('site-folder:' + id));
+        const isDeleted = deleted.has(id) || (field === 'siteFolders' && deleted.has('site-folder:' + id)) ||
+          (field === 'hobbyFolders' && deleted.has('hobby-folder:' + id));
         if (field === 'deletedItemIds') { merged[key] = Array.from(deleted); continue; }
         if (lh === rh) {
           // Older clients can keep a row alongside its deletion marker. Equal
           // stale copies do not constitute a new edit or undo that deletion.
-          if ((field === 'sites' || field === 'siteFolders' || field === 'vacations') && isDeleted) delete merged[key];
+          if ((field === 'sites' || field === 'siteFolders' || field === 'vacations' || field === 'hobbyNotes' || field === 'hobbyFolders') && isDeleted) delete merged[key];
           continue;
         }
         // An acknowledged deletion must not silently accept a stale/new remote
         // row with the same ID. Preserve that original for conflict resolution.
-        if ((field === 'sites' || field === 'siteFolders' || field === 'vacations') && isDeleted &&
+        if ((field === 'sites' || field === 'siteFolders' || field === 'vacations' || field === 'hobbyNotes' || field === 'hobbyFolders') && isDeleted &&
             lh === 'absent' && rh !== 'absent' && !p) {
           conflicts.push({ key, base, localHash: lh, remoteHash: rh, remote: this.clone(r[key]) });
           continue;
@@ -2198,10 +2199,49 @@
     }
 
     // --- Hobby & Activity Journal Methods ---
+    canEditHobby() {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return false; }
+      return true;
+    }
+
+    commitHobbyChanges(changes) {
+      if (!this.canEditHobby()) return false;
+      try {
+        // Publish records, folder changes and deletion markers only after the
+        // central commit has durably stored and read back the same outbox.
+        const data = {...this.buildLocalData(), ...changes};
+        data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+        data.syncRevision = (this.syncRevision || 0) + 1;
+        const meta = LocalSyncProtocol.track(this._committedData || {}, data, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data, meta)) return false;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud(true);
+        return true;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
+    }
+
+    isHobbyDestination(id) {
+      return !!id && id !== 'all' && this.hobbyFolders.some(f => f.id === id);
+    }
+
+    getVisibleHobbyNotes() {
+      const active = this.activeHobbyFolder || 'all';
+      return active === 'all' || !this.hobbyFolders.some(f => f.id === active)
+        ? this.hobbyNotes : this.hobbyNotes.filter(n => n.folder === active);
+    }
+
+    getSelectedVisibleHobbyIds() {
+      return this.getVisibleHobbyNotes().filter(n => this.selectedHobbyNotes?.has(n.id)).map(n => n.id);
+    }
+
     addHobbyNote(data) {
+      if (!this.canEditHobby()) return null;
+      const folder = data.folder || 'general';
+      if (!this.isHobbyDestination(folder)) return null;
       const newNote = {
         id: 'hnb-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        folder: data.folder || 'general',
+        folder,
         title: (data.title || '').trim(),
         date: data.date || getRealTodayStr(),
         place: (data.place || '').trim(),
@@ -2209,65 +2249,63 @@
         content: (data.content || '').trim(),
         createdAt: Date.now()
       };
-      this.hobbyNotes.unshift(newNote);
-      this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save(true);
-      return newNote;
+      const hobbyNotes = [newNote, ...this.hobbyNotes]
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitHobbyChanges({hobbyNotes}) ? newNote : null;
     }
 
     updateHobbyNote(id, updates) {
+      if (!this.canEditHobby()) return null;
       const note = this.hobbyNotes.find(n => n.id === id);
       if (!note) return null;
-      Object.assign(note, updates, { updatedAt: Date.now() });
-      this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save(true);
-      return note;
+      // Legacy orphan records remain editable in their original folder. A
+      // new destination must still exist at the moment of saving.
+      if (Object.hasOwn(updates, 'folder') && updates.folder !== note.folder && !this.isHobbyDestination(updates.folder)) return null;
+      const updated = {...note, ...updates, id:note.id, updatedAt:Date.now()};
+      const hobbyNotes = this.hobbyNotes.map(n => n.id === id ? updated : n)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitHobbyChanges({hobbyNotes}) ? updated : null;
     }
 
     deleteHobbyNote(id) {
-      if (!id) return false;
-      const targetId = String(id).trim();
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      this.deletedItemIds.add(targetId);
-      const idx = this.hobbyNotes.findIndex(n => n && String(n.id).trim() === targetId);
-      if (idx !== -1) this.hobbyNotes.splice(idx, 1);
-      this.save(true);
-      return true;
+      if (!this.canEditHobby() || !id) return false;
+      return this.deleteHobbyNotesBatch([String(id).trim()]) === 1;
     }
 
     addHobbyFolder(name, icon = '🎨') {
+      if (!this.canEditHobby()) return null;
       const cleanName = (name || '').trim();
       if (!cleanName) return null;
-      const folderId = 'hfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
       const newFolder = {
-        id: folderId,
-        name: cleanName,
-        icon: icon || '🎨'
+        id: 'hfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        name:cleanName, icon:icon || '🎨'
       };
-      this.hobbyFolders.push(newFolder);
-      this.save(true);
-      return newFolder;
+      return this.commitHobbyChanges({hobbyFolders:[...this.hobbyFolders, newFolder]}) ? newFolder : null;
     }
 
     updateHobbyFolder(id, updates) {
+      if (!this.canEditHobby()) return null;
       const folder = this.hobbyFolders.find(f => f.id === id);
       if (!folder) return null;
-      if (updates.name) folder.name = updates.name.trim();
-      if (updates.icon) folder.icon = updates.icon;
-      this.save(true);
-      return folder;
+      const updated = {...folder};
+      if (updates.name) updated.name = updates.name.trim();
+      if (updates.icon) updated.icon = updates.icon;
+      return this.commitHobbyChanges({hobbyFolders:this.hobbyFolders.map(f => f.id === id ? updated : f)}) ? updated : null;
     }
 
     deleteHobbyFolder(id) {
-      const idx = this.hobbyFolders.findIndex(f => f.id === id);
-      if (idx === -1) return false;
-      this.hobbyFolders.splice(idx, 1);
-      // Migrate any notes in this deleted folder to 'general'
-      this.hobbyNotes.forEach(note => {
-        if (note.folder === id) note.folder = 'general';
-      });
+      if (!this.canEditHobby()) return false;
+      // Preserve the existing effective modal policy for default folders.
+      if (['all','general','workout','piano','drawing','reading'].includes(id)) return false;
+      if (!this.hobbyFolders.some(f => f.id === id)) return false;
+      const hobbyFolders = this.hobbyFolders.filter(f => f.id !== id);
+      // Restore the destination only in this explicit operation, never on read.
+      if (!hobbyFolders.some(f => f.id === 'general')) hobbyFolders.push({...DEFAULT_HOBBY_FOLDERS.find(f => f.id === 'general')});
+      if (!this.commitHobbyChanges({hobbyFolders,
+        hobbyNotes:this.hobbyNotes.map(n => n.folder === id ? {...n, folder:'general', updatedAt:Date.now()} : n),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), 'hobby-folder:' + id])]
+      })) return false;
       if (this.activeHobbyFolder === id) this.activeHobbyFolder = 'all';
-      this.save(true);
       return true;
     }
 
@@ -2298,28 +2336,20 @@
     }
 
     moveHobbyNotesToFolder(noteIds, targetFolder) {
-      if (!Array.isArray(noteIds) || !noteIds.length || !targetFolder) return 0;
-      let count = 0;
-      this.hobbyNotes.forEach(n => {
-        if (noteIds.includes(n.id)) {
-          n.folder = targetFolder;
-          n.updatedAt = Date.now();
-          count++;
-        }
-      });
-      this.save(true);
-      return count;
+      if (!this.canEditHobby() || !Array.isArray(noteIds) || !noteIds.length || !this.isHobbyDestination(targetFolder)) return 0;
+      const ids = new Set(noteIds);
+      if ([...ids].some(id => !this.hobbyNotes.some(n => n.id === id))) return 0;
+      const hobbyNotes = this.hobbyNotes.map(n => ids.has(n.id) ? {...n, folder:targetFolder, updatedAt:Date.now()} : n);
+      return this.commitHobbyChanges({hobbyNotes}) ? ids.size : 0;
     }
 
     deleteHobbyNotesBatch(noteIds) {
-      if (!Array.isArray(noteIds) || !noteIds.length) return 0;
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      noteIds.forEach(id => this.deletedItemIds.add(String(id).trim()));
-      const initialLen = this.hobbyNotes.length;
-      this.hobbyNotes = this.hobbyNotes.filter(n => !noteIds.includes(n.id));
-      const deletedCount = initialLen - this.hobbyNotes.length;
-      this.save(true);
-      return deletedCount;
+      if (!this.canEditHobby() || !Array.isArray(noteIds) || !noteIds.length) return 0;
+      const ids = new Set(noteIds);
+      if ([...ids].some(id => !this.hobbyNotes.some(n => n.id === id))) return 0;
+      return this.commitHobbyChanges({hobbyNotes:this.hobbyNotes.filter(n => !ids.has(n.id)),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), ...ids])]
+      }) ? ids.size : 0;
     }
 
     // --- AI Study & Knowledge Hub Methods ---
@@ -6073,14 +6103,14 @@
 
       if (!gridContainer) return;
 
-      const activeFolder = store.activeHobbyFolder || 'all';
       const folders = store.hobbyFolders || DEFAULT_HOBBY_FOLDERS;
+      const activeFolder = folders.some(f => f.id === store.activeHobbyFolder) ? store.activeHobbyFolder : 'all';
       const allNotes = store.hobbyNotes || [];
       const nonAllFolders = folders.filter(f => f.id !== 'all');
 
       // 1. Render Folder Tabs (with edit pencil icon for editable folders)
       if (tabsBar) {
-        tabsBar.innerHTML = folders.map(f => {
+        tabsBar.innerHTML = (folders.some(f => f.id === 'all') ? folders : [DEFAULT_HOBBY_FOLDERS[0], ...folders]).map(f => {
           const isActive = (f.id === activeFolder);
           const count = f.id === 'all' 
             ? allNotes.length 
@@ -6106,7 +6136,7 @@
         ? allNotes
         : allNotes.filter(n => n.folder === activeFolder);
 
-      const activeFolderObj = folders.find(f => f.id === activeFolder) || folders[0];
+      const activeFolderObj = folders.find(f => f.id === activeFolder) || DEFAULT_HOBBY_FOLDERS[0];
       if (curFolderBadge) {
         curFolderBadge.textContent = `${activeFolderObj.icon || '🎨'} ${activeFolderObj.name}`;
       }
@@ -6307,7 +6337,15 @@
         if (!note) return;
         if (titleEl) titleEl.textContent = '🎨 취미 기록 수정 💖';
         if (editIdEl) editIdEl.value = note.id;
-        if (folderSelect) folderSelect.value = note.folder || 'general';
+        if (folderSelect) {
+          const originalFolder = note.folder || '';
+          if (!Array.from(folderSelect.options).some(option => option.value === originalFolder)) {
+            const option = document.createElement('option');
+            option.value = originalFolder; option.textContent = '기존 폴더 (현재 목록에 없음)';
+            folderSelect.appendChild(option);
+          }
+          folderSelect.value = originalFolder;
+        }
         if (dateInput) dateInput.value = note.date || getRealTodayStr();
         if (titleInput) titleInput.value = note.title || '';
         if (placeInput) placeInput.value = note.place || '';
@@ -6317,7 +6355,8 @@
         if (titleEl) titleEl.textContent = '🎨 취미 기록 작성 💖';
         if (editIdEl) editIdEl.value = '';
         if (folderSelect) {
-          folderSelect.value = (store.activeHobbyFolder && store.activeHobbyFolder !== 'all') ? store.activeHobbyFolder : 'workout';
+          const preferred = (store.activeHobbyFolder && store.activeHobbyFolder !== 'all') ? store.activeHobbyFolder : 'workout';
+          folderSelect.value = store.isHobbyDestination(preferred) ? preferred : (folderSelect.options[0]?.value || '');
         }
         if (dateInput) dateInput.value = getRealTodayStr();
       }
@@ -11495,7 +11534,7 @@
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const folderId = target.closest('#btn-delete-hobby-folder').dataset.id;
         if (folderId && folderId !== 'all' && confirm('정말 이 취미 폴더를 삭제하시겠습니까?\n(폴더 안의 일지는 [기타취미] 폴더로 안전하게 이동됩니다)')) {
-          store.deleteHobbyFolder(folderId);
+          if (!store.deleteHobbyFolder(folderId)) return;
           sounds.playDelete();
           UI.closeHobbyFolderModal();
           UI.showToast('취미 폴더가 삭제되었고 기록은 안전하게 보관되었어요.', 'info');
@@ -11515,13 +11554,14 @@
           if (selectEl) selectEl.focus();
           return;
         }
-        const noteIds = Array.from(store.selectedHobbyNotes || []);
+        const noteIds = store.getSelectedVisibleHobbyIds();
         if (!noteIds.length) {
           alert('이동할 일지를 먼저 체크박스로 선택해 주세요!');
           return;
         }
         const count = store.moveHobbyNotesToFolder(noteIds, targetFolder);
-        store.selectedHobbyNotes.clear();
+        if (!count) return;
+        noteIds.forEach(id => store.selectedHobbyNotes.delete(id));
         sounds.playComplete();
         confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
         UI.showToast(`총 ${count}개의 취미 일지가 성공적으로 이동되었어요! 🎨✨`, 'success');
@@ -11532,11 +11572,12 @@
       // Batch Delete Hobby Notes
       if (target.closest('[data-action="batch-delete-hobby-notes"]')) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
-        const noteIds = Array.from(store.selectedHobbyNotes || []);
+        const noteIds = store.getSelectedVisibleHobbyIds();
         if (!noteIds.length) return;
         if (confirm(`선택한 ${noteIds.length}개의 취미 일지를 정말 모두 삭제하시겠습니까?`)) {
           const count = store.deleteHobbyNotesBatch(noteIds);
-          store.selectedHobbyNotes.clear();
+          if (!count) return;
+          noteIds.forEach(id => store.selectedHobbyNotes.delete(id));
           sounds.playDelete();
           UI.showToast(`총 ${count}개의 취미 일지가 삭제되었어요. 🗑️`, 'info');
           UI.renderHobby();
@@ -11560,7 +11601,7 @@
             const num = parseInt(chosen.trim(), 10);
             if (num >= 1 && num <= nonAllFolders.length) {
               const selectedF = nonAllFolders[num - 1];
-              store.moveHobbyNotesToFolder([note.id], selectedF.id);
+              if (!store.moveHobbyNotesToFolder([note.id], selectedF.id)) return;
               sounds.playComplete();
               UI.showToast(`'${selectedF.name}' 폴더로 일지가 이동되었어요! ✨`, 'success');
               UI.renderHobby();
@@ -11575,6 +11616,7 @@
       if (hobbyTab && hobbyTab.dataset.hobbyFolderId) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
         store.activeHobbyFolder = hobbyTab.dataset.hobbyFolderId;
+        store.selectedHobbyNotes?.clear();
         UI.renderHobby();
         return;
       }
@@ -11595,7 +11637,7 @@
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const hId = deleteHobbyBtn.dataset.id;
         if (hId && confirm('이 취미 활동 일지를 정말 삭제하시겠습니까?')) {
-          store.deleteHobbyNote(hId);
+          if (!store.deleteHobbyNote(hId)) return;
           sounds.playDelete();
           UI.showToast('취미 기록이 삭제되었어요.', 'danger');
           UI.renderHobby();
@@ -12145,10 +12187,8 @@
       // Hobby Note Check All
       if (target.id === 'hobby-check-all') {
         if (!store.selectedHobbyNotes) store.selectedHobbyNotes = new Set();
-        const activeFolder = store.activeHobbyFolder || 'all';
-        const allNotes = store.hobbyNotes || [];
-        const filtered = (activeFolder === 'all') ? allNotes : allNotes.filter(n => n.folder === activeFolder);
-        
+        const filtered = store.getVisibleHobbyNotes();
+
         if (target.checked) {
           filtered.forEach(n => store.selectedHobbyNotes.add(n.id));
         } else {
@@ -12367,7 +12407,8 @@
       hobbyNoteForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const id = document.getElementById('hobby-note-edit-id')?.value;
-        const folder = document.getElementById('hobby-input-folder')?.value || 'general';
+        const folder = document.getElementById('hobby-input-folder')?.value || '';
+        if (!folder && !id) { UI.showToast('먼저 취미 폴더를 추가해 주세요. 작성한 내용은 유지됩니다.', 'info'); return; }
         const date = document.getElementById('hobby-input-date')?.value || getRealTodayStr();
         const title = document.getElementById('hobby-input-title')?.value || '';
         const place = document.getElementById('hobby-input-place')?.value || '';
@@ -12375,10 +12416,13 @@
         const content = document.getElementById('hobby-input-content')?.value || '';
 
         if (id) {
-          store.updateHobbyNote(id, { folder, date, title, place, duration, content });
+          const updates = {date, title, place, duration, content};
+          // A legacy record without a folder keeps that field unchanged.
+          if (folder) updates.folder = folder;
+          if (!store.updateHobbyNote(id, updates)) return;
           UI.showToast('취미 기록이 수정되었어요 🎨✨', 'info');
         } else {
-          store.addHobbyNote({ folder, date, title, place, duration, content });
+          if (!store.addHobbyNote({ folder, date, title, place, duration, content })) return;
           sounds.playComplete();
           UI.showToast('새 취미 기록이 등록되었어요 🏃💖', 'success');
         }
@@ -12397,11 +12441,11 @@
         if (!name.trim()) return;
 
         if (id) {
-          store.updateHobbyFolder(id, { name: name.trim(), icon });
+          if (!store.updateHobbyFolder(id, { name: name.trim(), icon })) return;
           sounds.playComplete();
           UI.showToast(`'${name.trim()}' 취미 폴더가 수정되었어요 ✨`, 'info');
         } else {
-          store.addHobbyFolder(name.trim(), icon);
+          if (!store.addHobbyFolder(name.trim(), icon)) return;
           sounds.playAdd();
           UI.showToast(`'${name.trim()}' 취미 폴더가 추가되었어요 📁✨`, 'success');
         }
