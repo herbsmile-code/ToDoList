@@ -228,16 +228,26 @@
         if (id === '$order') continue;
         const lh = this.state(l,key), rh = this.state(r,key), p = pending.get(key);
         const base = p ? p.base : meta.baseline.known ? (meta.baseline.itemHashes[key] || 'absent') : 'unknown';
+        // Folder IDs such as "work" also exist in other collections. Scope only
+        // their deletion marker; keep existing item tombstones compatible.
+        const isDeleted = deleted.has(id) || (field === 'siteFolders' && deleted.has('site-folder:' + id));
         if (field === 'deletedItemIds') { merged[key] = Array.from(deleted); continue; }
         if (lh === rh) continue;
+        // An acknowledged deletion must not silently accept a stale/new remote
+        // row with the same ID. Preserve that original for conflict resolution.
+        if ((field === 'sites' || field === 'siteFolders') && isDeleted &&
+            lh === 'absent' && rh !== 'absent' && !p) {
+          conflicts.push({ key, base, localHash: lh, remoteHash: rh, remote: this.clone(r[key]) });
+          continue;
+        }
         if (!p && base !== 'unknown' && lh === base) {
           // Absence alone is not a deletion instruction, even after a prior ack.
-          if (rh === 'absent' && lh !== 'absent' && !deleted.has(id)) merged[key] = this.clone(l[key]);
+          if (rh === 'absent' && lh !== 'absent' && !isDeleted) merged[key] = this.clone(l[key]);
           continue;
         }
         // A locally present legacy item missing remotely is retained, never inferred deleted.
-        const canApply = rh === base || (rh === 'absent' && lh !== 'absent' && !deleted.has(id));
-        if (canApply && !(id && deleted.has(id) && lh !== 'absent')) {
+        const canApply = rh === base || (rh === 'absent' && lh !== 'absent' && !isDeleted);
+        if (canApply && !(id && isDeleted && lh !== 'absent')) {
           if (lh === 'absent') delete merged[key]; else merged[key] = this.clone(l[key]);
         } else if (lh === 'absent' && base === 'unknown' && !p) {
           // No local copy is not an instruction to delete an older server item.
@@ -1238,7 +1248,7 @@
       const userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
       const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
       const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
-      let userSiteFolders = (savedData && Array.isArray(savedData.siteFolders)) ? savedData.siteFolders : DEFAULT_SITE_FOLDERS.slice();
+      let userSiteFolders = (savedData && Array.isArray(savedData.siteFolders)) ? LocalSyncProtocol.clone(savedData.siteFolders) : DEFAULT_SITE_FOLDERS.slice();
       const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
       let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS.slice();
       const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
@@ -1968,7 +1978,30 @@
     }
 
     // --- Sites / Bookmarks & Folders Methods ---
+    canEditSites() {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return false; }
+      return true;
+    }
+
+    commitSiteChanges(changes, immediate = false) {
+      if (!this.canEditSites()) return false;
+      // A folder deletion and its site moves are one candidate, never partially
+      // published to Store. Reuse the central local commit/outbox/sync pipeline.
+      const data = {...this.buildLocalData(), ...changes};
+      data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+      data.syncRevision = (this.syncRevision || 0) + 1;
+      try {
+        const meta = LocalSyncProtocol.track(this._committedData || {}, data, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data, meta)) return false;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud(immediate);
+        return true;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
+    }
+
     addSite(data) {
+      if (!this.canEditSites()) return null;
       let rawUrl = (data.url || '').trim();
       if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
         rawUrl = 'https://' + rawUrl;
@@ -1981,14 +2014,14 @@
         folder: data.folder || (this.activeSiteFolder !== 'all' ? this.activeSiteFolder : 'portal'),
         createdAt: Date.now()
       };
-      this.sites.unshift(newSite);
-      this.save();
-      return newSite;
+      return this.commitSiteChanges({sites:[newSite, ...this.sites]}) ? newSite : null;
     }
 
     updateSite(id, updates) {
+      if (!this.canEditSites()) return null;
       const site = this.sites.find(s => s.id === id);
       if (!site) return null;
+      updates = {...updates};
       if (updates.url) {
         let rawUrl = (updates.url || '').trim();
         if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
@@ -1996,23 +2029,22 @@
         }
         updates.url = rawUrl;
       }
-      Object.assign(site, updates, { updatedAt: Date.now() });
-      this.save();
-      return site;
+      const updated = {...site, ...updates, updatedAt: Date.now()};
+      return this.commitSiteChanges({sites:this.sites.map(s => s.id === id ? updated : s)}) ? updated : null;
     }
 
     deleteSite(id) {
+      if (!this.canEditSites()) return false;
       if (!id) return false;
       const targetId = String(id).trim();
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      this.deletedItemIds.add(targetId);
-      const idx = this.sites.findIndex(s => s && String(s.id).trim() === targetId);
-      if (idx !== -1) this.sites.splice(idx, 1);
-      this.save(true);
-      return true;
+      return this.commitSiteChanges({
+        sites:this.sites.filter(s => !s || String(s.id).trim() !== targetId),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), targetId])]
+      }, true);
     }
 
     addSiteFolder(name, icon = '📁') {
+      if (!this.canEditSites()) return null;
       const cleanName = (name || '').trim();
       if (!cleanName) return null;
       const folderId = 'sfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
@@ -2021,32 +2053,34 @@
         name: cleanName,
         icon: icon || '📁'
       };
-      this.siteFolders.push(newFolder);
-      this.save(true);
-      return newFolder;
+      return this.commitSiteChanges({siteFolders:[...this.siteFolders, newFolder]}, true) ? newFolder : null;
     }
 
     updateSiteFolder(id, updates) {
+      if (!this.canEditSites()) return null;
       const folder = this.siteFolders.find(f => f.id === id);
       if (!folder) return null;
-      if (updates.name) folder.name = updates.name.trim();
-      if (updates.icon) folder.icon = updates.icon;
-      this.save(true);
-      return folder;
+      const updated = {...folder};
+      if (updates.name) updated.name = updates.name.trim();
+      if (updates.icon) updated.icon = updates.icon;
+      return this.commitSiteChanges({siteFolders:this.siteFolders.map(f => f.id === id ? updated : f)}, true) ? updated : null;
     }
 
     deleteSiteFolder(id) {
+      if (!this.canEditSites()) return false;
+      // 'all' is navigation; 'portal' is the destination for displaced sites.
+      if (id === 'all' || id === 'portal') return false;
       const idx = this.siteFolders.findIndex(f => f.id === id);
       if (idx === -1) return false;
-      this.siteFolders.splice(idx, 1);
-      // Migrate any sites in this deleted folder to 'portal' so zero sites are lost
-      this.sites.forEach(site => {
-        if (site.folder === id) {
-          site.folder = 'portal';
-        }
-      });
+      const folders = this.siteFolders.filter(f => f.id !== id);
+      // Legacy data may have deleted the destination. Restore it only as part
+      // of this explicit user edit, never while rendering or reading storage.
+      if (!folders.some(f => f.id === 'portal')) folders.push({...DEFAULT_SITE_FOLDERS.find(f => f.id === 'portal')});
+      if (!this.commitSiteChanges({siteFolders:folders,
+        sites:this.sites.map(site => site.folder === id ? {...site, folder:'portal'} : site),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), 'site-folder:' + id])]
+      }, true)) return false;
       if (this.activeSiteFolder === id) this.activeSiteFolder = 'all';
-      this.save(true);
       return true;
     }
 
@@ -5857,8 +5891,14 @@
       const countBadge = document.getElementById('site-count-badge');
       if (!grid) return;
 
-      const activeFolder = store.activeSiteFolder || 'all';
       const folders = store.siteFolders || DEFAULT_SITE_FOLDERS;
+      let activeFolder = store.activeSiteFolder || 'all';
+      if (activeFolder !== 'all' && !folders.some(folder => folder.id === activeFolder)) {
+        // A remote deletion can remove the selected folder. Only reset the
+        // transient selection; rendering must never save or move business data.
+        activeFolder = 'all';
+        store.activeSiteFolder = 'all';
+      }
       const allSites = store.sites || [];
 
       // 1. Render Folder Tabs
@@ -5870,7 +5910,7 @@
             : allSites.filter(s => (s.folder || 'portal') === f.id).length;
 
           const editBtn = (f.id !== 'all')
-            ? `<span class="site-folder-edit-btn" data-action="open-edit-site-folder" data-id="${f.id}" onclick="event.stopPropagation(); UI.openSiteFolderModal('${f.id}');" title="?대뜑 ?섏젙/??젣">✏️</span>`
+            ? `<span class="site-folder-edit-btn" data-action="open-edit-site-folder" data-id="${f.id}" onclick="event.stopPropagation(); UI.openSiteFolderModal('${f.id}');" title="폴더 수정/삭제">✏️</span>`
             : '';
 
           return `
@@ -6025,7 +6065,13 @@
         if (hiddenId) hiddenId.value = folder.id;
         if (nameInput) nameInput.value = folder.name;
         selectedIcon = folder.icon || '📁';
-        if (deleteBtn) deleteBtn.style.display = 'inline-block';
+        if (deleteBtn) {
+          const protectedFolder = folder.id === 'all' || folder.id === 'portal';
+          deleteBtn.style.display = 'inline-block';
+          deleteBtn.disabled = protectedFolder;
+          deleteBtn.textContent = protectedFolder ? '기본 이동 폴더 · 삭제 불가' : '🗑️ 폴더 삭제';
+          deleteBtn.title = protectedFolder ? '다른 폴더를 삭제할 때 사이트가 이동하는 기본 폴더입니다.' : '폴더 삭제';
+        }
       } else {
         if (titleEl) titleEl.textContent = '📁 새 사이트 폴더 추가';
         if (hiddenId) hiddenId.value = '';
@@ -12432,7 +12478,7 @@
         const btn = target.closest('[data-action="delete-site"]');
         const siteId = btn.dataset.siteId;
         if (siteId && confirm('이 사이트 바로가기를 삭제하시겠습니까?')) {
-          store.deleteSite(siteId);
+          if (!store.deleteSite(siteId)) return;
           sounds.playDelete();
           UI.showToast('사이트 바로가기가 삭제되었어요 🗑️', 'danger');
           UI.renderSites();
@@ -12641,10 +12687,10 @@
         const memo = document.getElementById('site-input-memo')?.value;
 
         if (id) {
-          store.updateSite(id, { title, url, folder, memo });
+          if (!store.updateSite(id, { title, url, folder, memo })) return;
           UI.showToast('사이트 정보가 수정되었어요 🌐✨', 'info');
         } else {
-          store.addSite({ title, url, folder, memo });
+          if (!store.addSite({ title, url, folder, memo })) return;
           sounds.playComplete();
           UI.showToast('새 사이트 바로가기가 등록되었어요 🚀💖', 'success');
         }
@@ -12662,10 +12708,10 @@
         const icon = document.getElementById('site-folder-selected-icon')?.value || '📁';
 
         if (id) {
-          store.updateSiteFolder(id, { name, icon });
+          if (!store.updateSiteFolder(id, { name, icon })) return;
           UI.showToast('사이트 폴더가 수정되었어요 📁✨', 'info');
         } else {
-          store.addSiteFolder(name, icon);
+          if (!store.addSiteFolder(name, icon)) return;
           sounds.playComplete();
           UI.showToast('새 사이트 폴더가 생성되었어요 📂💖', 'success');
         }
@@ -12680,7 +12726,7 @@
         const id = document.getElementById('site-folder-edit-id')?.value;
         if (!id) return;
         if (confirm('정말 이 사이트 폴더를 삭제하시겠습니까?\n(폴더 안의 사이트들은 포털/검색 폴더로 안전하게 이관됩니다)')) {
-          store.deleteSiteFolder(id);
+          if (!store.deleteSiteFolder(id)) return;
           sounds.playDelete();
           UI.showToast('사이트 폴더가 삭제되고 사이트들이 안전하게 이동되었어요 🗑️', 'danger');
           UI.closeSiteFolderModal();
