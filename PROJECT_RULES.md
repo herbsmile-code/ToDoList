@@ -8,6 +8,7 @@
 - 개발기록 화면·상세 모달은 `js/features/devlog/view.js`가 제공하며, 두 HTML에서 `app.js`보다 먼저 읽는다. 이벤트 연결과 공통 `UI` 객체는 `app.js`에서 유지한다.
 - AI 스터디 목록·빈 화면·작성/수정/상세 모달·코드 복사는 `js/features/ai-study/view.js`가 제공하며, 두 HTML에서 `app.js`보다 먼저 읽는다. 팩토리는 기존 `store`와 상수·공통 함수를 전달받고, 이벤트 연결·CRUD·저장·동기화는 `app.js`에서 유지한다. `UI` 참조가 필요한 콜백은 팩토리 생성 시 실행하지 않는다.
 - 사이트 목록·사이트/폴더 모달은 `js/features/sites/view.js`가 제공하며, 두 HTML에서 `app.js`보다 먼저 읽는다. 이모지 버튼의 모달 내부 이벤트는 함께 두고 공통 이벤트는 `app.js`에서 유지한다.
+- 연차 목록·통계 표시·등록/수정·총 발생일 모달은 `js/features/vacation/view.js`가 제공하며, 두 HTML에서 `app.js`보다 먼저 읽는다. 계산·CRUD·공통 이벤트는 `app.js`의 기존 Store/UI에서 유지한다. 연차와 할 일의 휴가 유형을 자동으로 합치지 않는다.
 - `window.UI`, `window.store`, HTML 인라인 이벤트 호환성을 유지한다. `app.js` 전체 분리·모듈화는 별도 승인 후 단계적으로 진행한다.
 - 단일 `store`를 데이터의 기준으로 유지한다. 기능별 저장소나 별도 Firebase 업로드·암호화·타이머를 만들지 않는다.
 
@@ -21,6 +22,7 @@
 - 충돌 시 양쪽 원문을 보존하고, 충돌하지 않는 수신과 전체 동기화 완료를 구분한다. 삭제 기록을 무시하거나 기본값 시딩으로 항목을 되살리지 않는다.
 - 기본 템플릿은 사용자 원본이 아니다. 화면 렌더링·초기화가 기존 데이터의 재저장·초기화를 유발하지 않게 한다.
 - 사이트/폴더 변경은 단일 Store의 `commitSiteChanges()`에서 기존 중앙 저장 흐름을 통해 확인한 뒤 메모리에 반영한다. 폴더 삭제·내부 사이트 이동·삭제 기록을 한 후보로 저장한다. 폴더 삭제 기록은 기존 `deletedItemIds`에 `site-folder:<id>`로 기록해 `work` 등 다른 기능과 공유하는 ID를 삭제하지 않는다. `all`과 이동 대상 `portal`은 삭제하지 않는다. 오래된 사이트/폴더 행의 재유입은 원문을 충돌 기록에 보존하며 자동 복원하지 않는다.
+- 연차 변경은 `commitVacationChanges()`에서 기존 중앙 저장·미전송 경로를 확인한 뒤 반영한다. 총 발생일 0은 유효하며 `setTotalVacationDays()`의 실패는 `null`로 구분한다. 삭제한 연차의 오래된 원격 원문도 충돌로 보존한다. 초기화용 할 일·건강/취미/파일보관함 폴더의 임시 보정이 파싱한 사용자 원본을 변경하거나 다른 기능 저장에 섞이지 않게 한다.
 - Vault의 파일 메타데이터와 IndexedDB 원문은 함께 검토한다. 메타데이터 수신을 첨부파일 수신 성공으로 간주하지 않는다.
 - `file://` 로컬 HTML, GitHub Pages, 다른 기기의 브라우저 저장소는 같다고 가정하지 않는다. 동일 계정 로그인만으로 최신 데이터 동기화가 끝났다고 보고하지 않는다.
 
@@ -41,6 +43,7 @@
 | AI 노트 수신·표시 | `ai-sync.test.cjs`, `ai-sync-ui.cjs` |
 | AI 화면 분리·실제 HTML 로딩·입력 보존 | `ai-study-ui.cjs` (두 HTML, PC/모바일, `file://`, 가상 기기 간 AI 노트 동기화·편집), `ui-performance.cjs` |
 | 사이트 저장·폴더 삭제·화면 분리 | `sites-safety.test.cjs`, `sites-ui.cjs` (실제 두 HTML, PC/모바일/`file://`, 저장 실패·재실행·가상 기기 간 사이트/폴더 동기화) |
+| 연차 저장·계산·화면 분리 | `vacation-safety.test.cjs`, `vacation-ui.cjs` (0일·반차·휴가, 실패 입력·원문 보존, 관련 없는 기존 자료 보존, 달력·챗봇·기간 필터, 두 HTML/PC/모바일/`file://`/가상 기기 간 동기화) |
 | 가계부 금액·충돌·모바일 | `ledger-safety.test.cjs`, `ledger-conflict-sync.test.cjs`, `ledger-view-ui.cjs` |
 | 안내·성능 | `sync-notice-ui.cjs`, `ui-performance.cjs`, `sync-performance.cjs` |
 | 개발기록 모듈·실제 HTML 로딩·웹/모바일 메뉴 연결 | `devlog-ui.cjs` (두 진입 HTML, `file://`, 독립 브라우저 간 가상 메모 동기화) |
