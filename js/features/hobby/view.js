@@ -68,5 +68,72 @@
         modal.classList.remove('active');
       }
     },
+
+    openHobbyFolderModal(folderId = null) {
+      const modal = document.getElementById('hobby-folder-modal');
+      const form = document.getElementById('hobby-folder-form');
+      const titleEl = document.getElementById('hobby-folder-modal-title');
+      const editIdEl = document.getElementById('hobby-folder-edit-id');
+      const iconInput = document.getElementById('hobby-input-folder-icon');
+      const nameInput = document.getElementById('hobby-input-folder-name');
+      const grid = document.getElementById('hobby-folder-emoji-grid');
+      const deleteBtn = document.getElementById('btn-delete-hobby-folder');
+      const submitBtn = document.getElementById('btn-submit-hobby-folder');
+
+      if (!modal || !form) return;
+      form.reset();
+
+      let currentIcon = '🎨';
+      let currentName = '';
+
+      if (folderId) {
+        const folder = (store.hobbyFolders || DEFAULT_HOBBY_FOLDERS).find(f => f.id === folderId);
+        if (!folder) return;
+        currentIcon = folder.icon || '🎨';
+        currentName = folder.name || '';
+        if (titleEl) titleEl.textContent = '📁 취미 폴더 수정 💖';
+        if (editIdEl) editIdEl.value = folder.id;
+        if (nameInput) nameInput.value = currentName;
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) {
+          const isProtected = (folder.id === 'general' || folder.id === 'workout' || folder.id === 'piano' || folder.id === 'drawing' || folder.id === 'reading' || folder.id === 'all');
+          deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
+          deleteBtn.dataset.id = folder.id;
+        }
+        if (submitBtn) submitBtn.textContent = '수정 완료 ✨';
+      } else {
+        if (titleEl) titleEl.textContent = '📁 새 취미 폴더 추가';
+        if (editIdEl) editIdEl.value = '';
+        if (nameInput) nameInput.value = '';
+        if (iconInput) iconInput.value = currentIcon;
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (submitBtn) submitBtn.textContent = '폴더 생성 📁';
+      }
+
+      // Render 24 Hobby Emoji Picker Buttons
+      if (grid) {
+        grid.innerHTML = HOBBY_EMOJI_LIST.map(emoji => {
+          const isSel = (emoji === currentIcon);
+          return `
+            <button type="button" class="hobby-emoji-option-btn ${isSel ? 'selected' : ''}" data-hobby-emoji="${emoji}" title="${emoji}">
+              ${emoji}
+            </button>
+          `;
+        }).join('');
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (nameInput) setTimeout(() => nameInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeHobbyFolderModal() {
+      const modal = document.getElementById('hobby-folder-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
   });
 })(window);
