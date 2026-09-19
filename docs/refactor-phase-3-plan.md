@@ -1,6 +1,20 @@
 # 3차 구조 분리 계획
 
-작성일: 2026-09-19. 상태: 계획만 작성, 구현 미착수.
+작성일: 2026-09-19. 상태: 3차 분리 구현·검증 완료, main 병합·배포 미실행.
+
+## 실행 결과
+
+- 작업 브랜치: `codex/refactor-phase-3`. 원래 백업 브랜치는 유지했다.
+- 분리 전 실제 HTML 회귀 검사부터 커밋하고, 상세/복사 → 목록/빈 화면 → 작성/수정 모달을 각각 검증한 뒤 독립 커밋으로 남겼다.
+- 대상 7개 메서드를 `js/features/ai-study/view.js`로 옮겼다. 두 HTML은 같은 일반 script 순서로 새 파일을 app.js보다 먼저 읽는다.
+- 원본 `523c5b7`과 비교해 알림 콜백 전달 및 줄 끝 공백을 제외한 메서드 본문이 동일함을 확인했다. app.js의 나머지 코드(이벤트·저장·동기화 포함)는 변경하지 않았다.
+- Node 관련 검사 99개, `ai-sync-ui.cjs`, `ai-study-ui.cjs`, `devlog-ui.cjs`, `ui-performance.cjs`가 통과했다.
+- `ai-study-ui.cjs`는 두 실제 HTML과 PC/모바일, file://, 상세/복사/검색/분류, 생성·편집·고정·삭제·재로딩, 새 입력 및 편집 입력의 저장 실패 보존, 표시 중 쓰기 없음, 가상 기기 간 암호화된 AI 노트 수신·재편집을 확인한다.
+- 분리 전 캡처한 32개 DOM/크기 기준과 최종 화면이 일치했다. 기준 파일은 가상 데이터만 포함한 `scratch/ai-study-before-refactor.json`이며 Git에서 제외한다. 일반 회귀 검사 실행에는 이 파일이 필요 없다.
+- Playwright 입력이 기존 모달의 60ms 지연 포커스와 겹치는 검사 문제가 있어 포커스를 기다리도록 테스트를 수정했다. 이를 앱 결함으로 간주하거나 앱 동작을 바꾸지 않았다.
+- 실제 사용자 프로필·운영 Firebase는 접근하지 않았다. 외부 PDF/Excel CDN 라이브러리는 브라우저 검사에서 대체했으므로 이 검사로 해당 기능의 운영 동작을 판단하지 않는다.
+
+아래는 작업에 적용한 범위·순서·복구 기준이다.
 
 ## 1. 복구 기준점과 확인 범위
 
@@ -89,10 +103,12 @@ app.js에는 단일 store, AI 노트 CRUD/필터링, 중앙 저장·동기화, �
 $env:AI_TEST_PLAYWRIGHT_PATH='C:\Users\JY\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\playwright'
 node --test tests/local-load-safety.test.cjs tests/outbox.test.cjs tests/ai-sync.test.cjs
 node tests/ai-sync-ui.cjs
+node tests/ai-study-ui.cjs
 node tests/devlog-ui.cjs
+node tests/ui-performance.cjs
 ```
 
-실행 경로는 이 PC에서 확인한 값이다. 다른 PC에서는 Playwright 및 Edge 설치 위치를 다시 확인한다. 새 전체 HTML AI 검사의 파일명과 실행 명령은 구현 시 확정한다.
+실행 경로는 이 PC에서 확인한 값이다. 다른 PC에서는 Playwright 및 Edge 설치 위치를 다시 확인한다. 기존 기준과 화면을 비교하려면 `AI_STUDY_BASELINE_PATH`를 해당 기준 JSON 경로로 설정한다. 이 변수를 생략하면 동작 회귀 검사만 수행한다. 기준 파일이 없는 경로를 지정하면 검사가 모두 통과한 뒤 새 기준을 기록하므로, 변경 후 새로 만든 기준을 분리 전 비교 결과로 간주하지 않는다.
 
 완료에 필요한 관찰:
 

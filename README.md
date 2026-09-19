@@ -98,7 +98,16 @@ ToDoList/
 │   ├── style.css     # 코어 디자인 시스템, 테마 변수, 레이아웃, 컴포넌트
 │   └── animations.css# 마이크로 애니메이션, 트랜지션, 펄스, 글래스모피즘
 ├── js/
-│   └── app.js        # 메인 애플리케이션 로직, Store, UI, E2EE 보안 동기화
-├── GEMINI.md         # 프로젝트 룰 & 클라우드 동기화 가이드라인
+│   ├── app.js        # 단일 Store, 중앙 동기화, 공통 UI, 이벤트 연결 및 초기화
+│   ├── features/
+│   │   ├── ai-study/view.js # AI 스터디 목록·모달·코드 복사 화면
+│   │   └── devlog/view.js   # 개발기록 목록·상세 모달 화면
+│   ├── utils/        # 상수·개발기록 데이터와 공통 함수
+│   ├── services/crypto.js  # E2EE 암호화
+│   ├── memo-transfer.js    # 메모 이전
+│   └── treasure.js         # 보물창고
+├── tests/            # 가상 저장소·서버를 이용한 회귀 검사
+├── PROJECT_RULES.md  # 실행 구조, 데이터 보호, 검사·배포 규칙
+├── GEMINI.md         # 공통·프로젝트 규칙 연결
 └── README.md         # 프로젝트 문서
 ```

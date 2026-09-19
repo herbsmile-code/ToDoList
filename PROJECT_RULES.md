@@ -6,6 +6,7 @@
 - 정적 HTML·CSS·JavaScript 웹사이트이며 진입 파일은 `index.html`, `ToDoList.html`이다. 공통 화면 변경은 두 파일의 동작을 맞춘다.
 - 주요 로직은 `js/app.js`, 상수·개발기록은 `js/utils/constants.js`, 스타일은 `css/style.css`에 있다.
 - 개발기록 화면·상세 모달은 `js/features/devlog/view.js`가 제공하며, 두 HTML에서 `app.js`보다 먼저 읽는다. 이벤트 연결과 공통 `UI` 객체는 `app.js`에서 유지한다.
+- AI 스터디 목록·빈 화면·작성/수정/상세 모달·코드 복사는 `js/features/ai-study/view.js`가 제공하며, 두 HTML에서 `app.js`보다 먼저 읽는다. 팩토리는 기존 `store`와 상수·공통 함수를 전달받고, 이벤트 연결·CRUD·저장·동기화는 `app.js`에서 유지한다. `UI` 참조가 필요한 콜백은 팩토리 생성 시 실행하지 않는다.
 - `window.UI`, `window.store`, HTML 인라인 이벤트 호환성을 유지한다. `app.js` 전체 분리·모듈화는 별도 승인 후 단계적으로 진행한다.
 - 단일 `store`를 데이터의 기준으로 유지한다. 기능별 저장소나 별도 Firebase 업로드·암호화·타이머를 만들지 않는다.
 
@@ -36,6 +37,7 @@
 | 로컬 읽기·저장·미전송·중앙 동기화 | `local-load-safety.test.cjs`, `outbox.test.cjs` |
 | 메모 이전 | `memo-transfer.test.cjs`, `memo-transfer-ui.cjs` |
 | AI 노트 수신·표시 | `ai-sync.test.cjs`, `ai-sync-ui.cjs` |
+| AI 화면 분리·실제 HTML 로딩·입력 보존 | `ai-study-ui.cjs` (두 HTML, PC/모바일, `file://`, 가상 기기 간 AI 노트 동기화·편집), `ui-performance.cjs` |
 | 가계부 금액·충돌·모바일 | `ledger-safety.test.cjs`, `ledger-conflict-sync.test.cjs`, `ledger-view-ui.cjs` |
 | 안내·성능 | `sync-notice-ui.cjs`, `ui-performance.cjs`, `sync-performance.cjs` |
 | 개발기록 모듈·실제 HTML 로딩·웹/모바일 메뉴 연결 | `devlog-ui.cjs` (두 진입 HTML, `file://`, 독립 브라우저 간 가상 메모 동기화) |
