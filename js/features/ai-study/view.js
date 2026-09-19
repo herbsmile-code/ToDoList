@@ -117,6 +117,64 @@
       this.renderSidebar();
     },
 
+    openAiStudyModal(noteId = null) {
+      const modal = document.getElementById('aistudy-modal');
+      const titleInput = document.getElementById('aistudy-modal-title');
+      const catSelect = document.getElementById('aistudy-modal-category');
+      const summaryInput = document.getElementById('aistudy-modal-summary');
+      const contentInput = document.getElementById('aistudy-modal-content');
+      const codeInput = document.getElementById('aistudy-modal-code');
+      const langSelect = document.getElementById('aistudy-modal-lang');
+      const tagsInput = document.getElementById('aistudy-modal-tags');
+      const urlInput = document.getElementById('aistudy-modal-url');
+      const pinCheckbox = document.getElementById('aistudy-modal-pinned');
+      const modalHeaderTitle = document.getElementById('aistudy-modal-header-title');
+      const editIdHidden = document.getElementById('aistudy-modal-edit-id');
+
+      if (!modal) return;
+
+      if (noteId) {
+        const note = (store.aiStudyNotes || []).find(n => n.id === noteId);
+        if (!note) return;
+        if (modalHeaderTitle) modalHeaderTitle.textContent = '✏️ AI 스터디 노트 수정';
+        if (editIdHidden) editIdHidden.value = note.id;
+        if (titleInput) titleInput.value = note.title || '';
+        if (catSelect) catSelect.value = note.category || 'llm';
+        if (summaryInput) summaryInput.value = note.summary || '';
+        if (contentInput) contentInput.value = note.content || '';
+        if (codeInput) codeInput.value = note.codeSnippet || '';
+        if (langSelect) langSelect.value = note.snippetLang || 'Prompt';
+        if (tagsInput) tagsInput.value = Array.isArray(note.tags) ? note.tags.join(', ') : (note.tags || '');
+        if (urlInput) urlInput.value = note.refUrl || '';
+        if (pinCheckbox) pinCheckbox.checked = !!note.pinned;
+      } else {
+        if (modalHeaderTitle) modalHeaderTitle.textContent = '💡 새 AI 스터디 노트 작성';
+        if (editIdHidden) editIdHidden.value = '';
+        if (titleInput) titleInput.value = '';
+        if (catSelect) catSelect.value = store.activeAiStudyCategory !== 'all' ? store.activeAiStudyCategory : 'llm';
+        if (summaryInput) summaryInput.value = '';
+        if (contentInput) contentInput.value = '';
+        if (codeInput) codeInput.value = '';
+        if (langSelect) langSelect.value = 'Prompt';
+        if (tagsInput) tagsInput.value = '';
+        if (urlInput) urlInput.value = '';
+        if (pinCheckbox) pinCheckbox.checked = false;
+      }
+
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      if (titleInput) setTimeout(() => titleInput.focus(), 60);
+      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
+    },
+
+    closeAiStudyModal() {
+      const modal = document.getElementById('aistudy-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
     openAiStudyDetailModal(noteId) {
       const note = (store.aiStudyNotes || []).find(n => n.id === noteId);
       const modal = document.getElementById('aistudy-detail-modal');

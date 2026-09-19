@@ -27,12 +27,10 @@ function setup(code) {
   if (code.includes('...window.createAiStudyView(')) {
     vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/features/ai-study/view.js'),'utf8'),h.context);
     vm.runInContext('Object.assign(UI,createAiStudyView({store,DEFAULT_AI_STUDY_CATEGORIES,escapeHTML,showToast:(...args)=>UI.showToast(...args)}));',h.context);
-  }
-  if (code.includes('    renderAiStudyEmptyState()')) {
-    vm.runInContext('Object.assign(UI,{'+section(code,'    renderAiStudyEmptyState()','    openAiStudyModal(')+'});',h.context);
-  }
-  if (code.includes('    openAiStudyDetailModal(')) {
-    vm.runInContext('Object.assign(UI,{'+section(code,'    openAiStudyDetailModal(','    closeAiStudyDetailModal(')+'});',h.context);
+  } else {
+    // Historical baseline predates feature files; retain its original renderer.
+    vm.runInContext('Object.assign(UI,{'+section(code,'    renderAiStudyEmptyState()','    openAiStudyModal(')+
+      section(code,'    openAiStudyDetailModal(','    closeAiStudyDetailModal(')+'});',h.context);
   }
   h.elements=elements;return h;
 }
