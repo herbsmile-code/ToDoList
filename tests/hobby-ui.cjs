@@ -176,7 +176,7 @@ async function checkFailures(app) {
     await page.evaluate(()=>{fixtureState.failSave=true;fixtureState.toasts=[];});
     if(['new','edit'].includes(mode)){await submitNote(page);assert.equal(await page.locator('#hobby-note-modal').isVisible(),true);assert.equal(await page.locator('#hobby-input-title').inputValue(),'Unsaved draft');}
     else if(['folder-new','folder-edit'].includes(mode)){await submitFolder(page);assert.equal(await page.locator('#hobby-folder-modal').isVisible(),true);assert.equal(await page.locator('#hobby-input-folder-name').inputValue(),'Unsaved folder');}
-    else if(mode==='folder-delete')await page.locator('#btn-delete-hobby-folder').click();
+    else if(mode==='folder-delete'){await page.locator('#btn-delete-hobby-folder').click();assert.equal(await page.locator('#hobby-folder-modal').isVisible(),true);}
     else if(mode==='delete')await card(page).locator('[data-action="delete-hobby-note"]').click();
     else if(mode.startsWith('batch'))await page.locator('[data-action="'+mode+'-hobby-notes"]').click();
     else {await page.evaluate(()=>window.prompt=()=> '3');await card(page).locator('[data-action="quick-move-hobby-note"]').click();}
@@ -206,12 +206,16 @@ async function checkEdits(app,width) {
   assert.ok((await saved(page)).deletedItemIds.includes('hobby-folder:'+newFolder.id));
   // Selections from a different tab must not be acted on invisibly.
   await folder(page,'all').click();await card(page,'hnb-two').locator('.hobby-item-checkbox').check();
-  await folder(page,'hfolder-test').click();await card(page).locator('.hobby-item-checkbox').check();
+  await folder(page,'hfolder-test').click();assert.deepEqual(await page.evaluate(()=>[...store.selectedHobbyNotes]),[]);
+  await page.evaluate(()=>{store.selectedHobbyNotes.add('hnb-two');UI.renderHobby();});
+  await card(page).locator('.hobby-item-checkbox').check();
   await page.locator('#hobby-batch-target-folder').selectOption('general');await page.locator('[data-action="batch-move-hobby-notes"]').click();
   assert.equal((await saved(page)).hobbyNotes.find(n=>n.id==='hnb-two').folder,'workout');
   assert.equal((await saved(page)).hobbyNotes.find(n=>n.id==='hnb-one').folder,'general');
   await folder(page,'all').click();await card(page,'hnb-two').locator('.hobby-item-checkbox').check();
-  await folder(page,'general').click();await page.locator('#hobby-check-all').check();await page.locator('[data-action="batch-delete-hobby-notes"]').click();
+  await folder(page,'general').click();assert.deepEqual(await page.evaluate(()=>[...store.selectedHobbyNotes]),[]);
+  await page.evaluate(()=>{store.selectedHobbyNotes.add('hnb-two');UI.renderHobby();});
+  await page.locator('#hobby-check-all').check();await page.locator('[data-action="batch-delete-hobby-notes"]').click();
   assert.deepEqual((await saved(page)).hobbyNotes.map(n=>n.id),['hnb-two']);
   await folder(page,'workout').click();await page.evaluate(()=>window.prompt=()=> '2');await card(page,'hnb-two').locator('[data-action="quick-move-hobby-note"]').click();
   assert.equal((await saved(page)).hobbyNotes[0].folder,'general');
