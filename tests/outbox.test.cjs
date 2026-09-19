@@ -311,6 +311,9 @@ test('full application script loads with fake DOM and keeps existing storage byt
   const aiStudyView = require('node:fs').readFileSync(
     require('node:path').join(__dirname,'../js/features/ai-study/view.js'),'utf8');
   vm.runInContext(aiStudyView,h.context);
+  const sitesView = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/sites/view.js'),'utf8');
+  vm.runInContext(sitesView,h.context);
   vm.runInContext(source,h.context);
   assert.equal(h.values.get(key),raw);
   assert.equal(typeof h.context.UI.openAiStudyModal,'function');
