@@ -44,5 +44,22 @@
       }
     },
 
+    openTotalVacationModal() {
+      const modal = document.getElementById('total-vacation-modal');
+      const input = document.getElementById('input-total-vacation-days');
+      if (!modal) return;
+      if (input) input.value = store.getVacationStats().total;
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    },
+
+    closeTotalVacationModal() {
+      const modal = document.getElementById('total-vacation-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+      }
+    },
+
   });
 })(window);
