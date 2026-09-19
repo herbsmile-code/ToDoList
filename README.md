@@ -101,6 +101,7 @@ ToDoList/
 │   ├── app.js        # 단일 Store, 중앙 동기화, 공통 UI, 이벤트 연결 및 초기화
 │   ├── features/
 │   │   ├── ai-study/view.js # AI 스터디 목록·모달·코드 복사 화면
+│   │   ├── sites/view.js    # 사이트 목록·사이트/폴더 모달 화면
 │   │   └── devlog/view.js   # 개발기록 목록·상세 모달 화면
 │   ├── utils/        # 상수·개발기록 데이터와 공통 함수
 │   ├── services/crypto.js  # E2EE 암호화

@@ -1,6 +1,15 @@
 # 4차: 사이트 모음 안전성 점검과 화면 분리
 
-상태: 안전성 수정 검증 완료, 화면 분리 전. 운영 데이터 접근·main 병합·배포 없음.
+상태: 4차 안전성 수정·5개 화면 함수 분리·검증 완료. 운영 데이터 접근·main 병합·배포 없음. 4차 변경은 로컬 커밋이며, GitHub에는 3차 완료 복구 지점을 보관했다.
+
+## 최종 결과
+
+- 관련 Node 검사 158개 통과(사이트 안전성 19개 포함).
+- 실제 사이트 브라우저 검사에서 안전성 수정 후 확보한 40개 DOM/크기 기준과 분리 후 결과가 일치했다. 두 HTML, PC/모바일/file://, 저장 실패·삭제 실패·재실행·가상 기기 간 동기화·원격 폴더 삭제 후 선택 복구를 확인했다.
+- 기존 AI 화면 검사에서 3차 분리 전의 32개 DOM/크기 기준이 유지됐고, 개발기록·전체 메뉴·가상 메모 동기화 검사도 통과했다.
+- AI 동기화 화면, 가계부 20개 화면 조건, 모바일 동기화 안내, UI/동기화 성능 회귀 검사를 통과했다. 성능 검사의 과거 버전 대비 수치를 이번 분리의 개선 효과로 해석하지 않는다.
+- 새 파일은 `js/features/sites/view.js`이며 이벤트·저장·동기화는 기존 app.js와 단일 Store에서 관리한다. 사용자 데이터 이전이나 새 저장소 생성은 없다.
+- 화면 기준 파일 `scratch/sites-safe-before-extraction.json`, 재현/검사 로그는 Git에서 제외했다. 일반 테스트 실행은 기준 JSON 없이도 가능하다.
 
 ## 복구 기준
 
@@ -18,6 +27,9 @@
 5. 포털 폴더 자체를 삭제하면 사이트 이동 대상이 없어질 수 있다. `all`은 탐색용, `portal`은 기본 이동 대상으로 삭제를 차단한다. 포털 이름/아이콘 변경은 유지하며 나머지 기본 폴더와 사용자 폴더는 삭제할 수 있다. 과거 데이터에 포털이 없다면 명시적인 폴더 삭제/이동을 저장하는 동일 후보 안에서만 이동 대상을 복원한다.
 6. 다른 기기에서 현재 선택한 폴더를 지우면 빈 목록에 남았다. 수신 후 렌더링에서 선택 상태만 전체보기로 전환한다. 저장이나 추가 이동은 실행하지 않는다.
 7. 폴더 편집 버튼의 깨진 도움말을 정상 한국어로 수정한다.
+8. 구버전이 삭제 기록과 같은 원문 행을 함께 재전송하고 양쪽 저장소가 동일한 상태인 경우에도 삭제가 취소되지 않도록 확인했다. 서로 같은 사이트/폴더 행은 기존 삭제 기록을 적용하고, 서로 다른 수정 원문은 충돌로 보존한다.
+
+안전성 수정 기준 커밋은 `acc93a0`이다. 화면 이동은 사이트 모달 `1d9a2d3`, 폴더 모달 `2ab3d3a`, 목록 `77d43be`로 나눴다. 이동한 5개 함수 본문은 안전성 수정본과 줄 끝 공백 외에 동일하며, 각 분리 커밋에서 대상 블록 밖의 app.js는 바꾸지 않았음을 비교했다. 마지막 구버전 동일 행 보완도 화면 이동과 별도 커밋으로 남긴다.
 
 중앙 동기화 수정은 사이트와 폴더 삭제 판정에 한정한다. 다른 컬렉션의 삭제 정책, 가계부, Vault, 인증, 암호화 구현은 변경하지 않는다. 구버전 기기는 새 폴더 삭제 기록을 이해하지 못할 수 있다. 최신 코드에서 재유입을 충돌로 보존하는 방어를 검사하며, 모든 실제 기기의 호환성을 확인했다고 주장하지 않는다.
 
@@ -42,9 +54,13 @@ $env:AI_TEST_PLAYWRIGHT_PATH='C:\Users\JY\.cache\codex-runtimes\codex-primary-ru
 node --test tests/sites-safety.test.cjs tests/local-load-safety.test.cjs tests/outbox.test.cjs tests/ai-sync.test.cjs tests/ledger-conflict-sync.test.cjs tests/ledger-safety.test.cjs tests/memo-transfer.test.cjs
 node tests/sites-ui.cjs
 node tests/ai-study-ui.cjs
+node tests/ai-sync-ui.cjs
 node tests/devlog-ui.cjs
+node tests/sync-notice-ui.cjs
 node tests/ui-performance.cjs
 node tests/sync-performance.cjs
+$env:LEDGER_TEST_PLAYWRIGHT_PATH=$env:AI_TEST_PLAYWRIGHT_PATH
+node tests/ledger-view-ui.cjs
 ```
 
 `SITES_BASELINE_PATH`에 기존 JSON을 지정하면 DOM/크기를 비교한다. 없는 경로를 지정하면 전체 검사 통과 후 새 기준을 기록한다. 변경 후 새로 만든 기준을 이전 버전 검증으로 취급하지 않는다. 기준 파일과 로그는 Git에서 제외한 scratch 아래에만 둔다.
