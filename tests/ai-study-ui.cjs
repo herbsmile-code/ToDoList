@@ -20,10 +20,11 @@ const initialData = {tasks:[], notes:[], aiStudyNotes:[note], photos:[], sites:[
   wishlist:[], vacations:[], healthNotes:[], hobbyNotes:[], projects:[], subscriptions:[],
   ledgerFiles:[], deletedItemIds:[], updatedAt:100, syncRevision:1};
 
-async function openApp(browser, entry, width, localFile = false) {
+async function openApp(browser, entry, width, localFile = false, sharedServer = null) {
   const context = await browser.newContext({viewport:{width,height:900}, serviceWorkers:'block',
     isMobile:width < 600, hasTouch:width < 600, timezoneId:'Asia/Seoul'});
-  const errors = [], loaded = [], server = {requests:0, puts:0, body:null, version:1, failGET:true};
+  const errors = [], loaded = [];
+  const server = sharedServer || {requests:0, puts:0, body:null, version:1, failGET:true};
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
     if (url.protocol === 'file:') {
@@ -262,6 +263,38 @@ async function checkEdits(app, width) {
   assert.equal(server.puts, 0, 'Failed server reads must preserve local outbox without uploads');
 }
 
+async function checkSync(browser, entry) {
+  const server = {requests:0, puts:0, body:null, version:1, failGET:false};
+  const desktop = await openApp(browser, entry, 1280, false, server);
+  const mobile = await openApp(browser, entry, 390, false, server);
+  const sync = async page => {
+    const result = await page.evaluate(async () => ({ok:await cloudSync.requestManualSync(),
+      status:store.saveStatus, conflicts:store.localSync.conflicts}));
+    assert.equal(result.ok, true, JSON.stringify(result));
+  };
+  try {
+    await sync(desktop.page); await sync(mobile.page);
+    await navigate(desktop.page, 1280); await navigate(mobile.page, 390);
+    await desktop.page.evaluate(() => store.addAiStudyNote({title:'다른 기기의 AI 노트', content:'수신 원문'}));
+    await sync(desktop.page); await sync(mobile.page);
+    assert.equal(await mobile.page.locator('.aistudy-card').count(), 2);
+    const received = mobile.page.locator('.aistudy-card').filter({hasText:'다른 기기의 AI 노트'});
+    await received.locator('.aistudy-card-title').click();
+    assert.equal(await mobile.page.locator('.aistudy-detail-text').textContent(), '수신 원문');
+    await mobile.page.locator('[data-close-aistudy-detail-modal]').first().click();
+    await received.locator('[data-action="edit-aistudy"]').click();
+    await modalReady(mobile.page);
+    await mobile.page.locator('#aistudy-modal-content').fill('모바일에서 수정한 원문');
+    await mobile.page.locator('#aistudy-modal-form button[type="submit"]').click();
+    await sync(mobile.page); await sync(desktop.page);
+    await desktop.page.locator('.aistudy-card').filter({hasText:'다른 기기의 AI 노트'}).locator('.aistudy-card-title').click();
+    assert.equal(await desktop.page.locator('.aistudy-detail-text').textContent(), '모바일에서 수정한 원문');
+    assert.deepEqual((await saved(desktop.page)).aiStudyNotes, (await saved(mobile.page)).aiStudyNotes);
+    assert.ok(server.puts > 0 && server.body.isEncrypted);
+    assert.deepEqual(desktop.errors, []); assert.deepEqual(mobile.errors, []);
+  } finally { await desktop.context.close(); await mobile.context.close(); }
+}
+
 (async () => {
   const browser = await chromium.launch({headless:true,channel:'msedge'});
   try {
@@ -285,12 +318,13 @@ async function checkEdits(app, width) {
         await app.page.locator('[data-close-aistudy-modal]').first().click();
         assert.deepEqual(app.errors, []);
       } finally { await app.context.close(); }
+      await checkSync(browser, entry);
     }
     if (baselinePath && !baseline) {
       fs.mkdirSync(path.dirname(baselinePath), {recursive:true});
       fs.writeFileSync(baselinePath, JSON.stringify(snapshots,null,2));
     }
-    console.log('PASS: both real HTML entries; desktop/mobile navigation; light/dark list/detail; keyboard; clipboard/fallback; search/categories/empty states; create/edit/pin/delete/reload; failed-save drafts; no viewing writes; file:// loading' +
+    console.log('PASS: both real HTML entries; desktop/mobile navigation; light/dark list/detail; keyboard; clipboard/fallback; search/categories/empty states; create/edit/pin/delete/reload; failed-save drafts; no viewing writes; file:// loading; encrypted two-context AI sync and received-note editing' +
       (baseline ? '; pre-refactor DOM/layout unchanged' : ''));
   } finally { await browser.close(); }
 })().catch(error => {console.error(error); process.exitCode = 1;});

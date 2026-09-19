@@ -47,13 +47,14 @@ function section(start,end) {
         document.getElementById('aistudy-view-container').style.display='flex';
       },{local:localData(),remote:remoteData(),key});
       await page.addScriptTag({content:read('js/utils/constants.js')});
+      await page.addScriptTag({content:read('js/features/ai-study/view.js')});
       await page.addScriptTag({content:'(()=>{'+
         section('  const LocalSyncProtocol','  // IndexedDB Vault Storage Engine')+
         '\nconst cloudSync=new CloudSyncManager();window.cloudSync=cloudSync;'+
         section('  const INITIAL_HONEYMOON_DATA','  // 6. UI View Engine')+
         '\nstore.writerBlocked=false;store.activeFilter="aistudy";cloudSync.startRealtimePolling=()=>{};cloudSync.hashPin=async()=>"fake-auth-hash";'+
         '\ncloudSync.getAllVaultFiles=()=>{throw Error("Unexpected vault read during conflict");};'+
-        '\nObject.assign(UI,{'+section('    renderAiStudyEmptyState()','    openAiStudyModal(')+'});'+
+        '\nObject.assign(UI,createAiStudyView({store,DEFAULT_AI_STUDY_CATEGORIES,escapeHTML,showToast:(...args)=>UI.showToast(...args)}));'+
         '\nUI.renderTasks=()=>UI.renderAiStudy();UI.renderAiStudy();'+
         section('    // 2-Step Cloud Sync Form Submit','    const disconnectSyncBtn =')+'})()'});
       // The real form handler must report pending data rather than login+sync success.
