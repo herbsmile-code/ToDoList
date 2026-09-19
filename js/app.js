@@ -235,12 +235,12 @@
         if (lh === rh) {
           // Older clients can keep a row alongside its deletion marker. Equal
           // stale copies do not constitute a new edit or undo that deletion.
-          if ((field === 'sites' || field === 'siteFolders') && isDeleted) delete merged[key];
+          if ((field === 'sites' || field === 'siteFolders' || field === 'vacations') && isDeleted) delete merged[key];
           continue;
         }
         // An acknowledged deletion must not silently accept a stale/new remote
         // row with the same ID. Preserve that original for conflict resolution.
-        if ((field === 'sites' || field === 'siteFolders') && isDeleted &&
+        if ((field === 'sites' || field === 'siteFolders' || field === 'vacations') && isDeleted &&
             lh === 'absent' && rh !== 'absent' && !p) {
           conflicts.push({ key, base, localHash: lh, remoteHash: rh, remote: this.clone(r[key]) });
           continue;
@@ -1244,7 +1244,8 @@
       this.deletedItemIds = new Set(Array.isArray(savedData?.deletedItemIds) ? savedData.deletedItemIds : []);
       this.syncRevision = Number(savedData?.syncRevision) || 0;
 
-      const userTasks = (savedData && Array.isArray(savedData.tasks)) ? savedData.tasks : [];
+      // Startup category defaults must not mutate the parsed user originals.
+      const userTasks = (savedData && Array.isArray(savedData.tasks)) ? LocalSyncProtocol.clone(savedData.tasks) : [];
       const userWishlist = (savedData && Array.isArray(savedData.wishlist)) ? savedData.wishlist : [];
       const userPhotos = (savedData && Array.isArray(savedData.photos)) ? savedData.photos : [];
       const userNotes = (savedData && Array.isArray(savedData.notes)) ? savedData.notes : [];
@@ -1911,7 +1912,29 @@
     }
 
     // --- Vacation Manager Methods ---
+    canEditVacations() {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return false; }
+      return true;
+    }
+
+    commitVacationChanges(changes, immediate = false) {
+      if (!this.canEditVacations()) return false;
+      try {
+        // Confirm data and its outbox together before publishing any changed rows.
+        const data = {...this.buildLocalData(), ...changes};
+        data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+        data.syncRevision = (this.syncRevision || 0) + 1;
+        const meta = LocalSyncProtocol.track(this._committedData || {}, data, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data, meta)) return false;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud(immediate);
+        return true;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
+    }
+
     addVacation(data) {
+      if (!this.canEditVacations()) return null;
       const type = data.type || 'full';
       let amount = 1.0;
       if (type === 'half-am' || type === 'half-pm') amount = 0.5;
@@ -1925,13 +1948,13 @@
         reason: (data.reason || '').trim(),
         createdAt: Date.now()
       };
-      this.vacations.unshift(newVacation);
-      this.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save();
-      return newVacation;
+      const vacations = [newVacation, ...this.vacations]
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitVacationChanges({vacations}) ? newVacation : null;
     }
 
     updateVacation(id, data) {
+      if (!this.canEditVacations()) return null;
       const vac = this.vacations.find(v => v.id === id);
       if (!vac) return null;
       const type = data.type || vac.type || 'full';
@@ -1939,35 +1962,41 @@
       if (type === 'half-am' || type === 'half-pm') amount = 0.5;
       else if (type === 'holiday') amount = 0.0;
 
-      vac.type = type;
-      vac.amount = amount;
-      if (data.date) vac.date = data.date;
-      if (data.reason !== undefined) vac.reason = (data.reason || '').trim();
-      vac.updatedAt = Date.now();
-      this.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save();
-      return vac;
+      const updated = {...vac, type, amount, updatedAt:Date.now()};
+      if (data.date) updated.date = data.date;
+      if (data.reason !== undefined) updated.reason = (data.reason || '').trim();
+      const vacations = this.vacations.map(v => v.id === id ? updated : v)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitVacationChanges({vacations}) ? updated : null;
     }
 
     deleteVacation(id) {
+      if (!this.canEditVacations()) return false;
       if (!id) return false;
       const targetId = String(id).trim();
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      this.deletedItemIds.add(targetId);
-      const idx = this.vacations.findIndex(v => v && String(v.id).trim() === targetId);
-      if (idx !== -1) this.vacations.splice(idx, 1);
-      this.save(true);
-      return true;
+      return this.commitVacationChanges({
+        vacations:this.vacations.filter(v => !v || String(v.id).trim() !== targetId),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), targetId])]
+      }, true);
     }
 
     setTotalVacationDays(days) {
-      this.totalVacationDays = Math.max(0, Number(days) || 0);
-      this.save(true);
-      return this.totalVacationDays;
+      if (!this.canEditVacations()) return null;
+      const total = Number(days);
+      if (days === null || days === undefined || String(days).trim() === '' || !Number.isFinite(total) || total < 0) return null;
+      // Zero is a successful value; callers must check null, not truthiness.
+      return this.commitVacationChanges({totalVacationDays:total}, true) ? total : null;
+    }
+
+    getVacationAmount(vacation) {
+      if (vacation.type === 'holiday' || vacation.amount === 0) return 0;
+      return Number.isFinite(vacation.amount) ? vacation.amount : (vacation.type === 'full' ? 1.0 : 0.5);
     }
 
     getVacationStats() {
-      const total = Number(this.totalVacationDays) || 15.0;
+      const value = this.totalVacationDays;
+      const total = value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
+        ? Number(value) : 15.0;
       let used = 0;
       let holidayCount = 0;
       this.vacations.forEach(v => {
@@ -1975,7 +2004,7 @@
           holidayCount += 1;
           return;
         }
-        used += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
+        used += this.getVacationAmount(v);
       });
       const remain = Math.max(0, total - used);
       const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
@@ -3632,7 +3661,7 @@
       (store.vacations || []).forEach(v => {
         if (v.date && v.date.startsWith(currentMonthPrefix)) {
           if (v.type === 'holiday' || v.amount === 0) return; // 휴가는 제외
-          monthVacationDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
+          monthVacationDays += store.getVacationAmount(v);
         }
       });
 
@@ -3691,14 +3720,15 @@
         }
 
         daysVacations.forEach(v => {
-          dayTotalScore += (v.amount || (v.type === 'full' ? 1.0 : 0.5));
+          dayTotalScore += store.getVacationAmount(v);
           const isFull = (v.type === 'full');
           const isAm = (v.type === 'half-am');
-          const vLabel = isFull ? '🌴 연차 (1.0)' : (isAm ? '🌅 오전반차 (0.5)' : '🌇 오후반차 (0.5)');
-          const vClass = isFull ? 'vacation' : 'half-off';
+          const isHoliday = v.type === 'holiday' || v.amount === 0;
+          const vLabel = isHoliday ? '🏖️ 휴가 (0일)' : (isFull ? '🌴 연차 (1.0)' : (isAm ? '🌅 오전반차 (0.5)' : '🌇 오후반차 (0.5)'));
+          const vClass = isFull || isHoliday ? 'vacation' : 'half-off';
           taskChipsHTML += `
             <div class="cal-task-chip ${vClass}" title="${vLabel} ${v.reason ? '- ' + escapeHTML(v.reason) : ''}" data-date="${dateStr}">
-              <span class="cal-chip-icon">${isFull ? '🌴' : '🌿'}</span>
+              <span class="cal-chip-icon">${isHoliday ? '🏖️' : (isFull ? '🌴' : '🌿')}</span>
               <span class="cal-chip-text">${vLabel}</span>
             </div>
           `;
@@ -3796,8 +3826,9 @@
         vacBannerHTML = vacationsForDate.map(v => {
           const isFull = (v.type === 'full');
           const isAm = (v.type === 'half-am');
-          const badgeClass = isFull ? 'full' : (isAm ? 'half-am' : 'half-pm');
-          const badgeLabel = isFull ? '🌴 연차 (1.0일 사용)' : (isAm ? '🌅 오전 반차 (0.5일 사용)' : '🌇 오후 반차 (0.5일 사용)');
+          const isHoliday = v.type === 'holiday' || v.amount === 0;
+          const badgeClass = isHoliday ? 'badge-vacation-holiday' : (isFull ? 'full' : (isAm ? 'half-am' : 'half-pm'));
+          const badgeLabel = isHoliday ? '🏖️ 휴가 (0일 / 개인 확인용)' : (isFull ? '🌴 연차 (1.0일 사용)' : (isAm ? '🌅 오전 반차 (0.5일 사용)' : '🌇 오후 반차 (0.5일 사용)'));
           return `
             <div class="vacation-item-card" style="margin-bottom: 0.5rem; background: linear-gradient(135deg, rgba(255, 243, 191, 0.4), rgba(255, 212, 59, 0.15)); border: 1px solid rgba(250, 176, 5, 0.35);">
               <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -5354,7 +5385,7 @@
       if (textEl) textEl.textContent = `${stats.pct}% (${stats.used.toFixed(1)}일 / ${stats.total.toFixed(1)}일) 사용 완료`;
 
       // 1. Current Selected Filters (이번 달 기본 선택 & 통계 카드 필터)
-      const currentSelectedYear = store.selectedVacationYear || '2026';
+      const currentSelectedYear = store.selectedVacationYear || String(new Date().getFullYear());
       const currentSelectedMonth = store.selectedVacationMonth || String(new Date().getMonth() + 1);
       const currentTypeFilter = store.vacationTypeFilter || 'all';
 
@@ -5370,7 +5401,8 @@
 
       // 2. Populate Year Select Options dynamically from data
       if (yearSelect) {
-        const yearsSet = new Set(['2026', '2025']);
+        const yearsSet = new Set(['2026', '2025', String(new Date().getFullYear())]);
+        if (currentSelectedYear !== 'all') yearsSet.add(currentSelectedYear);
         (store.vacations || []).forEach(v => {
           if (v.date) {
             const y = v.date.split('-')[0];
@@ -5412,7 +5444,7 @@
           periodHolidayCount += 1;
           return;
         }
-        periodUsedDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
+        periodUsedDays += store.getVacationAmount(v);
       });
 
       // 5. Apply Top Stat Box Type Filter (총 발생연차 / 사용한 연차 / 휴가 사용)
@@ -5559,7 +5591,7 @@
       const modal = document.getElementById('total-vacation-modal');
       const input = document.getElementById('input-total-vacation-days');
       if (!modal) return;
-      if (input) input.value = store.totalVacationDays || 15;
+      if (input) input.value = store.getVacationStats().total;
       modal.style.display = 'flex';
       modal.classList.add('active');
     },
@@ -6971,7 +7003,7 @@
       if (['할 일', '남은', '현황', '연차', '브리핑', '요약'].some(k => text.includes(k))) {
         const activeTasks = store.tasks.filter(t => t.status !== 'completed').length;
         const todayTasks = store.tasks.filter(t => t.dueDate === TODAY_STR && t.status !== 'completed').length;
-        const remainingVac = (store.totalVacationDays || 15.0) - (store.vacations || []).reduce((s, v) => s + (v.amount || 1.0), 0);
+        const remainingVac = store.getVacationStats().remain;
 
         return {
           type: 'status-summary',
@@ -12185,7 +12217,7 @@
         const btn = target.closest('[data-action="delete-vacation"]');
         const vId = btn.dataset.vacationId;
         if (vId && confirm('이 연차/반차 기록을 삭제하시겠습니까?')) {
-          store.deleteVacation(vId);
+          if (!store.deleteVacation(vId)) return;
           sounds.playDelete();
           UI.showToast('연차 기록이 삭제되었어요 🗑️', 'danger');
           UI.renderVacation();
@@ -12423,12 +12455,12 @@
         const reason = document.getElementById('vacation-input-reason')?.value || '';
 
         if (editId) {
-          store.updateVacation(editId, { type, date, reason });
+          if (!store.updateVacation(editId, { type, date, reason })) return;
           sounds.playComplete();
           UI.closeVacationModal();
           UI.showToast('연차/휴가 내역이 성공적으로 수정되었어요 ✏️✨', 'success');
         } else {
-          store.addVacation({ type, date, reason });
+          if (!store.addVacation({ type, date, reason })) return;
           sounds.playComplete();
           UI.closeVacationModal();
           if (type === 'holiday') {
@@ -12446,7 +12478,7 @@
       totalVacationForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const days = document.getElementById('input-total-vacation-days')?.value;
-        store.setTotalVacationDays(days);
+        if (store.setTotalVacationDays(days) === null) return;
         UI.closeTotalVacationModal();
         UI.showToast('총 연차 일수가 설정되었어요 ⚙️✨', 'success');
         UI.renderVacation();
