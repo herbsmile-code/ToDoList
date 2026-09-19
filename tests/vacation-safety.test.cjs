@@ -54,6 +54,17 @@ test('vacation edits cannot persist startup normalization of unrelated legacy ta
   assert.ok(h.store.addVacation({type:'full',date:'2026-09-03'}));
   assert.deepEqual(saved(h).tasks,d.tasks);
 });
+test('vacation edits cannot reseed removed health/hobby/vault folders',()=>{
+  for(const field of ['healthFolders','hobbyFolders','vaultFolders']) {
+    for(const folders of [[],[{id:'custom-only',name:'Original folder',icon:'⭐'}]]) {
+      const d=data();d[field]=folders;const raw=JSON.stringify(d),h=local(raw);
+      assert.deepEqual(clone(h.store[field]),folders,field+' on read');
+      assert.equal(h.values.get(key),raw);
+      assert.ok(h.store.updateVacation('vac-full',{reason:'Edit'}));
+      assert.deepEqual(saved(h)[field],folders,field+' on unrelated edit');
+    }
+  }
+});
 test('invalid entitlement input cannot replace existing saved data',()=>{
   for(const value of ['',null,undefined,'invalid',Infinity,-1]) {
     const h=local(),raw=h.values.get(key),before=state(h);

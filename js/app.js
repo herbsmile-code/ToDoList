@@ -1256,10 +1256,10 @@
       const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
       let userSiteFolders = (savedData && Array.isArray(savedData.siteFolders)) ? LocalSyncProtocol.clone(savedData.siteFolders) : DEFAULT_SITE_FOLDERS.slice();
       const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
-      let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS.slice();
+      let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? LocalSyncProtocol.clone(savedData.healthFolders) : DEFAULT_HEALTH_FOLDERS.slice();
       const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
-      let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS.slice();
-      let userVaultFolders = (savedData && Array.isArray(savedData.vaultFolders)) ? savedData.vaultFolders : DEFAULT_VAULT_FOLDERS.slice();
+      let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? LocalSyncProtocol.clone(savedData.hobbyFolders) : DEFAULT_HOBBY_FOLDERS.slice();
+      let userVaultFolders = (savedData && Array.isArray(savedData.vaultFolders)) ? LocalSyncProtocol.clone(savedData.vaultFolders) : DEFAULT_VAULT_FOLDERS.slice();
       const userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
       const userAiStudyNotes = (savedData && Array.isArray(savedData.aiStudyNotes)) ? savedData.aiStudyNotes : [];
       const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
