@@ -305,6 +305,9 @@ test('full application script loads with fake DOM and keeps existing storage byt
   h.context.document.readyState='loading';
   h.context.document.addEventListener=()=>{};
   h.context.addEventListener=()=>{};
+  const devlogView = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/devlog/view.js'),'utf8');
+  vm.runInContext(devlogView,h.context);
   vm.runInContext(source,h.context);
   assert.equal(h.values.get(key),raw);
   assert.equal(typeof h.context.UI.openAiStudyModal,'function');
