@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const {performance}=require('node:perf_hooks');
 const {execFileSync}=require('node:child_process');
+const fs=require('node:fs'),path=require('node:path');
 const {harness,fixture,source}=require('./sync-harness.cjs');
 const before=execFileSync('git',['show','21a47af:js/app.js'],{encoding:'utf8'});
 function section(code,start,end) {
@@ -22,9 +23,17 @@ function setup(code) {
   h.reads=0;
   h.context.cloudSync.getAllVaultFiles=async()=>{h.reads++;return[{id:'fake-file',size:1000}];};
   const start=code.includes('    renderSidebar() {')?'    renderSidebar() {':'    async renderSidebar() {';
-  vm.runInContext('Object.assign(UI,{'+section(code,start,'    // --- 5-Emoji Quick Menu Engine ---')+
-    section(code,'    renderAiStudyEmptyState()','    openAiStudyModal(')+
-    section(code,'    openAiStudyDetailModal(','    closeAiStudyDetailModal(')+'});',h.context);
+  vm.runInContext('Object.assign(UI,{'+section(code,start,'    // --- 5-Emoji Quick Menu Engine ---')+'});',h.context);
+  if (code.includes('...window.createAiStudyView(')) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/features/ai-study/view.js'),'utf8'),h.context);
+    vm.runInContext('Object.assign(UI,createAiStudyView({store,DEFAULT_AI_STUDY_CATEGORIES,escapeHTML,showToast:(...args)=>UI.showToast(...args)}));',h.context);
+  }
+  if (code.includes('    renderAiStudyEmptyState()')) {
+    vm.runInContext('Object.assign(UI,{'+section(code,'    renderAiStudyEmptyState()','    openAiStudyModal(')+'});',h.context);
+  }
+  if (code.includes('    openAiStudyDetailModal(')) {
+    vm.runInContext('Object.assign(UI,{'+section(code,'    openAiStudyDetailModal(','    closeAiStudyDetailModal(')+'});',h.context);
+  }
   h.elements=elements;return h;
 }
 async function sidebar(code) {
