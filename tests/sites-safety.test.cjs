@@ -182,3 +182,16 @@ test('concurrent site edit versus deletion preserves the remote original as a co
   assert.ok(saved(a).localSync.conflicts.some(c=>c.remote?.memo==='다른 기기 원문'));
   assert.equal(s.data.sites[0].memo,'다른 기기 원문');
 });
+
+test('identical legacy rows on both devices cannot override a retained site/folder deletion record', async () => {
+  // An older client may resend its rows while preserving unknown deletion strings.
+  // This checks an upgrade/restart with that same mixed snapshot on both sides.
+  const mixed=data();
+  mixed.deletedItemIds.push('site-test','site-folder:work');
+  const s=server(mixed),h=device(s,JSON.stringify(mixed));
+  assert.equal(await sync(h),true);
+  assert.equal(saved(h).sites.some(s=>s.id==='site-test'),false);
+  assert.equal(saved(h).siteFolders.some(f=>f.id==='work'),false);
+  assert.ok(saved(h).categories.some(c=>c.id==='work'));
+  assert.ok(s.data.deletedItemIds.includes('site-folder:work'));
+});

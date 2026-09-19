@@ -232,7 +232,12 @@
         // their deletion marker; keep existing item tombstones compatible.
         const isDeleted = deleted.has(id) || (field === 'siteFolders' && deleted.has('site-folder:' + id));
         if (field === 'deletedItemIds') { merged[key] = Array.from(deleted); continue; }
-        if (lh === rh) continue;
+        if (lh === rh) {
+          // Older clients can keep a row alongside its deletion marker. Equal
+          // stale copies do not constitute a new edit or undo that deletion.
+          if ((field === 'sites' || field === 'siteFolders') && isDeleted) delete merged[key];
+          continue;
+        }
         // An acknowledged deletion must not silently accept a stale/new remote
         // row with the same ID. Preserve that original for conflict resolution.
         if ((field === 'sites' || field === 'siteFolders') && isDeleted &&
