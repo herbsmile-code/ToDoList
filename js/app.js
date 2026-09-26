@@ -198,6 +198,14 @@
       }
       return h.map(v => v.toString(16).padStart(8,'0')).join('');
     },
+    async hashAsync(value) {
+      // Large cloud comparisons need no synchronous outbox transaction. Use
+      // native SHA-256 so hashing attachment bytes does not run in a JS loop.
+      if (!globalThis.crypto?.subtle) return this.hash(value);
+      const bytes = new TextEncoder().encode(this.canonical(value));
+      const digest = await globalThis.crypto.subtle.digest('SHA-256',bytes);
+      return Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('');
+    },
     select(data) {
       const result = {};
       for (const field of this.fields) if (Object.prototype.hasOwnProperty.call(data, field)) result[field] = this.clone(data[field]);
@@ -224,7 +232,18 @@
       }
       return slots;
     },
-    state(slots, key) { return Object.hasOwn(slots,key) ? this.hash(slots[key]) : 'absent'; },
+    _slotStates: new WeakMap(),
+    state(slots, key) {
+      if (!Object.hasOwn(slots,key)) return 'absent';
+      // Slot maps are short-lived. Reuse a digest within one merge, but check
+      // serialized bytes so even a caller mutating a nested record is safe.
+      let cache = this._slotStates.get(slots);
+      if (!cache) { cache = new Map(); this._slotStates.set(slots,cache); }
+      const raw = JSON.stringify(slots[key]), previous = cache.get(key);
+      if (previous?.raw === raw) return previous.hash;
+      const hash = this.hash(slots[key]);
+      cache.set(key,{raw,hash});return hash;
+    },
     baseline(data) {
       const hashes = {};
       for (const [key,value] of Object.entries(this.slots(data))) hashes[key] = this.hash(value);
@@ -287,7 +306,7 @@
         const isDeleted = deleted.has(id) || (field === 'siteFolders' && deleted.has('site-folder:' + id)) ||
           (field === 'hobbyFolders' && deleted.has('hobby-folder:' + id)) ||
           (field === 'healthFolders' && deleted.has('health-folder:' + id));
-        if (field === 'deletedItemIds') { merged[key] = Array.from(deleted); continue; }
+        if (field === 'deletedItemIds') { merged[key] = Array.from(deleted).sort(); continue; }
         if (lh === rh) {
           // Older clients can keep a row alongside its deletion marker. Equal
           // stale copies do not constitute a new edit or undo that deletion.
@@ -395,7 +414,9 @@
         archive(conflict.key,conflict.reason || 'concurrent-edit',choice);
         this.replaceSlot(data,conflict.key,choice === 'local' ? local : choice === 'remote' ? remote : {[field]:[]});
       }
-      data.deletedItemIds = [...deleted];
+      // Tombstones are a set. Device insertion order is not a new deletion and
+      // must not make identical clients repeatedly overwrite each other.
+      data.deletedItemIds = [...deleted].sort();
       for (const field of this.lists) for (const row of [...(local[field] || []),...(remote[field] || [])]) {
         if (removed(field,row.id)) archive(JSON.stringify([field,row.id]),'deleted-original','deleted');
       }
@@ -670,6 +691,15 @@
         localStorage.getItem('todolist_jy_vault_files')]);
     }
 
+    canUseIdleCache(cached, target, raw) {
+      return cached && this._idleSyncCache === cached && cached.target === target && cached.raw === raw &&
+        store._lastLocalRaw === raw && !store.localLoadFailed && !store.localWriteFailed && !store.localSyncInvalid && !store.writerBlocked &&
+        target === LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) &&
+        cached.vaultVersion === this._vaultChangeVersion && cached.vaultStamp === this.vaultMetadataStamp() && !this._vaultWritesInFlight &&
+        Date.now() >= cached.checkedAt && Date.now() - cached.checkedAt < 300000 && store.localSync.baseline.known &&
+        !store.localSync.waitingForDesktop && !store.localSync.pending.length && !store.localSync.conflicts.length;
+    }
+
     async requestCloud(url, options = {}) {
       const controller = new AbortController();
       const {timeoutMs = 15000, ...requestOptions} = options;
@@ -771,12 +801,12 @@
       return compacted;
     }
 
-    async commitSyncLocal(data, meta) {
+    async commitSyncLocal(data, meta, guard = () => true) {
       const raw = store._lastLocalRaw;
       this.setSyncStage('originals');
       const compacted = await this.compactRecovery(meta);
       if (window.MainStorage) await window.MainStorage.prepare({...data,localSync:compacted});
-      if (raw !== store._lastLocalRaw || store.writerBlocked || store.localLoadFailed) return false;
+      if (raw !== store._lastLocalRaw || store.writerBlocked || store.localLoadFailed || !guard()) return false;
       this.setSyncStage('local-save');
       return store.commitLocal(data,compacted);
     }
@@ -939,10 +969,28 @@
         if (forceWrite) store.setSaveStatus('syncing');
         else if (store.localSync.pending.length && store.saveStatus === 'confirmed') store.setSaveStatus('pending');
         let capturedRaw = store._lastLocalRaw;
-        const vaultVersion = this._vaultChangeVersion;
-        const vaultStamp = this.vaultMetadataStamp();
         const cached = this._idleSyncCache;
         this.setSyncStage('download');
+        if (!forceWrite && /^[A-Za-z0-9+/]{16}$/.test(cached?.iv || '') && this.canUseIdleCache(cached,target,capturedRaw)) {
+          // Every supported encrypted write uses a fresh 96-bit GCM nonce.
+          // Checking it avoids downloading/merging an unchanged large snapshot.
+          // This never acknowledges pending edits or supplies an ETag for a PUT.
+          const probe = await this.requestCloud(url.replace(/\.json$/,'/iv.json'));
+          if (!probe.ok) throw Object.assign(new Error('Cloud check failed: ' + probe.status),{httpStatus:probe.status,kind:probe.errorKind});
+          const nonce = await probe.json();
+          this._lastRemoteCheckAt = Date.now();
+          if (!this.canUseIdleCache(cached,target,capturedRaw)) return false;
+          if (nonce === cached.iv) {
+            if (!store.hasConfirmedLocalData()) {
+              this._idleSyncCache = null;
+              store.setSaveStatus('pending','동기화 필요 · 변경된 로컬 데이터를 다시 확인합니다.');
+              return false;
+            }
+            this.failures = 0; this.retryAfter = 0;
+            if (store.saveStatus !== 'confirmed') store.setSaveStatus('confirmed');
+            return true;
+          }
+        }
         const response = await this.requestCloud(url, { headers: { 'X-Firebase-ETag': 'true' }, timeoutMs:60000 });
         this._lastRemoteCheckAt = Date.now();
         if (!response.ok) throw Object.assign(new Error('Cloud GET failed: ' + response.status),{httpStatus:response.status,kind:response.errorKind});
@@ -953,11 +1001,7 @@
         if (store.localLoadFailed || store.localSyncInvalid || store.localWriteFailed || store.writerBlocked || store._lastLocalRaw !== capturedRaw) return false;
         if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
         const wire = JSON.stringify(encrypted);
-        if (!forceWrite && cached && this._idleSyncCache === cached &&
-            cached.target === target && cached.raw === capturedRaw && cached.etag === etag && cached.wire === wire &&
-            cached.vaultVersion === this._vaultChangeVersion && cached.vaultStamp === this.vaultMetadataStamp() &&
-            !this._vaultWritesInFlight && Date.now() >= cached.checkedAt && Date.now() - cached.checkedAt < 300000 &&
-            store.localSync.baseline.known && !store.localSync.waitingForDesktop && !store.localSync.pending.length && !store.localSync.conflicts.length) {
+        if (!forceWrite && this.canUseIdleCache(cached,target,capturedRaw) && cached.etag === etag && cached.wire === wire) {
           // Check durable bytes AND live Store values again after the network await.
           // This path acknowledges no pending changes and performs no data writes.
           if (!store.hasConfirmedLocalData()) {
@@ -1040,9 +1084,17 @@
           revision: Math.max(Number(decoded.revision)||0, store.syncRevision||0) + 1,
           updatedAt: Math.max(Date.now(), (Number(decoded.updatedAt)||0)+1, store.lastUpdatedAt||0)};
         if (result.ledgerAuthority) rawPayload.ledgerAuthority = result.ledgerAuthority;
-        const changed = LocalSyncProtocol.hash({...remote, vaultFiles:decoded.vaultFiles || [],syncVersions:decoded.syncVersions || {},ledgerAuthority:decoded.ledgerAuthority || null}) !==
-          LocalSyncProtocol.hash({...result.data, vaultFiles,syncVersions:result.versions,ledgerAuthority:result.ledgerAuthority});
-        const shouldWrite = changed || forceWrite;
+        const byId = rows => [...rows].sort((a,b)=>a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+        const [remoteHash, mergedHash, localVaultHash, mergedVaultHash, localHash, resultHash] = await Promise.all([
+          LocalSyncProtocol.hashAsync({...remote, vaultFiles:decoded.vaultFiles || [],syncVersions:decoded.syncVersions || {},ledgerAuthority:decoded.ledgerAuthority || null}),
+          LocalSyncProtocol.hashAsync({...result.data, vaultFiles,syncVersions:result.versions,ledgerAuthority:result.ledgerAuthority}),
+          LocalSyncProtocol.hashAsync(byId(localVault)),LocalSyncProtocol.hashAsync(byId(vaultFiles)),
+          LocalSyncProtocol.hashAsync(local),LocalSyncProtocol.hashAsync(result.data)
+        ]);
+        if (store.localLoadFailed || store.localWriteFailed || store.writerBlocked || store._lastLocalRaw !== capturedRaw ||
+            !vaultUnchanged() || LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
+        const shouldWrite = remoteHash !== mergedHash || forceWrite;
+        let confirmedIv = encrypted?.iv;
         if (shouldWrite) {
           this._showSyncProgress = true;
           this.setSyncStage('upload');
@@ -1059,6 +1111,7 @@
           const options = {method:'PUT',headers:{'Content-Type':'application/json','if-match':etag},
             body:JSON.stringify(encryptedBody),timeoutMs:60000};
           this._lastUploadBytes = options.body.length; // Encrypted envelope is ASCII.
+          this._uploadNonce = {target,iv:encryptedBody.iv};
           const plain = this._plainPutTarget === target;
           let put = await this.requestCloud(url + (plain ? '' : '?print=silent'),options);
           if (put.status === 400 && !plain && put.errorKind !== 'size-limit') {
@@ -1077,6 +1130,7 @@
             return false; // Another device saved first: re-read and merge automatically.
           }
           if (!put.ok) throw Object.assign(new Error('Cloud PUT failed: ' + put.status),{httpStatus:put.status,kind:put.errorKind});
+          confirmedIv = encryptedBody.iv;
         }
         // A GET matching our contents also confirms a previously lost PUT response.
         // An older response must never clear a newer edit's outbox.
@@ -1120,7 +1174,7 @@
           }
         }
         const mergedVault = [...vaultMap.values()].filter(f => !(result.data.deletedItemIds || []).includes(f.id));
-        if (LocalSyncProtocol.hash(localVault) !== LocalSyncProtocol.hash(mergedVault)) {
+        if (localVaultHash !== mergedVaultHash) {
           this.setSyncStage('files');
           await this.saveVaultFiles(mergedVault, true, () =>
             this._vaultChangeVersion === readVaultVersion + 1 && this._vaultWritesInFlight === 1);
@@ -1128,13 +1182,18 @@
           if (this._vaultChangeVersion > readVaultVersion + 1 || this._vaultWritesInFlight) { store.setSaveStatus('pending'); return false; }
         }
         this.setSyncStage('local-save');
-        if (!await this.commitSyncLocal(next, acknowledged)) return false;
+        const commitVaultVersion = this._vaultChangeVersion;
+        if (!await this.commitSyncLocal(next, acknowledged, () => !this._vaultWritesInFlight && this._vaultChangeVersion === commitVaultVersion &&
+            LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) === target)) return false;
         window.treasureVault?.refreshFromStore();
-        // Only a fully validated GET can seed this cache; a PUT changes its ETag.
-        // Recheck occasionally even without changes, and always after vault writes.
-        this._idleSyncCache = !result.waitingForDesktop && !shouldWrite && !this._vaultWritesInFlight && vaultVersion === this._vaultChangeVersion &&
-          vaultStamp === this.vaultMetadataStamp()
-          ? {target, raw:store._lastLocalRaw, etag, wire, vaultVersion, vaultStamp, checkedAt:Date.now()} : null;
+        // Cache only after server acknowledgement AND durable local commit. A
+        // PUT supplies a nonce, never a guessed ETag. Full validation still runs
+        // every five minutes and whenever local data/files or the nonce change.
+        this._idleSyncCache = !result.waitingForDesktop && !this._vaultWritesInFlight &&
+          (!shouldWrite || /^[A-Za-z0-9+/]{16}$/.test(confirmedIv || ''))
+          ? {target, raw:store._lastLocalRaw, etag:shouldWrite ? null : etag, wire:shouldWrite ? null : wire, iv:confirmedIv,
+            vaultVersion:this._vaultChangeVersion, vaultStamp:this.vaultMetadataStamp(), checkedAt:Date.now()} : null;
+        this._confirmedRemoteNonce = {target,iv:confirmedIv};
         this.lastSyncedUpdatedAt = store.lastUpdatedAt;
         this.lastSyncedRevision = store.syncRevision;
         this.failures = 0; this.retryAfter = 0;
@@ -1146,7 +1205,7 @@
           store.setSaveStatus('confirmed', forceWrite ? '동기화 성공' : undefined);
         }
         // Do not render hidden ledger views: their renderer currently saves data.
-        if (typeof UI !== 'undefined' && LocalSyncProtocol.hash(local) !== LocalSyncProtocol.hash(result.data)) {
+        if (typeof UI !== 'undefined' && localHash !== resultHash) {
           UI.renderTasks(); UI.renderSidebar();
         }
         return !result.waitingForDesktop;
@@ -1175,6 +1234,7 @@
         console.warn('Cloud sync deferred; automatic retry scheduled.');
         return false;
       } finally {
+        this._uploadNonce = null;
         this.isPushing = false;
         if (store.saveStatus === 'syncing' || store.saveStatus === 'pending' && !store.localSync.waitingForDesktop) {
           const stage = {originals:'원문 보관',download:'서버 수신',decrypt:'자료 확인',merge:'기록 병합',
@@ -1205,9 +1265,14 @@
         this._remoteStream = stream; this._remoteStreamUrl = url;
         const current = () => this._remoteStream === stream &&
           url === this.activeUrl + '/spaces/' + this.getStorageKey() + '/iv.json';
-        const changed = () => {
+        const changed = event => {
           if (!current()) { stream.close(); return; }
           this._streamConnected = true;
+          let nonce;
+          try { const message = JSON.parse(event?.data); if (message.path === '/') nonce = message.data; } catch {}
+          const target = LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]);
+          if (typeof nonce === 'string' && /^[A-Za-z0-9+/]{16}$/.test(nonce) &&
+              [this._confirmedRemoteNonce,this._uploadNonce].some(known=>known?.target === target && known.iv === nonce)) return;
           if (this._remoteNoticeTimer) clearTimeout(this._remoteNoticeTimer);
           this._remoteNoticeTimer = setTimeout(() => {
             this._remoteNoticeTimer = null;
@@ -1243,7 +1308,7 @@
         this._lastWakeSyncAt = now;
         this.retryAfter = 0;
         this.startRemoteListener();
-        this.fetchLatestFromCloud(true);
+        this.fetchLatestFromCloud(false);
       };
       window.addEventListener('online', wake);
 

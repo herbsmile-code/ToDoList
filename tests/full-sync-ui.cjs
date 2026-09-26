@@ -10,11 +10,14 @@ const root=path.resolve(__dirname,'..');
 const streams=new Set(),repro=process.env.PAYLOAD_REPRO_BEFORE==='1';
 const oldCrypto=repro?require('node:child_process').execFileSync('git',['show','2d56cb7:js/services/crypto.js'],{encoding:'utf8'}):null;
 function largestString(value){return typeof value==='string'?Buffer.byteLength(value):value&&typeof value==='object'?Math.max(0,...Object.values(value).map(largestString)):0;}
-let body,revision,puts,failNextPut=false;
+let body,revision,puts,fullGets=0,probes=0,failNextPut=false;
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   if(url.pathname.startsWith('/backend/')) {
     if(url.pathname.endsWith('/iv.json')) {
+      if(!req.headers.accept?.includes('text/event-stream')) {
+        probes++;res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(body?.iv || null));return;
+      }
       res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});
       streams.add(res);req.on('close',()=>streams.delete(res));
       res.write('event: put\ndata: '+JSON.stringify({path:'/',data:body?.iv || null})+'\n\n');return;
@@ -30,7 +33,7 @@ const server=http.createServer(async(req,res)=>{
       for(const stream of streams)stream.write('event: put\ndata: '+JSON.stringify({path:'/',data:body.iv})+'\n\n');
       assert.equal(url.searchParams.get('print'),'silent');res.writeHead(204);res.end();return;
     }
-    res.writeHead(200,{'Content-Type':'application/json',ETag:String(revision)});res.end(JSON.stringify(body));return;
+    fullGets++;res.writeHead(200,{'Content-Type':'application/json',ETag:String(revision)});res.end(JSON.stringify(body));return;
   }
   if(url.pathname==='/seed'){res.writeHead(200,{'Content-Type':'text/html'});res.end('<title>Synthetic fixture</title>');return;}
   const filename=path.resolve(root,'.'+url.pathname);
@@ -46,6 +49,7 @@ async function open(browser,origin,entry,label,mobile=false) {
   const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin+'/seed');
   const data={...structuredClone(fixture),totalVacationDays:label==='pc'?15:18,
+    deletedItemIds:label==='mobile'?['deleted-b','deleted-a']:['deleted-a','deleted-b'],
     honeymoonData:{9:{hasData:true,income:{total:label==='pc'?100:9999,items:[]}}}};
   for(const f of ['tasks','notes','aiStudyNotes','healthNotes','hobbyNotes','wishlist','photos','sites','vacations','projects','subscriptions','ledgerFiles']) {
     data[f].push({id:f+'-'+label,title:label,content:label,category:'personal',folder:'general',type:'todo'});
@@ -71,7 +75,7 @@ async function open(browser,origin,entry,label,mobile=false) {
       request.onsuccess=()=>{
         const db=request.result,tx=db.transaction('vault_files','readwrite');
         tx.objectStore('vault_files').put({id:'file-'+label,name:label+'.bin',createdAt:1,
-          dataUrl:'data:application/octet-stream;base64,'+'A'.repeat(label==='pc'?700000:label==='mobile'?3500000:100)});
+          dataUrl:'data:application/octet-stream;base64,'+'A'.repeat(label==='pc'?700000:label==='mobile'?12100000:100)});
         tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);
       };
     });
@@ -107,6 +111,7 @@ async function consistent(apps,expected) {
       const second=await open(browser,origin,entry,'second-pc');
       const apps=[pc,mobile,second];await consistent(apps,3);
       assert.equal(body.v,3);assert.ok(largestString(body)<=1024*1024);
+      const encryptedBytes=Buffer.byteLength(JSON.stringify(body));assert.ok(encryptedBytes>23000000);
       for(const app of apps) {
         assert.equal(await app.page.evaluate(()=>store.honeymoonData[9].income.total),100);
         assert.deepEqual(await app.page.evaluate(key=>({photo:store.photos.find(r=>r.id==='photos-pc').dataUrl.length,
@@ -130,8 +135,18 @@ async function consistent(apps,expected) {
       await consistent(apps,3);
       await mobile.page.reload();await consistent(apps,3);
       assert.equal(await mobile.page.evaluate(()=>store.treasures.some(row=>row.id==='treasure-mobile')),false);
+      // Once converged, replays and return-to-tab checks must neither upload nor
+      // download 23 MB again. A changed nonce above still delivered every edit.
+      await Promise.all(apps.map(({page})=>page.waitForFunction(()=>store.saveStatus==='confirmed' && !cloudSync._syncPromise && !cloudSync._remoteNoticeTimer)));
+      const quiet={puts,fullGets,probes};
+      for(const stream of streams)stream.write('event: put\ndata: '+JSON.stringify({path:'/',data:body.iv})+'\n\n');
+      await Promise.all(apps.map(({page})=>page.evaluate(()=>cloudSync.fetchLatestFromCloud(false))));
+      await new Promise(resolve=>setTimeout(resolve,2500));
+      assert.equal(puts,quiet.puts,'idle devices must not ping-pong snapshots');
+      assert.equal(fullGets,quiet.fullGets,'own/duplicate events and nonce checks must avoid full downloads');
+      assert.equal(probes,quiet.probes+3);
       for(const app of apps) {assert.deepEqual(app.errors,[]);await app.context.close();}
-      console.log('PASS '+entry+': 3 devices, all collections, full file bytes, SSE '+elapsed+'ms, automatic retry, originals and restart');
+      console.log('PASS '+entry+': 3 devices, '+encryptedBytes+' encrypted bytes, all collections, SSE '+elapsed+'ms, retry and restart; idle: 0 PUT, 0 full GET, 3 nonce checks');
     }
   } finally {
     await browser.close();for(const stream of streams)stream.end();
