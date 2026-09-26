@@ -20,6 +20,7 @@ function section(start,end) {
       await context.route('**/*',route=>route.abort());
       const page=await context.newPage(),errors=[];
       page.on('pageerror',error=>errors.push(error.message));
+      page.on('console',message=>{if(message.type()==='warning' && message.text().includes('Cloud sync deferred'))console.log(message.text());});
       await page.setContent(read(entry).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<link\b[^>]*>/gi,''));
       await page.addStyleTag({content:read('css/style.css').replace(/@import\s+url\([^)]*\);/g,'')});
       await page.evaluate(({local,remote,key})=>{
@@ -33,11 +34,12 @@ function section(start,end) {
             if(options.method==='PUT')throw Error('Unexpected account registration');
             return {ok:true,status:200,headers:{get:()=>'auth-1'},json:async()=>({pinHash:'fake-auth-hash'})};
           }
-          if(options.method==='PUT'){testState.puts++;throw Error('Conflict must not upload');}
+          if(options.method==='PUT'){testState.puts++;testState.remote=JSON.parse(JSON.parse(options.body).payload);return {ok:true,status:200,json:async()=>({})};}
           const status=testState.failGET?503:200;
           return {ok:status===200,status,headers:{get:()=>'1'},json:async()=>({isEncrypted:true,iv:'fake',payload:JSON.stringify(testState.remote)})};
         };
         window.E2EESecurityEngine={encrypt:async data=>({isEncrypted:true,iv:'fake',payload:JSON.stringify(data)}),decrypt:async data=>JSON.parse(data.payload)};
+        window.SyncOriginals={preserve:async()=>true,getAll:async()=>[]};
         window.normalizeArray=value=>Array.isArray(value)?value:[];
         window.escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
         window.UI={renderSidebar(){},showToast(message,type){testState.toasts.push({message,type});},closeCloudModal(){}};
@@ -47,13 +49,14 @@ function section(start,end) {
         document.getElementById('aistudy-view-container').style.display='flex';
       },{local:localData(),remote:remoteData(),key});
       await page.addScriptTag({content:read('js/utils/constants.js')});
+      await page.addScriptTag({content:read('js/features/ai-study/view.js')});
       await page.addScriptTag({content:'(()=>{'+
         section('  const LocalSyncProtocol','  // IndexedDB Vault Storage Engine')+
         '\nconst cloudSync=new CloudSyncManager();window.cloudSync=cloudSync;'+
         section('  const INITIAL_HONEYMOON_DATA','  // 6. UI View Engine')+
         '\nstore.writerBlocked=false;store.activeFilter="aistudy";cloudSync.startRealtimePolling=()=>{};cloudSync.hashPin=async()=>"fake-auth-hash";'+
-        '\ncloudSync.getAllVaultFiles=()=>{throw Error("Unexpected vault read during conflict");};'+
-        '\nObject.assign(UI,{'+section('    renderAiStudyEmptyState()','    openAiStudyModal(')+'});'+
+        '\ncloudSync.getAllVaultFiles=async()=>[];'+
+        '\nObject.assign(UI,createAiStudyView({store,DEFAULT_AI_STUDY_CATEGORIES,escapeHTML,showToast:(...args)=>UI.showToast(...args)}));'+
         '\nUI.renderTasks=()=>UI.renderAiStudy();UI.renderAiStudy();'+
         section('    // 2-Step Cloud Sync Form Submit','    const disconnectSyncBtn =')+'})()'});
       // The real form handler must report pending data rather than login+sync success.
@@ -68,10 +71,11 @@ function section(start,end) {
       assert.equal(await page.evaluate(()=>testState.bursts),0);
       assert.equal(await page.locator('#manual-sync-state').textContent(),'동기화 실패');
       assert.match(await page.locator('#aistudy-empty-description').textContent(),/서버 확인이 완료되지/);
-      // Network recovers but vacation conflict remains: receive AI, keep conflict visible.
+      // Once the network recovers, archive differing settings and receive AI automatically.
       await page.evaluate(async()=>{testState.failGET=false;await cloudSync.requestManualSync();});
-      assert.equal(await page.locator('#manual-sync-state').textContent(),'동기화 필요');
-      assert.equal(await page.evaluate(()=>store.localSync.conflicts.length),1);
+      assert.equal(await page.locator('#manual-sync-state').textContent(),'동기화 완료');
+      assert.equal(await page.evaluate(()=>store.localSync.conflicts.length),0);
+      assert.ok(await page.evaluate(()=>store.localSync.recovery.some(r=>r.local.totalVacationDays===15)));
       for(const width of [320,390,768,1280]) {
         await page.setViewportSize({width,height:900});
         assert.equal(await page.locator('.aistudy-card').count(),1);
@@ -86,11 +90,11 @@ function section(start,end) {
       assert.equal(await page.locator('.aistudy-card').count(),1);
       const saved=await page.evaluate(key=>JSON.parse(testState.values.get(key)),key);
       assert.deepEqual(saved.aiStudyNotes,remoteData().aiStudyNotes);
-      assert.equal(saved.totalVacationDays,15);
-      assert.equal(await page.evaluate(()=>testState.puts),0);
+      assert.equal(saved.totalVacationDays,20);
+      assert.equal(await page.evaluate(()=>testState.puts),1);
       assert.deepEqual(errors,[]);
       await context.close();
     }
-    console.log(`PASS: ${cases} AI layouts; real login handler failure warning; recovery receives AI during unrelated conflict; search empty state; zero server writes`);
+    console.log(`PASS: ${cases} AI layouts; login failure warning; automatic recovery and AI receive; search empty state`);
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

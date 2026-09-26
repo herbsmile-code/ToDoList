@@ -1864,6 +1864,7 @@
         </form>
       </div>
       <div class="modal-actions">
+        <button type="button" id="btn-open-data-settings" class="btn">데이터 관리 · 원문 보관</button>
         <button type="button" class="btn btn-primary" data-close-modal>닫기</button>
       </div>
     </div>
@@ -1908,6 +1909,12 @@
         <button class="modal-close-btn" data-close-modal>✕</button>
       </div>
       <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <section aria-labelledby="sync-recovery-heading">
+          <h4 id="sync-recovery-heading">자동 보관한 원문</h4>
+          <p style="font-size: .8rem; line-height: 1.6; margin: .5rem 0;">동기화 중 서로 다른 내용은 자동 보관합니다. 필요할 때 이 기기에 보관된 원문을 파일로 저장할 수 있습니다.</p>
+          <button type="button" id="btn-export-sync-recovery" class="btn" style="width: 100%;">자동 보관한 원문 저장</button>
+          <p id="sync-recovery-result" role="status" aria-live="polite" style="font-size: .8rem; line-height: 1.6;"></p>
+        </section>
         <section aria-labelledby="memo-transfer-heading" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 12px;">
           <h4 id="memo-transfer-heading" style="margin-bottom: .5rem;">메모를 로컬에서 웹으로 옮기기</h4>
           <p style="font-size: .8rem; line-height: 1.6;">로컬 HTML에서 백업 파일을 저장한 뒤, 웹사이트에서 가져오세요. 메모·AI 스터디·건강·취미 기록·사이트를 옮깁니다. 내용이 다른 메모는 각각 남깁니다.</p>
@@ -2978,8 +2985,16 @@
   <script src="js/utils/constants.js?v=20260917_v16_guide2"></script>
   <script src="js/utils/helpers.js?v=20260912_v152"></script>
   <script src="js/services/crypto.js?v=20260912_v152"></script>
-  <script src="js/memo-transfer.js?v=20260915_transfer1"></script>
-  <script src="js/app.js?v=20260916_ledger4"></script>
-  <script src="js/treasure.js?v=20260912_v152"></script>
+  <script src="js/memo-transfer.js?v=20260926_union1"></script>
+  <script src="js/features/devlog/view.js?v=20260918_mod2_devlog1"></script>
+  <script src="js/features/ai-study/view.js?v=20260919_mod3_ai1"></script>
+  <script src="js/features/sites/view.js?v=20260919_mod4_sites1"></script>
+  <script src="js/features/vacation/view.js?v=20260919_mod5_vacation5"></script>
+  <script src="js/features/hobby/view.js?v=20260919_mod6_hobby5"></script>
+  <script src="js/features/health/attachments.js?v=20260919_mod7_health1"></script>
+  <script src="js/features/health/view.js?v=20260919_mod7_health4"></script>
+  <script src="js/sync-originals.js?v=20260926_union1"></script>
+  <script src="js/app.js?v=20260926_union1"></script>
+  <script src="js/treasure.js?v=20260926_union1"></script>
 </body>
 </html>

@@ -118,6 +118,7 @@ test('a fresh empty view accepts later cloud data without persisting a zero repl
   h.context.UI.renderLedger();
   assert.match(h.elements.get('ledger-month-data-status').textContent, /아직/);
   remote.honeymoonData = clone(data); remote.syncRevision++; remote.updatedAt++; revision++;
+  remote.ledgerAuthority={source:'desktop-web',hash:h.context.protocol.hash(remote.honeymoonData)};
   await h.context.cloudSync.fetchLatestFromCloud(true);
   const writesBefore = h.writes.length;
   h.context.UI.renderLedger();

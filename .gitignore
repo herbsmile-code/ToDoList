@@ -40,4 +40,5 @@ print_all_recovered.py
 scratch/
 todolist-local-memos-*.json
 todolist-before-transfer-*.json
+todolist-sync-recovery-*.json
 

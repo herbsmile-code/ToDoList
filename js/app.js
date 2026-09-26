@@ -126,10 +126,34 @@
       'vaultFolders', 'deletedItemIds', 'honeymoonData', 'ledgerFiles', 'vacations',
       'totalVacationDays', 'sites', 'siteFolders', 'healthNotes', 'healthFolders',
       'hobbyNotes', 'hobbyFolders', 'aiStudyNotes', 'subscriptions', 'projects',
-      'customMenuNames', 'customTheme'],
+      'customMenuNames', 'customTheme', 'treasures', 'ledgerBankStatements', 'ledgerCategoryRules', 'streak'],
     lists: ['tasks', 'categories', 'wishlist', 'photos', 'notes', 'vaultFolders',
       'ledgerFiles', 'vacations', 'sites', 'siteFolders', 'healthNotes', 'healthFolders',
-      'hobbyNotes', 'hobbyFolders', 'aiStudyNotes', 'subscriptions', 'projects'],
+      'hobbyNotes', 'hobbyFolders', 'aiStudyNotes', 'subscriptions', 'projects',
+      'treasures', 'ledgerBankStatements', 'ledgerCategoryRules'],
+    legacyKeys: {treasures:'zentask_treasures', ledgerBankStatements:'ledgerBankStatements',
+      ledgerCategoryRules:'ledgerCategoryRules', streak:'todolist_jy_streak_v39'},
+    legacyRows(field, rows) {
+      if (!Array.isArray(rows)) throw new Error('Invalid legacy list: ' + field);
+      const seen = new Map();
+      rows.forEach(row => {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('Invalid legacy record');
+        const copy = this.clone(row);
+        if (typeof copy.id !== 'string' || !copy.id) {
+          const identity = field === 'ledgerCategoryRules' && row.keyword ?
+            [row.bank || 'shinhan',row.owner || '',row.keyword] :
+            field === 'ledgerBankStatements' && row.date ?
+            [row.bank || 'shinhan',row.owner || '',row.date,row.desc || '',row.out || 0,row.in || 0,row.balance || 0] : row;
+          copy.id = field + '-' + this.hash(identity);
+        }
+        // Older imports can contain the same ID with different original contents.
+        if (seen.has(copy.id) && this.canonical(seen.get(copy.id)) !== this.canonical(copy)) {
+          copy.id = field + '-original-' + this.hash(row);
+        }
+        seen.set(copy.id,copy);
+      });
+      return [...seen.values()];
+    },
     clone(value) { return JSON.parse(JSON.stringify(value)); },
     canonical(value) {
       if (Array.isArray(value)) return '[' + value.map(v => this.canonical(v)).join(',') + ']';
@@ -170,19 +194,23 @@
       for (const field of this.fields) if (Object.prototype.hasOwnProperty.call(data, field)) result[field] = this.clone(data[field]);
       return result;
     },
-    slots(data) {
+    slots(data, strictDuplicates = false) {
       const slots = {};
       for (const [field, value] of Object.entries(this.select(data))) {
         if (this.lists.includes(field)) {
           if (!Array.isArray(value)) throw new Error('Invalid sync list: ' + field);
-          const seen = new Set();
+          const seen = new Map();
           value.forEach(item => {
-            if (!item || typeof item.id !== 'string' || !item.id || seen.has(item.id)) throw new Error('Invalid sync item: ' + field);
-            seen.add(item.id);
+            if (!item || typeof item.id !== 'string' || !item.id) throw new Error('Invalid sync item: ' + field);
+            if (seen.has(item.id)) {
+              if (strictDuplicates || this.canonical(seen.get(item.id)) !== this.canonical(item)) throw new Error('Duplicate sync item: ' + field);
+              return; // Identical repeats are the same record, never a global sync blocker.
+            }
+            seen.set(item.id,item);
             if (item.id === '$order') throw new Error('Reserved sync item id');
             slots[JSON.stringify([field,item.id])] = item;
           });
-          slots[JSON.stringify([field,'$order'])] = value.map(item => item.id);
+          slots[JSON.stringify([field,'$order'])] = [...seen.keys()];
         } else slots[JSON.stringify([field,null])] = value;
       }
       return slots;
@@ -193,6 +221,13 @@
       for (const [key,value] of Object.entries(this.slots(data))) hashes[key] = this.hash(value);
       return { known: true, itemHashes: hashes };
     },
+    isLedger(value) { return !!value && typeof value === 'object' && !Array.isArray(value); },
+    clientKind() {
+      const nav = window.navigator;
+      if (!['https:','http:'].includes(window.location?.protocol) || !nav?.userAgent) return 'local-file';
+      return nav.userAgentData?.mobile || /Android|iPhone|iPad|iPod/i.test(nav.userAgent) ||
+        (/Macintosh/i.test(nav.userAgent) && nav.maxTouchPoints > 1) ? 'mobile' : 'desktop-web';
+    },
     empty() { return { version: 1, targetFingerprint: null, baseline: { known: false, itemHashes: {} }, pending: [], conflicts: [] }; },
     valid(meta) {
       const hash = v => v === 'absent' || /^[a-f0-9]{64}$/.test(v);
@@ -202,7 +237,14 @@
         typeof meta.baseline.itemHashes === 'object' && Object.entries(meta.baseline.itemHashes).every(([k,v]) => slot(k) && hash(v)) &&
         Array.isArray(meta.pending) && new Set(meta.pending.map(p => p?.key)).size === meta.pending.length &&
         meta.pending.every(p => p && slot(p.key) && typeof p.changeId === 'string' && (p.base === 'unknown' || hash(p.base)) && hash(p.localHash)) &&
-        Array.isArray(meta.conflicts);
+        Array.isArray(meta.conflicts) && (meta.recovery === undefined || Array.isArray(meta.recovery)) &&
+        (meta.editClock === undefined || Number.isSafeInteger(meta.editClock) && meta.editClock >= 0) &&
+        (meta.itemVersions === undefined || this.validVersions(meta.itemVersions)) &&
+        meta.pending.every(p => p.changedAt === undefined || Number.isSafeInteger(p.changedAt) && p.changedAt >= 0);
+    },
+    validVersions(versions) {
+      return this.isLedger(versions) && Object.values(versions).every(v=>v && Number.isSafeInteger(v.at) && v.at >= 0 &&
+        (v.hash === 'absent' || typeof v.hash === 'string' && /^[a-f0-9]{64}$/.test(v.hash)));
     },
     track(previous, next, meta) {
       const result = this.clone(meta), before = this.slots(previous), after = this.slots(next);
@@ -215,7 +257,10 @@
         const old = result.pending.find(p => p.key === key);
         const base = old ? old.base : result.baseline.known ? (result.baseline.itemHashes[key] || 'absent') : 'unknown';
         result.pending = result.pending.filter(p => p.key !== key);
-        result.pending.push({ key, changeId: 'change-' + Date.now() + '-' + Math.random().toString(36).slice(2), base, localHash: current });
+        result.editClock = Math.max(Date.now(),(Number(result.editClock) || 0)+1);
+        const entry = { key, changeId: 'change-' + Date.now() + '-' + Math.random().toString(36).slice(2), base, localHash: current,
+          changedAt:result.editClock,source:this.clientKind() };
+        result.pending.push(entry);
       }
       return result;
     },
@@ -228,20 +273,38 @@
         if (id === '$order') continue;
         const lh = this.state(l,key), rh = this.state(r,key), p = pending.get(key);
         const base = p ? p.base : meta.baseline.known ? (meta.baseline.itemHashes[key] || 'absent') : 'unknown';
+        // Folder IDs such as "work" also exist in other collections. Scope only
+        // their deletion marker; keep existing item tombstones compatible.
+        const isDeleted = deleted.has(id) || (field === 'siteFolders' && deleted.has('site-folder:' + id)) ||
+          (field === 'hobbyFolders' && deleted.has('hobby-folder:' + id)) ||
+          (field === 'healthFolders' && deleted.has('health-folder:' + id));
         if (field === 'deletedItemIds') { merged[key] = Array.from(deleted); continue; }
-        if (lh === rh) continue;
+        if (lh === rh) {
+          // Older clients can keep a row alongside its deletion marker. Equal
+          // stale copies do not constitute a new edit or undo that deletion.
+          if ((field === 'sites' || field === 'siteFolders' || field === 'vacations' || field === 'hobbyNotes' || field === 'hobbyFolders' || field === 'healthNotes' || field === 'healthFolders') && isDeleted) delete merged[key];
+          continue;
+        }
+        // An acknowledged deletion must not silently accept a stale/new remote
+        // row with the same ID. Preserve that original for conflict resolution.
+        if ((field === 'sites' || field === 'siteFolders' || field === 'vacations' || field === 'hobbyNotes' || field === 'hobbyFolders' || field === 'healthNotes' || field === 'healthFolders') && isDeleted &&
+            lh === 'absent' && rh !== 'absent' && !p) {
+          conflicts.push({ key, base, localHash: lh, remoteHash: rh, remote: this.clone(r[key]), reason:'deleted-item' });
+          continue;
+        }
         if (!p && base !== 'unknown' && lh === base) {
           // Absence alone is not a deletion instruction, even after a prior ack.
-          if (rh === 'absent' && lh !== 'absent' && !deleted.has(id)) merged[key] = this.clone(l[key]);
+          if (rh === 'absent' && lh !== 'absent' && !isDeleted) merged[key] = this.clone(l[key]);
           continue;
         }
         // A locally present legacy item missing remotely is retained, never inferred deleted.
-        const canApply = rh === base || (rh === 'absent' && lh !== 'absent' && !deleted.has(id));
-        if (canApply && !(id && deleted.has(id) && lh !== 'absent')) {
+        const canApply = rh === base || (rh === 'absent' && lh !== 'absent' && !isDeleted);
+        if (canApply && !(id && isDeleted && lh !== 'absent')) {
           if (lh === 'absent') delete merged[key]; else merged[key] = this.clone(l[key]);
         } else if (lh === 'absent' && base === 'unknown' && !p) {
           // No local copy is not an instruction to delete an older server item.
-        } else conflicts.push({ key, base, localHash: lh, remoteHash: rh, remote: Object.hasOwn(r,key) ? this.clone(r[key]) : null });
+        } else conflicts.push({ key, base, localHash: lh, remoteHash: rh, remote: Object.hasOwn(r,key) ? this.clone(r[key]) : null,
+          reason:base === 'unknown' ? 'unknown-base' : isDeleted ? 'deleted-item' : 'both-changed' });
       }
       const data = {};
       for (const field of this.fields) {
@@ -259,49 +322,125 @@
       }
       return { data, conflicts };
     },
-    receiveNewMemos(local, remote, meta) {
-      // During a conflict, receive new memos and an unchanged local ledger only.
-      // Conflicting originals, pending edits and vault files remain untouched.
-      const data = this.clone(local), nextMeta = this.clone(meta);
-      const deleted = new Set([...(local.deletedItemIds || []), ...(remote.deletedItemIds || [])]);
-      const blocked = new Set([...meta.pending.map(p => p.key), ...meta.conflicts.map(c => c.key)]);
-      let received = 0;
-      for (const field of ['notes', 'aiStudyNotes']) {
-        const existing = local[field] || [], ids = new Set(existing.map(item => item.id));
-        const additions = (remote[field] || []).filter(item => {
-          const key = JSON.stringify([field,item.id]);
-          const base = meta.baseline.itemHashes[key];
-          return !ids.has(item.id) && !deleted.has(item.id) && !blocked.has(key) &&
-            (!meta.baseline.known || !base || base === 'absent');
+    replaceSlot(data, key, source) {
+      const [field,id] = JSON.parse(key);
+      if (this.lists.includes(field)) {
+        if (id === '$order') return;
+        const row = (source[field] || []).find(item => item.id === id);
+        const index = (data[field] || []).findIndex(item => item.id === id);
+        if (index >= 0) { if (row) data[field][index] = this.clone(row); else data[field].splice(index,1); }
+        else if (row) (data[field] ||= []).push(this.clone(row));
+      } else if (Object.hasOwn(source,field)) data[field] = this.clone(source[field]);
+      else delete data[field];
+    },
+    versionTime(slots, key, versions, pending) {
+      const hash = this.state(slots,key), recorded = versions?.[key];
+      if (pending?.localHash === hash && Number.isSafeInteger(pending.changedAt)) return pending.changedAt;
+      if (recorded?.hash === hash && Number.isSafeInteger(recorded.at) && recorded.at >= 0) return recorded.at;
+      const time = Number(slots[key]?.updatedAt || slots[key]?.createdAt);
+      return Number.isSafeInteger(time) && time >= 0 ? time : 0;
+    },
+    automaticPlan(local, remote, meta, decoded) {
+      const result = this.merge(local,remote,meta), data = result.data;
+      const l = this.slots(local), r = this.slots(remote), pending = new Map(meta.pending.map(p => [p.key,p]));
+      const remoteVersions = decoded.syncVersions || {};
+      if (!this.validVersions(remoteVersions)) throw new Error('Invalid record version metadata');
+      const recovery = this.clone(meta.recovery || []), ids = new Set(recovery.map(entry => entry.id));
+      const scope = (key, source) => {
+        const [field,id] = JSON.parse(key);
+        return {[field]:this.lists.includes(field) ? this.clone((source[field] || []).filter(row => row.id === id)) :
+          Object.hasOwn(source,field) ? this.clone(source[field]) : null};
+      };
+      const archive = (key,reason,winner) => {
+        const original = {key,local:scope(key,local),remote:scope(key,remote)};
+        const id = 'auto-' + this.hash(original);
+        if (!ids.has(id)) {
+          recovery.push({...original,id,at:new Date().toISOString(),reason,winner,
+            localDeleted:this.clone(local.deletedItemIds || []),remoteDeleted:this.clone(remote.deletedItemIds || [])});
+          ids.add(id);
+        }
+      };
+      // Older versions stopped on conflicts. Retain their captured server
+      // originals as well, even if that server record has changed since then.
+      for (const conflict of meta.conflicts || []) {
+        if (!conflict?.key || !Object.hasOwn(conflict,'remote')) continue;
+        let field,id;
+        try { [field,id] = JSON.parse(conflict.key); } catch { continue; }
+        if (!this.fields.includes(field) || id === '$order') continue;
+        const original = {key:conflict.key,local:scope(conflict.key,local),remote:{[field]:
+          this.lists.includes(field) ? (conflict.remote ? [this.clone(conflict.remote)] : []) : this.clone(conflict.remote)}};
+        const archiveId = 'legacy-' + this.hash(original);
+        if (!ids.has(archiveId)) { recovery.push({...original,id:archiveId,at:new Date().toISOString(),reason:'previous-conflict'});ids.add(archiveId); }
+      }
+      const deleted = new Set([...(local.deletedItemIds || []),...(remote.deletedItemIds || [])]);
+      const prefixes = {healthFolders:'health-folder:',hobbyFolders:'hobby-folder:',siteFolders:'site-folder:'};
+      const removed = (field,id) => id && (deleted.has(id) || (prefixes[field] && deleted.has(prefixes[field]+id)));
+      for (const conflict of result.conflicts) {
+        const [field,id] = JSON.parse(conflict.key);
+        if (field === 'honeymoonData') continue;
+        const localTime = this.versionTime(l,conflict.key,meta.itemVersions,pending.get(conflict.key));
+        const remoteTime = this.versionTime(r,conflict.key,remoteVersions);
+        // A missing legacy timestamp cannot outrank a known edit. Equal/unknown
+        // times retain the current server version; both originals are archived.
+        const choice = removed(field,id) ? 'deleted' : localTime > remoteTime ? 'local' : 'remote';
+        archive(conflict.key,conflict.reason || 'concurrent-edit',choice);
+        this.replaceSlot(data,conflict.key,choice === 'local' ? local : choice === 'remote' ? remote : {[field]:[]});
+      }
+      data.deletedItemIds = [...deleted];
+      for (const field of this.lists) for (const row of [...(local[field] || []),...(remote[field] || [])]) {
+        if (removed(field,row.id)) archive(JSON.stringify([field,row.id]),'deleted-original','deleted');
+      }
+      for (const field of this.lists) if (data[field]) {
+        data[field] = data[field].filter(row => {
+          if (!removed(field,row.id)) return true;
+          archive(JSON.stringify([field,row.id]),'deleted-original','deleted');return false;
         });
-        if (!additions.length) continue;
-        data[field] = [...existing, ...this.clone(additions)];
-        received += additions.length;
-        const orderKey = JSON.stringify([field,'$order']);
-        const orderHash = this.hash(data[field].map(item => item.id));
-        const pendingOrder = nextMeta.pending.find(p => p.key === orderKey);
-        // Keep the pending order's identity/base; include newly received IDs in
-        // its local fingerprint so restart validation still protects every edit.
-        if (pendingOrder) pendingOrder.localHash = orderHash;
-        if (nextMeta.baseline.known) {
-          for (const item of additions) nextMeta.baseline.itemHashes[JSON.stringify([field,item.id])] = this.hash(item);
-          if (!pendingOrder) nextMeta.baseline.itemHashes[orderKey] = orderHash;
+      }
+      // Folder deletion and movement stay in the same confirmed snapshot. A
+      // stale edit cannot recreate a deleted folder or leave its records orphaned.
+      for (const [notes,folders,fallback] of [['healthNotes','healthFolders','general'],['hobbyNotes','hobbyFolders','general'],['sites','siteFolders','portal']]) {
+        for (const row of data[notes] || []) if (removed(folders,row.folder)) {
+          archive(JSON.stringify([notes,row.id]),'deleted-folder','moved');row.folder = fallback;
+          if (!(data[folders] || []).some(folder => folder.id === fallback)) {
+            const original = [...(local[folders] || []),...(remote[folders] || [])].find(folder => folder.id === fallback);
+            (data[folders] ||= []).push(original ? this.clone(original) : {id:fallback,name:folders === 'siteFolders' ? '포털' : '일반/기타',icon:'📁'});
+          }
         }
       }
-      const ledgerKey = JSON.stringify(['honeymoonData', null]);
-      if (Object.hasOwn(remote, 'honeymoonData') && !blocked.has(ledgerKey)) {
-        const localHash = Object.hasOwn(local, 'honeymoonData') ? this.hash(local.honeymoonData) : 'absent';
-        const base = meta.baseline.itemHashes[ledgerKey] || 'absent';
-        const remoteHash = this.hash(remote.honeymoonData);
-        if (remote.honeymoonData && typeof remote.honeymoonData === 'object' &&
-            !Array.isArray(remote.honeymoonData) && localHash !== remoteHash &&
-            ((meta.baseline.known && localHash === base) || (!meta.baseline.known && localHash === 'absent'))) {
-          data.honeymoonData = this.clone(remote.honeymoonData);
-          if (nextMeta.baseline.known) nextMeta.baseline.itemHashes[ledgerKey] = remoteHash;
-          received++;
-        }
+      const ledgerKey = '["honeymoonData",null]', ledgerPending = pending.get(ledgerKey);
+      const remoteAuthority = decoded.ledgerAuthority;
+      const authoritative = this.isLedger(remote.honeymoonData) && remoteAuthority?.source === 'desktop-web' &&
+        remoteAuthority.hash === this.hash(remote.honeymoonData);
+      const desktop = this.clientKind() === 'desktop-web';
+      const placeholder = !this.isLedger(local.honeymoonData) || Object.keys(local.honeymoonData).length === 0 ||
+        this.canonical(local.honeymoonData) === this.canonical(INITIAL_HONEYMOON_DATA);
+      const hasPcOriginal = this.isLedger(local.honeymoonData) && (!placeholder || ledgerPending?.source === 'desktop-web');
+      let ledgerAuthority = authoritative ? this.clone(remoteAuthority) : null, waitingForDesktop = false;
+      const receivedUnverified = meta.unverifiedLedgerHash === this.state(l,ledgerKey) && !ledgerPending;
+      if (desktop && hasPcOriginal && !receivedUnverified && (!authoritative || ledgerPending || !meta.baseline.known)) {
+        const localTime = this.versionTime(l,ledgerKey,meta.itemVersions,ledgerPending);
+        const remoteTime = this.versionTime(r,ledgerKey,remoteVersions);
+        const chooseLocal = !authoritative ||
+          this.state(r,ledgerKey) === (ledgerPending?.base || meta.baseline.itemHashes[ledgerKey]) || localTime > remoteTime;
+        data.honeymoonData = this.clone(chooseLocal ? local.honeymoonData : remote.honeymoonData);
+        ledgerAuthority = {source:'desktop-web',hash:this.hash(data.honeymoonData)};
+        if (this.state(l,ledgerKey) !== this.state(r,ledgerKey) && this.isLedger(remote.honeymoonData)) archive(ledgerKey,'desktop-ledger',chooseLocal ? 'local' : 'remote');
+      } else if (authoritative) {
+        data.honeymoonData = this.clone(remote.honeymoonData);
+        if (this.isLedger(local.honeymoonData) && this.state(l,ledgerKey) !== this.state(r,ledgerKey)) archive(ledgerKey,'desktop-ledger','remote');
+      } else {
+        // A mobile/local-file client cannot promote its ledger to the PC source.
+        if (Object.hasOwn(remote,'honeymoonData')) data.honeymoonData = this.clone(remote.honeymoonData);else delete data.honeymoonData;
+        waitingForDesktop = hasPcOriginal || this.isLedger(remote.honeymoonData) && Object.keys(remote.honeymoonData).length > 0;
       }
-      return {data, meta:nextMeta, received};
+      const output = this.slots(data), versions = {};
+      for (const key of new Set([...Object.keys(l),...Object.keys(r),...Object.keys(output)])) {
+        const hash = this.state(output,key);
+        const at = Math.max(hash === this.state(l,key) ? this.versionTime(l,key,meta.itemVersions,pending.get(key)) : 0,
+          hash === this.state(r,key) ? this.versionTime(r,key,remoteVersions) : 0);
+        if (at) versions[key] = {hash,at};
+      }
+      return {data,recovery,versions,ledgerAuthority,waitingForDesktop};
     }
   };
 
@@ -560,15 +699,85 @@
     }
 
     _executePushTasksToCloud(options = {}) {
-      if (this._syncPromise) return this._syncPromise;
+      if (this._syncPromise) { this._syncAgain = true; return this._syncPromise; }
       if (this._transferPromise && !options.manual) return Promise.resolve(false);
       // The queued manual request owns the next turn; polling must not overtake it.
       if (this._manualPromise && !options.manual) return Promise.resolve(false);
+      if (this._retryTimer) clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+      this._syncAgain = false;
       const work = this._syncOnce(options);
       this._syncPromise = work;
-      const release = () => { if (this._syncPromise === work) this._syncPromise = null; };
+      const release = () => {
+        if (this._syncPromise !== work) return;
+        this._syncPromise = null;
+        const blocked = store.localLoadFailed || store.localWriteFailed || store.localSyncInvalid || store.writerBlocked;
+        const waitingOnly = store.localSync?.waitingForDesktop &&
+          store.localSync.pending.every(entry => entry.key === '["honeymoonData",null]');
+        if (!blocked && this.spaceId && this.pin && (this._syncAgain || this.retryAfter ||
+            store.saveStatus === 'pending' && !waitingOnly)) {
+          const delay = Math.max(150, (this.retryAfter || 0) - Date.now());
+          this._retryTimer = setTimeout(() => { this._retryTimer = null; this._executePushTasksToCloud(); }, delay);
+        }
+      };
       work.then(release, release);
       return work;
+    }
+
+    async prepareDeviceData(target) {
+      if (this._preparedTarget === target) return true;
+      const raw = store._lastLocalRaw;
+      const auxiliary = Object.fromEntries(Object.entries(LocalSyncProtocol.legacyKeys)
+        .map(([field,key]) => [field,localStorage.getItem(key)]));
+      const vaultVersion = this._vaultChangeVersion;
+      const vaultFiles = await this.getAllVaultFiles(true,true);
+      if (!window.SyncOriginals) throw new Error('Original backup module unavailable');
+      const protectedOriginal = await window.SyncOriginals.preserve({id:'device-before-union-v1-' + target, version:1,
+        createdAt:new Date().toISOString(), mainRaw:raw, auxiliary, vaultFiles});
+      if (protectedOriginal !== true) throw new Error('Original backup not confirmed');
+      if (raw !== store._lastLocalRaw || localStorage.getItem(STORAGE_KEY) !== raw ||
+          vaultVersion !== this._vaultChangeVersion || this._vaultWritesInFlight ||
+          target !== LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()])) return false;
+      const data = store.buildLocalData(), meta = LocalSyncProtocol.clone(store.localSync);
+      const imported = {...meta.legacyImported};
+      for (const [field,text] of Object.entries(auxiliary)) {
+        if (imported[field]) continue;
+        if (text !== null) {
+          const value = JSON.parse(text);
+          const original = field === 'streak' ? value : LocalSyncProtocol.legacyRows(field,value);
+          if (field === 'streak' && (!value || typeof value !== 'object' || Array.isArray(value))) throw new Error('Invalid legacy streak');
+          if (!Object.hasOwn(data,field) || field === 'streak' && !Object.hasOwn(store._committedData,field)) data[field] = original;
+          else if (field !== 'streak') {
+            const combined = [...data[field]];
+            for (const row of original) {
+              const existing = combined.find(item => item.id === row.id);
+              if (!existing) combined.push(row);
+              else if (LocalSyncProtocol.canonical(existing) !== LocalSyncProtocol.canonical(row)) {
+                // Preserve distinct legacy originals as visible records, once.
+                const copy = {...row,id:field + '-original-' + LocalSyncProtocol.hash(row)};
+                if (!combined.some(item => item.id === copy.id)) combined.push(copy);
+              }
+            }
+            data[field] = combined;
+          }
+        }
+        imported[field] = true;
+      }
+      const tracked = LocalSyncProtocol.track(store._committedData,data,meta);
+      const migratedSlots = LocalSyncProtocol.slots(data);
+      for (const entry of tracked.pending) {
+        const [field] = JSON.parse(entry.key);
+        if (Object.hasOwn(auxiliary,field) && !meta.pending.some(old => old.key === entry.key)) {
+          // Moving old storage is not a fresh user edit. Retain an actual row
+          // timestamp if present; never make an old import win by migration time.
+          entry.changedAt = LocalSyncProtocol.versionTime(migratedSlots,entry.key,meta.itemVersions);
+        }
+      }
+      tracked.legacyImported = imported;
+      if (!store.commitLocal(data,tracked)) return false;
+      this._preparedTarget = target;
+      window.treasureVault?.refreshFromStore();
+      return true;
     }
 
     requestMemoTransfer(sourceFile, saveProtectionFile) {
@@ -624,6 +833,9 @@
         // A real GET supplies the comparison base. All differences remain pending
         // until the ordinary sync sees a matching base and receives a PUT ack.
         const base = {...p.empty(),targetFingerprint:target,baseline:p.baseline(remote)};
+        for (const field of ['recovery','conflicts','editClock','itemVersions','ledgerAuthority','unverifiedLedgerHash','waitingForDesktop']) {
+          if (Object.hasOwn(store.localSync,field)) base[field] = p.clone(store.localSync[field]);
+        }
         const pending = p.track(remote,p.select(next),base);
         if (!store.commitLocal(next,pending)) throw new Error('웹 브라우저 저장 성공을 확인하지 못했습니다. 보호 백업을 보관해 주세요.');
         this._idleSyncCache = null;
@@ -653,16 +865,18 @@
         if (store.localSync.targetFingerprint && store.localSync.targetFingerprint !== target) {
           store.setSaveStatus('conflict'); return false;
         }
+        if (!await this.prepareDeviceData(target)) return false;
         // Persist unsaved mutations/outbox before ANY network request.
         // Routine checks keep the last visible status until there is work or an error.
         if (!store.saveLocalOnly(null, null, {showPending:false, skipUnchanged:!forceWrite})) return false;
         if (forceWrite) store.setSaveStatus('syncing');
         else if (store.localSync.pending.length && store.saveStatus === 'confirmed') store.setSaveStatus('pending');
-        const capturedRaw = store._lastLocalRaw;
+        let capturedRaw = store._lastLocalRaw;
         const vaultVersion = this._vaultChangeVersion;
         const vaultStamp = this.vaultMetadataStamp();
         const cached = this._idleSyncCache;
         const response = await this.requestCloud(url, { headers: { 'X-Firebase-ETag': 'true' } });
+        this._lastRemoteCheckAt = Date.now();
         if (!response.ok) throw new Error('Cloud GET failed: ' + response.status);
         const etag = response.headers.get('ETag');
         if (!etag) throw new Error('Cloud ETag missing');
@@ -675,7 +889,7 @@
             cached.target === target && cached.raw === capturedRaw && cached.etag === etag && cached.wire === wire &&
             cached.vaultVersion === this._vaultChangeVersion && cached.vaultStamp === this.vaultMetadataStamp() &&
             !this._vaultWritesInFlight && Date.now() >= cached.checkedAt && Date.now() - cached.checkedAt < 300000 &&
-            store.localSync.baseline.known && !store.localSync.pending.length && !store.localSync.conflicts.length) {
+            store.localSync.baseline.known && !store.localSync.waitingForDesktop && !store.localSync.pending.length && !store.localSync.conflicts.length) {
           // Check durable bytes AND live Store values again after the network await.
           // This path acknowledges no pending changes and performs no data writes.
           if (!store.hasConfirmedLocalData()) {
@@ -695,59 +909,88 @@
         if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked ||
             LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
         const remote = LocalSyncProtocol.select(decoded); // NEVER import remote.localSync.
-        const result = LocalSyncProtocol.merge(local, remote, meta);
-        if (result.conflicts.length) {
-          this._idleSyncCache = null;
-          const ledgerConflictChanged = JSON.stringify(meta.conflicts.find(c => c?.key === '["honeymoonData",null]')) !==
-            JSON.stringify(result.conflicts.find(c => c.key === '["honeymoonData",null]'));
-          meta.conflicts = result.conflicts;
-          const incoming = LocalSyncProtocol.receiveNewMemos(captured, remote, meta);
-          if (!store.commitLocal(incoming.data, incoming.meta)) return false;
-          store.setSaveStatus('conflict', '동기화 필요 · 서로 다른 변경을 보존 중입니다. 안전하게 받을 수 있는 메모·가계부는 받아옵니다.');
-          if ((incoming.received || (ledgerConflictChanged && store.activeFilter === 'ledger')) && typeof UI !== 'undefined') {
-            UI.renderTasks(); UI.renderSidebar();
-          }
-          return false;
+        if (this._protectedRemoteTarget !== target) {
+          const protectedOriginal = await window.SyncOriginals.preserve({id:'server-before-union-v1-' + target,version:1,
+            createdAt:new Date().toISOString(),data:decoded});
+          if (protectedOriginal !== true) throw new Error('Server original backup not confirmed');
+          if (store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked) return false;
+          this._protectedRemoteTarget = target;
+        }
+        const result = LocalSyncProtocol.automaticPlan(local, remote, meta, decoded);
+        if (JSON.stringify(meta.recovery || []) !== JSON.stringify(result.recovery)) {
+          // Preserve both originals durably BEFORE changing the active copy or
+          // issuing a conditional upload. Failure leaves the outbox untouched.
+          meta.recovery = result.recovery;
+          if (!store.commitLocal(captured,meta)) return false;
+          capturedRaw = store._lastLocalRaw;
         }
         // Vault original bytes stay coordinated with IndexedDB. Never replace them
         // with a cloud metadata-only list. Existing file helpers own IDB writes.
+        const readVaultVersion = this._vaultChangeVersion;
+        const vaultUnchanged = () => this._vaultChangeVersion === readVaultVersion && !this._vaultWritesInFlight;
+        if (!vaultUnchanged()) { store.setSaveStatus('pending'); return false; }
         const localVault = await this.getAllVaultFiles(true, true);
-        if (store._lastLocalRaw !== capturedRaw || store.localLoadFailed) return false;
-        const vaultMap = new Map((Array.isArray(decoded.vaultFiles) ? decoded.vaultFiles : []).map(f => [f.id,f]));
+        if (store._lastLocalRaw !== capturedRaw || store.localLoadFailed || !vaultUnchanged()) return false;
+        const remoteVault = decoded.vaultFiles || [];
+        if (!Array.isArray(remoteVault) || remoteVault.some(f=>!f || typeof f.id !== 'string') ||
+            new Set(remoteVault.map(f=>f.id)).size !== remoteVault.length) throw new Error('Invalid vault records');
+        const vaultMap = new Map(remoteVault.map(f => [f.id,f]));
+        const archiveVault = (id,local,remote) => {
+          const original = {key:JSON.stringify(['vaultFiles',id]),local:{vaultFiles:local ? [local] : []},remote:{vaultFiles:remote ? [remote] : []}};
+          const archiveId = 'auto-' + LocalSyncProtocol.hash(original);
+          if (!(meta.recovery || []).some(entry=>entry.id===archiveId)) {
+            (meta.recovery ||= []).push({...original,id:archiveId,at:new Date().toISOString(),reason:'vault-original'});
+          }
+        };
         for (const f of localVault) {
           if (!f || !f.id) continue;
           const previous = vaultMap.get(f.id);
           if (!previous) vaultMap.set(f.id,f);
-          else if (LocalSyncProtocol.hash({...previous, dataUrl:null}) !== LocalSyncProtocol.hash({...f, dataUrl:null})) {
-            store.setSaveStatus('conflict'); return false;
+          else if (LocalSyncProtocol.hash({...previous, dataUrl:null}) !== LocalSyncProtocol.hash({...f, dataUrl:null}) ||
+              previous.dataUrl && f.dataUrl && previous.dataUrl !== f.dataUrl) {
+            archiveVault(f.id,f,previous);
+            const winner = (Number(f.updatedAt || f.createdAt)||0) > (Number(previous.updatedAt || previous.createdAt)||0) ? f : previous;
+            // A metadata-only response never removes bytes available on this device.
+            vaultMap.set(f.id,{...winner,...(!winner.dataUrl && (f.dataUrl || previous.dataUrl) ? {dataUrl:f.dataUrl || previous.dataUrl} : {})});
           } else if (!previous.dataUrl && f.dataUrl) vaultMap.set(f.id,f);
         }
-        const vaultFiles = [...vaultMap.values()].filter(f => !(result.data.deletedItemIds || []).includes(f.id)).map(f => {
-          const copy = {...f};
-          if (copy.dataUrl && copy.dataUrl.length > 500 * 1024) delete copy.dataUrl;
-          return copy;
-        });
-        const rawPayload = {...LocalSyncProtocol.select(result.data), vaultFiles,
+        for (const f of vaultMap.values()) if ((result.data.deletedItemIds || []).includes(f.id)) {
+          archiveVault(f.id,localVault.find(local=>local.id===f.id),remoteVault.find(remote=>remote.id===f.id));
+        }
+        if (JSON.stringify(store.localSync.recovery || []) !== JSON.stringify(meta.recovery || [])) {
+          if (!store.commitLocal(captured,meta)) return false;
+          capturedRaw = store._lastLocalRaw;
+        }
+        const vaultFiles = [...vaultMap.values()].filter(f => !(result.data.deletedItemIds || []).includes(f.id));
+        const rawPayload = {...LocalSyncProtocol.select(result.data), vaultFiles,syncVersions:result.versions,
           revision: Math.max(Number(decoded.revision)||0, store.syncRevision||0) + 1,
           updatedAt: Math.max(Date.now(), (Number(decoded.updatedAt)||0)+1, store.lastUpdatedAt||0)};
-        const changed = LocalSyncProtocol.hash({...remote, vaultFiles:decoded.vaultFiles || []}) !==
-          LocalSyncProtocol.hash({...result.data, vaultFiles});
+        if (result.ledgerAuthority) rawPayload.ledgerAuthority = result.ledgerAuthority;
+        const changed = LocalSyncProtocol.hash({...remote, vaultFiles:decoded.vaultFiles || [],syncVersions:decoded.syncVersions || {},ledgerAuthority:decoded.ledgerAuthority || null}) !==
+          LocalSyncProtocol.hash({...result.data, vaultFiles,syncVersions:result.versions,ledgerAuthority:result.ledgerAuthority});
         const shouldWrite = changed || forceWrite;
         if (shouldWrite) {
           store.setSaveStatus('syncing');
           const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, sessionPin);
           if (!encryptedBody?.isEncrypted || !encryptedBody.payload || !encryptedBody.iv) throw new Error('Encryption failed; plaintext upload blocked');
           if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked) return false;
+          if (!vaultUnchanged()) { store.setSaveStatus('pending'); return false; }
           if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) {
             store.setSaveStatus('conflict', '동기화 계정이 변경되어 전송을 중단했습니다. 기존 데이터를 유지합니다.');
             return false;
           }
           const put = await this.requestCloud(url, { method:'PUT', headers:{'Content-Type':'application/json','if-match':etag}, body:JSON.stringify(encryptedBody) });
+          if (put.status === 412) {
+            this._syncAgain = true;
+            store.setSaveStatus('pending');
+            return false; // Another device saved first: re-read and merge automatically.
+          }
           if (!put.ok) throw new Error('Cloud PUT failed: ' + put.status);
         }
         // A GET matching our contents also confirms a previously lost PUT response.
         // An older response must never clear a newer edit's outbox.
         if (store.localLoadFailed || store.localWriteFailed) return false;
+        if (!vaultUnchanged()) { store.setSaveStatus('pending'); return false; }
         if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) {
           store.setSaveStatus('conflict', '동기화 계정이 변경되어 완료 처리를 중단했습니다. 미전송 기록을 유지합니다.');
           return false;
@@ -756,6 +999,7 @@
           // The acknowledged snapshot is older than a local edit. Keep that edit
           // pending, but advance its comparison base to the version just accepted.
           const latestMeta = LocalSyncProtocol.clone(store.localSync);
+          latestMeta.editClock = Object.values(result.versions).reduce((clock,v)=>Math.max(clock,v.at),Number(latestMeta.editClock)||0);
           const confirmedSlots = LocalSyncProtocol.slots(result.data);
           for (const p of latestMeta.pending) {
             const sent = meta.pending.find(old => old.key === p.key);
@@ -769,35 +1013,55 @@
         const next = {...captured, ...result.data,
           updatedAt:Number(confirmed.updatedAt)||captured.updatedAt,
           syncRevision:Number(confirmed.revision)||captured.syncRevision};
-        const acknowledged = {version:1,targetFingerprint:target,baseline:LocalSyncProtocol.baseline(result.data),pending:[],conflicts:[]};
+        const acknowledged = {...meta,version:1,targetFingerprint:target,baseline:LocalSyncProtocol.baseline(result.data),pending:[],conflicts:[],
+          itemVersions:result.versions,ledgerAuthority:result.ledgerAuthority,waitingForDesktop:result.waitingForDesktop,
+          editClock:Object.values(result.versions).reduce((clock,v)=>Math.max(clock,v.at),Number(meta.editClock)||0)};
+        delete acknowledged.conflictScopes;
+        if (!result.ledgerAuthority && !Object.hasOwn(captured,'honeymoonData') && Object.hasOwn(result.data,'honeymoonData')) {
+          acknowledged.unverifiedLedgerHash = LocalSyncProtocol.hash(result.data.honeymoonData);
+        } else if (result.ledgerAuthority) delete acknowledged.unverifiedLedgerHash;
+        if (result.waitingForDesktop && Object.hasOwn(captured,'honeymoonData')) {
+          next.honeymoonData = LocalSyncProtocol.clone(captured.honeymoonData);
+          const key = '["honeymoonData",null]', hash = LocalSyncProtocol.hash(next.honeymoonData);
+          if (hash !== (acknowledged.baseline.itemHashes[key] || 'absent')) {
+            const original = meta.pending.find(entry => entry.key === key);
+            acknowledged.pending.push(original || {key,changeId:'ledger-awaiting-desktop',base:'unknown',localHash:hash});
+          }
+        }
         const mergedVault = [...vaultMap.values()].filter(f => !(result.data.deletedItemIds || []).includes(f.id));
         if (LocalSyncProtocol.hash(localVault) !== LocalSyncProtocol.hash(mergedVault)) {
-          await this.saveVaultFiles(mergedVault, true);
+          await this.saveVaultFiles(mergedVault, true, () =>
+            this._vaultChangeVersion === readVaultVersion + 1 && this._vaultWritesInFlight === 1);
           if (store._lastLocalRaw !== capturedRaw || store.localLoadFailed || store.writerBlocked) return false;
+          if (this._vaultChangeVersion > readVaultVersion + 1 || this._vaultWritesInFlight) { store.setSaveStatus('pending'); return false; }
         }
         if (!store.commitLocal(next, acknowledged)) return false;
+        window.treasureVault?.refreshFromStore();
         // Only a fully validated GET can seed this cache; a PUT changes its ETag.
         // Recheck occasionally even without changes, and always after vault writes.
-        this._idleSyncCache = !shouldWrite && !this._vaultWritesInFlight && vaultVersion === this._vaultChangeVersion &&
+        this._idleSyncCache = !result.waitingForDesktop && !shouldWrite && !this._vaultWritesInFlight && vaultVersion === this._vaultChangeVersion &&
           vaultStamp === this.vaultMetadataStamp()
           ? {target, raw:store._lastLocalRaw, etag, wire, vaultVersion, vaultStamp, checkedAt:Date.now()} : null;
         this.lastSyncedUpdatedAt = store.lastUpdatedAt;
         this.lastSyncedRevision = store.syncRevision;
         this.failures = 0; this.retryAfter = 0;
-        if (store.saveStatus !== 'confirmed' || forceWrite) {
+        if (result.waitingForDesktop) {
+          store.setSaveStatus('pending','다른 기록은 동기화했습니다. 가계부는 원본이 있는 PC 웹에서 접속하면 자동으로 맞춰집니다.');
+        } else if (store.saveStatus !== 'confirmed' || forceWrite) {
           store.setSaveStatus('confirmed', forceWrite ? '동기화 성공' : undefined);
         }
         // Do not render hidden ledger views: their renderer currently saves data.
         if (typeof UI !== 'undefined' && LocalSyncProtocol.hash(local) !== LocalSyncProtocol.hash(result.data)) {
           UI.renderTasks(); UI.renderSidebar();
         }
-        return true;
+        return !result.waitingForDesktop;
       } catch (e) {
         this._idleSyncCache = null;
         this.failures = (this.failures || 0) + 1;
         this.retryAfter = Date.now() + Math.min(60000, 1000 * 2 ** Math.min(this.failures,6));
         store.setSaveStatus(store.hasConfirmedLocalData() ? 'syncFailed' : 'failed');
-        console.warn('Cloud sync deferred:', e);
+        // Do not log request URLs, credentials or record contents.
+        console.warn('Cloud sync deferred; automatic retry scheduled.');
         return false;
       } finally {
         this.isPushing = false;
@@ -805,10 +1069,52 @@
       }
     }
 
+    stopRemoteListener() {
+      this._remoteStream?.close();
+      this._remoteStream = null;
+      this._streamConnected = false;
+      if (this._remoteNoticeTimer) clearTimeout(this._remoteNoticeTimer);
+      this._remoteNoticeTimer = null;
+    }
+
+    startRemoteListener() {
+      if (!window.EventSource || !this.spaceId || !this.pin || document.hidden) return;
+      // Observe only the encryption nonce. Every encrypted commit changes it;
+      // the large encrypted data is fetched once through the existing CAS flow.
+      const url = this.activeUrl + '/spaces/' + this.getStorageKey() + '/iv.json';
+      if (this._remoteStream && this._remoteStreamUrl === url) return;
+      this.stopRemoteListener();
+      try {
+        const stream = new window.EventSource(url);
+        this._remoteStream = stream; this._remoteStreamUrl = url;
+        const current = () => this._remoteStream === stream &&
+          url === this.activeUrl + '/spaces/' + this.getStorageKey() + '/iv.json';
+        const changed = () => {
+          if (!current()) { stream.close(); return; }
+          this._streamConnected = true;
+          if (this._remoteNoticeTimer) clearTimeout(this._remoteNoticeTimer);
+          this._remoteNoticeTimer = setTimeout(() => {
+            this._remoteNoticeTimer = null;
+            if (current()) this.fetchLatestFromCloud(false);
+          },100);
+        };
+        stream.addEventListener('put',changed);
+        stream.addEventListener('patch',changed);
+        stream.addEventListener('error',() => { if (current()) this._streamConnected = false; });
+        for (const event of ['cancel','auth_revoked']) stream.addEventListener(event,() => {
+          if (current()) this.stopRemoteListener();
+        });
+      } catch { this._streamConnected = false; }
+    }
+
     startRealtimePolling() {
       if (this.syncTimer) clearInterval(this.syncTimer);
+      this.startRemoteListener();
       this.syncTimer = setInterval(() => {
-        if (!document.hidden) this.fetchLatestFromCloud(false);
+        if (!document.hidden && (!this._streamConnected || Date.now() - (this._lastRemoteCheckAt || 0) > 300000)) {
+          this.startRemoteListener();
+          this.fetchLatestFromCloud(false);
+        }
       }, 30000);
 
       if (this._pollEventsBound) return;
@@ -820,6 +1126,7 @@
         if (this._lastWakeSyncAt !== undefined && now - this._lastWakeSyncAt < 1000) return;
         this._lastWakeSyncAt = now;
         this.retryAfter = 0;
+        this.startRemoteListener();
         this.fetchLatestFromCloud(true);
       };
       window.addEventListener('online', wake);
@@ -827,6 +1134,7 @@
       // 모바일 앱/화면 복귀 시 즉시 동기화
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) wake();
+        else this.stopRemoteListener();
       });
       window.addEventListener('focus', () => {
         if (!document.hidden) wake();
@@ -911,9 +1219,9 @@
       }
     }
 
-    async saveVaultFiles(files, strict = false) {
+    async saveVaultFiles(files, strict = false, canSave = null) {
       try {
-        const saved = await VaultDBEngine.saveAll(files || []);
+        const saved = await VaultDBEngine.saveAll(files || [], canSave);
         if (saved !== true) throw new Error('Vault save failed');
         this._vaultFilesCache = Array.isArray(files) ? files.slice() : [];
         const metaOnly = (files || []).map(f => ({
@@ -1089,10 +1397,11 @@
       }
     },
 
-    async saveAll(files) {
+    async saveAll(files, canSave = null) {
       const finish = cloudSync.beginVaultWrite();
       try {
         const db = await this.getDB();
+        if (canSave && !canSave()) throw new Error('Vault changed before sync transaction');
         return new Promise((resolve, reject) => {
           const tx = db.transaction(this.storeName, 'readwrite');
           const store = tx.objectStore(this.storeName);
@@ -1216,7 +1525,8 @@
           'tasks', 'categories', 'wishlist', 'photos', 'notes', 'ledgerFiles',
           'vacations', 'sites', 'siteFolders', 'healthNotes', 'healthFolders',
           'hobbyNotes', 'hobbyFolders', 'vaultFolders', 'projects',
-          'aiStudyNotes', 'subscriptions', 'sidebarMenuOrder', 'deletedItemIds'
+          'aiStudyNotes', 'subscriptions', 'sidebarMenuOrder', 'deletedItemIds',
+          'treasures', 'ledgerBankStatements', 'ledgerCategoryRules'
         ];
         for (const field of arrayFields) {
           // Older snapshots may omit fields; present but unreadable lists must survive.
@@ -1229,7 +1539,8 @@
       this.deletedItemIds = new Set(Array.isArray(savedData?.deletedItemIds) ? savedData.deletedItemIds : []);
       this.syncRevision = Number(savedData?.syncRevision) || 0;
 
-      const userTasks = (savedData && Array.isArray(savedData.tasks)) ? savedData.tasks : [];
+      // Startup category defaults must not mutate the parsed user originals.
+      const userTasks = (savedData && Array.isArray(savedData.tasks)) ? LocalSyncProtocol.clone(savedData.tasks) : [];
       const userWishlist = (savedData && Array.isArray(savedData.wishlist)) ? savedData.wishlist : [];
       const userPhotos = (savedData && Array.isArray(savedData.photos)) ? savedData.photos : [];
       const userNotes = (savedData && Array.isArray(savedData.notes)) ? savedData.notes : [];
@@ -1238,12 +1549,12 @@
       const userVacations = (savedData && Array.isArray(savedData.vacations)) ? savedData.vacations : [];
       const userTotalVacationDays = (savedData && typeof savedData.totalVacationDays === 'number') ? savedData.totalVacationDays : 15.0;
       const userSites = (savedData && Array.isArray(savedData.sites)) ? savedData.sites : [];
-      let userSiteFolders = (savedData && Array.isArray(savedData.siteFolders)) ? savedData.siteFolders : DEFAULT_SITE_FOLDERS.slice();
+      let userSiteFolders = (savedData && Array.isArray(savedData.siteFolders)) ? LocalSyncProtocol.clone(savedData.siteFolders) : DEFAULT_SITE_FOLDERS.slice();
       const userHealthNotes = (savedData && Array.isArray(savedData.healthNotes)) ? savedData.healthNotes : [];
-      let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? savedData.healthFolders : DEFAULT_HEALTH_FOLDERS.slice();
+      let userHealthFolders = (savedData && Array.isArray(savedData.healthFolders)) ? LocalSyncProtocol.clone(savedData.healthFolders) : DEFAULT_HEALTH_FOLDERS.slice();
       const userHobbyNotes = (savedData && Array.isArray(savedData.hobbyNotes)) ? savedData.hobbyNotes : [];
-      let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? savedData.hobbyFolders : DEFAULT_HOBBY_FOLDERS.slice();
-      let userVaultFolders = (savedData && Array.isArray(savedData.vaultFolders)) ? savedData.vaultFolders : DEFAULT_VAULT_FOLDERS.slice();
+      let userHobbyFolders = (savedData && Array.isArray(savedData.hobbyFolders)) ? LocalSyncProtocol.clone(savedData.hobbyFolders) : DEFAULT_HOBBY_FOLDERS.slice();
+      let userVaultFolders = (savedData && Array.isArray(savedData.vaultFolders)) ? LocalSyncProtocol.clone(savedData.vaultFolders) : DEFAULT_VAULT_FOLDERS.slice();
       const userProjects = (savedData && Array.isArray(savedData.projects)) ? savedData.projects : JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
       const userAiStudyNotes = (savedData && Array.isArray(savedData.aiStudyNotes)) ? savedData.aiStudyNotes : [];
       const userSidebarOrder = (savedData && Array.isArray(savedData.sidebarMenuOrder)) ? savedData.sidebarMenuOrder : null;
@@ -1503,6 +1814,14 @@
         }
       }
       this._lastLocalRaw = raw;
+      // Defaults rendered for missing legacy fields are placeholders, not edits.
+      // Only an actual change to those values enters the central outbox.
+      this._legacyPlaceholders = {};
+      if (savedData) for (const field of LocalSyncProtocol.fields) {
+        if (!Object.hasOwn(savedData,field) && this[field] !== undefined) {
+          this._legacyPlaceholders[field] = JSON.stringify(field === 'deletedItemIds' ? Array.from(this.deletedItemIds) : this[field]);
+        }
+      }
       this._committedData = savedData ? LocalSyncProtocol.clone(savedData) : this.buildLocalData();
       this.localSyncInvalid = savedData && Object.hasOwn(savedData,'localSync') && !LocalSyncProtocol.valid(savedData.localSync);
       this.localSync = this.localSyncInvalid ? savedData.localSync : savedData?.localSync || LocalSyncProtocol.empty();
@@ -1531,6 +1850,8 @@
       const data = {...(this._committedData || {})};
       delete data.localSync;
       for (const field of LocalSyncProtocol.fields) {
+        if (!Object.hasOwn(data,field) && this._legacyPlaceholders && Object.hasOwn(this._legacyPlaceholders,field) &&
+            JSON.stringify(field === 'deletedItemIds' ? Array.from(this.deletedItemIds || []) : this[field]) === this._legacyPlaceholders[field]) continue;
         // Missing legacy ledger defaults are display placeholders, not edits.
         if (field === 'honeymoonData' && this._committedData &&
             !Object.hasOwn(this._committedData, field) &&
@@ -1660,6 +1981,25 @@
       if (!this.saveLocalOnly(nowTs,nextRev)) return false;
       cloudSync.pushTasksToCloud(immediate);
       return true;
+    }
+
+    commitSyncedCollection(field, rows) {
+      if (!['treasures','ledgerBankStatements','ledgerCategoryRules'].includes(field)) return false;
+      try {
+        const next = this.buildLocalData();
+        const before = next[field] || LocalSyncProtocol.legacyRows(field,
+          JSON.parse(localStorage.getItem(LocalSyncProtocol.legacyKeys[field]) || '[]'));
+        next[field] = LocalSyncProtocol.legacyRows(field,rows);
+        const kept = new Set(next[field].map(row => row.id));
+        next.deletedItemIds = [...new Set([...(next.deletedItemIds || []),...before.filter(row => !kept.has(row.id)).map(row => row.id)])];
+        next.updatedAt = Math.max(Date.now(),(this.lastUpdatedAt || 0)+1);
+        next.syncRevision = (this.syncRevision || 0)+1;
+        const meta = LocalSyncProtocol.track(this._committedData,next,this.localSync);
+        if (!this.commitLocal(next,meta)) return false;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud();
+        return true;
+      } catch { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
     }
 
     commitMemo(collection, item, immediate = false) {
@@ -1896,7 +2236,29 @@
     }
 
     // --- Vacation Manager Methods ---
+    canEditVacations() {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return false; }
+      return true;
+    }
+
+    commitVacationChanges(changes, immediate = false) {
+      if (!this.canEditVacations()) return false;
+      try {
+        // Confirm data and its outbox together before publishing any changed rows.
+        const data = {...this.buildLocalData(), ...changes};
+        data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+        data.syncRevision = (this.syncRevision || 0) + 1;
+        const meta = LocalSyncProtocol.track(this._committedData || {}, data, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data, meta)) return false;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud(immediate);
+        return true;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
+    }
+
     addVacation(data) {
+      if (!this.canEditVacations()) return null;
       const type = data.type || 'full';
       let amount = 1.0;
       if (type === 'half-am' || type === 'half-pm') amount = 0.5;
@@ -1910,13 +2272,13 @@
         reason: (data.reason || '').trim(),
         createdAt: Date.now()
       };
-      this.vacations.unshift(newVacation);
-      this.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save();
-      return newVacation;
+      const vacations = [newVacation, ...this.vacations]
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitVacationChanges({vacations}) ? newVacation : null;
     }
 
     updateVacation(id, data) {
+      if (!this.canEditVacations()) return null;
       const vac = this.vacations.find(v => v.id === id);
       if (!vac) return null;
       const type = data.type || vac.type || 'full';
@@ -1924,35 +2286,41 @@
       if (type === 'half-am' || type === 'half-pm') amount = 0.5;
       else if (type === 'holiday') amount = 0.0;
 
-      vac.type = type;
-      vac.amount = amount;
-      if (data.date) vac.date = data.date;
-      if (data.reason !== undefined) vac.reason = (data.reason || '').trim();
-      vac.updatedAt = Date.now();
-      this.vacations.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save();
-      return vac;
+      const updated = {...vac, type, amount, updatedAt:Date.now()};
+      if (data.date) updated.date = data.date;
+      if (data.reason !== undefined) updated.reason = (data.reason || '').trim();
+      const vacations = this.vacations.map(v => v.id === id ? updated : v)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitVacationChanges({vacations}) ? updated : null;
     }
 
     deleteVacation(id) {
+      if (!this.canEditVacations()) return false;
       if (!id) return false;
       const targetId = String(id).trim();
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      this.deletedItemIds.add(targetId);
-      const idx = this.vacations.findIndex(v => v && String(v.id).trim() === targetId);
-      if (idx !== -1) this.vacations.splice(idx, 1);
-      this.save(true);
-      return true;
+      return this.commitVacationChanges({
+        vacations:this.vacations.filter(v => !v || String(v.id).trim() !== targetId),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), targetId])]
+      }, true);
     }
 
     setTotalVacationDays(days) {
-      this.totalVacationDays = Math.max(0, Number(days) || 0);
-      this.save(true);
-      return this.totalVacationDays;
+      if (!this.canEditVacations()) return null;
+      const total = Number(days);
+      if (days === null || days === undefined || String(days).trim() === '' || !Number.isFinite(total) || total < 0) return null;
+      // Zero is a successful value; callers must check null, not truthiness.
+      return this.commitVacationChanges({totalVacationDays:total}, true) ? total : null;
+    }
+
+    getVacationAmount(vacation) {
+      if (vacation.type === 'holiday' || vacation.amount === 0) return 0;
+      return Number.isFinite(vacation.amount) ? vacation.amount : (vacation.type === 'full' ? 1.0 : 0.5);
     }
 
     getVacationStats() {
-      const total = Number(this.totalVacationDays) || 15.0;
+      const value = this.totalVacationDays;
+      const total = value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
+        ? Number(value) : 15.0;
       let used = 0;
       let holidayCount = 0;
       this.vacations.forEach(v => {
@@ -1960,7 +2328,7 @@
           holidayCount += 1;
           return;
         }
-        used += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
+        used += this.getVacationAmount(v);
       });
       const remain = Math.max(0, total - used);
       const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
@@ -1968,7 +2336,30 @@
     }
 
     // --- Sites / Bookmarks & Folders Methods ---
+    canEditSites() {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return false; }
+      return true;
+    }
+
+    commitSiteChanges(changes, immediate = false) {
+      if (!this.canEditSites()) return false;
+      // A folder deletion and its site moves are one candidate, never partially
+      // published to Store. Reuse the central local commit/outbox/sync pipeline.
+      const data = {...this.buildLocalData(), ...changes};
+      data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+      data.syncRevision = (this.syncRevision || 0) + 1;
+      try {
+        const meta = LocalSyncProtocol.track(this._committedData || {}, data, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data, meta)) return false;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud(immediate);
+        return true;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
+    }
+
     addSite(data) {
+      if (!this.canEditSites()) return null;
       let rawUrl = (data.url || '').trim();
       if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
         rawUrl = 'https://' + rawUrl;
@@ -1981,14 +2372,14 @@
         folder: data.folder || (this.activeSiteFolder !== 'all' ? this.activeSiteFolder : 'portal'),
         createdAt: Date.now()
       };
-      this.sites.unshift(newSite);
-      this.save();
-      return newSite;
+      return this.commitSiteChanges({sites:[newSite, ...this.sites]}) ? newSite : null;
     }
 
     updateSite(id, updates) {
+      if (!this.canEditSites()) return null;
       const site = this.sites.find(s => s.id === id);
       if (!site) return null;
+      updates = {...updates};
       if (updates.url) {
         let rawUrl = (updates.url || '').trim();
         if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
@@ -1996,23 +2387,22 @@
         }
         updates.url = rawUrl;
       }
-      Object.assign(site, updates, { updatedAt: Date.now() });
-      this.save();
-      return site;
+      const updated = {...site, ...updates, updatedAt: Date.now()};
+      return this.commitSiteChanges({sites:this.sites.map(s => s.id === id ? updated : s)}) ? updated : null;
     }
 
     deleteSite(id) {
+      if (!this.canEditSites()) return false;
       if (!id) return false;
       const targetId = String(id).trim();
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      this.deletedItemIds.add(targetId);
-      const idx = this.sites.findIndex(s => s && String(s.id).trim() === targetId);
-      if (idx !== -1) this.sites.splice(idx, 1);
-      this.save(true);
-      return true;
+      return this.commitSiteChanges({
+        sites:this.sites.filter(s => !s || String(s.id).trim() !== targetId),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), targetId])]
+      }, true);
     }
 
     addSiteFolder(name, icon = '📁') {
+      if (!this.canEditSites()) return null;
       const cleanName = (name || '').trim();
       if (!cleanName) return null;
       const folderId = 'sfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
@@ -2021,40 +2411,81 @@
         name: cleanName,
         icon: icon || '📁'
       };
-      this.siteFolders.push(newFolder);
-      this.save(true);
-      return newFolder;
+      return this.commitSiteChanges({siteFolders:[...this.siteFolders, newFolder]}, true) ? newFolder : null;
     }
 
     updateSiteFolder(id, updates) {
+      if (!this.canEditSites()) return null;
       const folder = this.siteFolders.find(f => f.id === id);
       if (!folder) return null;
-      if (updates.name) folder.name = updates.name.trim();
-      if (updates.icon) folder.icon = updates.icon;
-      this.save(true);
-      return folder;
+      const updated = {...folder};
+      if (updates.name) updated.name = updates.name.trim();
+      if (updates.icon) updated.icon = updates.icon;
+      return this.commitSiteChanges({siteFolders:this.siteFolders.map(f => f.id === id ? updated : f)}, true) ? updated : null;
     }
 
     deleteSiteFolder(id) {
+      if (!this.canEditSites()) return false;
+      // 'all' is navigation; 'portal' is the destination for displaced sites.
+      if (id === 'all' || id === 'portal') return false;
       const idx = this.siteFolders.findIndex(f => f.id === id);
       if (idx === -1) return false;
-      this.siteFolders.splice(idx, 1);
-      // Migrate any sites in this deleted folder to 'portal' so zero sites are lost
-      this.sites.forEach(site => {
-        if (site.folder === id) {
-          site.folder = 'portal';
-        }
-      });
+      const folders = this.siteFolders.filter(f => f.id !== id);
+      // Legacy data may have deleted the destination. Restore it only as part
+      // of this explicit user edit, never while rendering or reading storage.
+      if (!folders.some(f => f.id === 'portal')) folders.push({...DEFAULT_SITE_FOLDERS.find(f => f.id === 'portal')});
+      if (!this.commitSiteChanges({siteFolders:folders,
+        sites:this.sites.map(site => site.folder === id ? {...site, folder:'portal'} : site),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), 'site-folder:' + id])]
+      }, true)) return false;
       if (this.activeSiteFolder === id) this.activeSiteFolder = 'all';
-      this.save(true);
       return true;
     }
 
     // --- Health Manager Methods ---
+    canEditHealth() {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return false; }
+      return true;
+    }
+
+    commitHealthChanges(changes, immediate = false) {
+      if (!this.canEditHealth()) return false;
+      try {
+        // Publish records, folder changes and deletion markers only after the
+        // central commit has durably stored and read back the same outbox.
+        const data = {...this.buildLocalData(), ...changes};
+        data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+        data.syncRevision = (this.syncRevision || 0) + 1;
+        const meta = LocalSyncProtocol.track(this._committedData || {}, data, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data, meta)) return false;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud(immediate);
+        return true;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
+    }
+
+    isHealthDestination(id) {
+      return !!id && id !== 'all' && this.healthFolders.some(f => f.id === id);
+    }
+
+    getVisibleHealthNotes() {
+      const active = this.activeHealthFolder || 'all';
+      return active === 'all' || !this.healthFolders.some(f => f.id === active)
+        ? this.healthNotes : this.healthNotes.filter(n => n.folder === active);
+    }
+
+    getSelectedVisibleHealthIds() {
+      return this.getVisibleHealthNotes().filter(n => this.selectedHealthNotes?.has(n.id)).map(n => n.id);
+    }
+
     addHealthNote(data) {
+      if (!this.canEditHealth()) return null;
+      const folder = data.folder || 'general';
+      if (!this.isHealthDestination(folder)) return null;
       const newNote = {
         id: 'hnote-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        folder: data.folder || 'general',
+        folder,
         title: (data.title || '').trim(),
         date: data.date || getRealTodayStr(),
         hospital: (data.hospital || '').trim(),
@@ -2067,73 +2498,115 @@
         fileMemo: (data.fileMemo || '').trim(),
         createdAt: Date.now()
       };
-      this.healthNotes.unshift(newNote);
-      this.healthNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save();
-      return newNote;
+      const healthNotes = [newNote, ...this.healthNotes]
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitHealthChanges({healthNotes}) ? newNote : null;
     }
 
     updateHealthNote(id, updates) {
+      if (!this.canEditHealth()) return null;
       const note = this.healthNotes.find(n => n.id === id);
       if (!note) return null;
-      Object.assign(note, updates, { updatedAt: Date.now() });
-      this.healthNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save();
-      return note;
+      // Legacy orphan records remain editable in their original folder. A
+      // new destination must still exist at the moment of saving.
+      if (Object.hasOwn(updates, 'folder') && updates.folder !== note.folder && !this.isHealthDestination(updates.folder)) return null;
+      const updated = {...note, ...updates, id:note.id, updatedAt:Date.now()};
+      const healthNotes = this.healthNotes.map(n => n.id === id ? updated : n)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitHealthChanges({healthNotes}) ? updated : null;
     }
 
     deleteHealthNote(id) {
-      if (!id) return false;
-      const targetId = String(id).trim();
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      this.deletedItemIds.add(targetId);
-      const idx = this.healthNotes.findIndex(n => n && String(n.id).trim() === targetId);
-      if (idx !== -1) this.healthNotes.splice(idx, 1);
-      this.save(true);
-      return true;
+      if (!this.canEditHealth() || !id) return false;
+      return this.deleteHealthNotesBatch([String(id).trim()]) === 1;
     }
 
     addHealthFolder(name, icon = '🩺') {
+      if (!this.canEditHealth()) return null;
       const cleanName = (name || '').trim();
       if (!cleanName) return null;
-      const folderId = 'folder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
       const newFolder = {
-        id: folderId,
-        name: cleanName,
-        icon: icon || '🩺'
+        id: 'folder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        name:cleanName, icon:icon || '🩺'
       };
-      this.healthFolders.push(newFolder);
-      this.save(true);
-      return newFolder;
+      return this.commitHealthChanges({healthFolders:[...this.healthFolders, newFolder]}, true) ? newFolder : null;
     }
 
     updateHealthFolder(id, updates) {
+      if (!this.canEditHealth()) return null;
       const folder = this.healthFolders.find(f => f.id === id);
       if (!folder) return null;
-      if (updates.name) folder.name = updates.name.trim();
-      if (updates.icon) folder.icon = updates.icon;
-      this.save(true);
-      return folder;
+      const updated = {...folder};
+      if (updates.name) updated.name = updates.name.trim();
+      if (updates.icon) updated.icon = updates.icon;
+      return this.commitHealthChanges({healthFolders:this.healthFolders.map(f => f.id === id ? updated : f)}, true) ? updated : null;
     }
 
     deleteHealthFolder(id) {
-      const idx = this.healthFolders.findIndex(f => f.id === id);
-      if (idx === -1) return false;
-      this.healthFolders.splice(idx, 1);
-      // Migrate any notes in this deleted folder to 'general'
-      this.healthNotes.forEach(note => {
-        if (note.folder === id) note.folder = 'general';
-      });
+      if (!this.canEditHealth()) return false;
+      // Protect navigation and the destination for displaced records.
+      if (['all','general'].includes(id)) return false;
+      if (!this.healthFolders.some(f => f.id === id)) return false;
+      const healthFolders = this.healthFolders.filter(f => f.id !== id);
+      // Restore the destination only in this explicit operation, never on read.
+      if (!healthFolders.some(f => f.id === 'general')) healthFolders.push({...DEFAULT_HEALTH_FOLDERS.find(f => f.id === 'general')});
+      if (!this.commitHealthChanges({healthFolders,
+        healthNotes:this.healthNotes.map(n => n.folder === id ? {...n, folder:'general', updatedAt:Date.now()} : n),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), 'health-folder:' + id])]
+      }, true)) return false;
       if (this.activeHealthFolder === id) this.activeHealthFolder = 'all';
-      this.save(true);
       return true;
     }
 
+    getHealthNoteFingerprint(id) {
+      const note = this.healthNotes.find(n => n.id === id);
+      return note ? LocalSyncProtocol.hash(note) : 'absent';
+    }
+
     // --- Hobby & Activity Journal Methods ---
+    canEditHobby() {
+      if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return false; }
+      return true;
+    }
+
+    commitHobbyChanges(changes) {
+      if (!this.canEditHobby()) return false;
+      try {
+        // Publish records, folder changes and deletion markers only after the
+        // central commit has durably stored and read back the same outbox.
+        const data = {...this.buildLocalData(), ...changes};
+        data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+        data.syncRevision = (this.syncRevision || 0) + 1;
+        const meta = LocalSyncProtocol.track(this._committedData || {}, data, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data, meta)) return false;
+        this.setSaveStatus('pending');
+        cloudSync.pushTasksToCloud(true);
+        return true;
+      } catch (e) { this.localWriteFailed = true; this.setSaveStatus('failed'); return false; }
+    }
+
+    isHobbyDestination(id) {
+      return !!id && id !== 'all' && this.hobbyFolders.some(f => f.id === id);
+    }
+
+    getVisibleHobbyNotes() {
+      const active = this.activeHobbyFolder || 'all';
+      return active === 'all' || !this.hobbyFolders.some(f => f.id === active)
+        ? this.hobbyNotes : this.hobbyNotes.filter(n => n.folder === active);
+    }
+
+    getSelectedVisibleHobbyIds() {
+      return this.getVisibleHobbyNotes().filter(n => this.selectedHobbyNotes?.has(n.id)).map(n => n.id);
+    }
+
     addHobbyNote(data) {
+      if (!this.canEditHobby()) return null;
+      const folder = data.folder || 'general';
+      if (!this.isHobbyDestination(folder)) return null;
       const newNote = {
         id: 'hnb-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        folder: data.folder || 'general',
+        folder,
         title: (data.title || '').trim(),
         date: data.date || getRealTodayStr(),
         place: (data.place || '').trim(),
@@ -2141,117 +2614,99 @@
         content: (data.content || '').trim(),
         createdAt: Date.now()
       };
-      this.hobbyNotes.unshift(newNote);
-      this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save(true);
-      return newNote;
+      const hobbyNotes = [newNote, ...this.hobbyNotes]
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitHobbyChanges({hobbyNotes}) ? newNote : null;
     }
 
     updateHobbyNote(id, updates) {
+      if (!this.canEditHobby()) return null;
       const note = this.hobbyNotes.find(n => n.id === id);
       if (!note) return null;
-      Object.assign(note, updates, { updatedAt: Date.now() });
-      this.hobbyNotes.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-      this.save(true);
-      return note;
+      // Legacy orphan records remain editable in their original folder. A
+      // new destination must still exist at the moment of saving.
+      if (Object.hasOwn(updates, 'folder') && updates.folder !== note.folder && !this.isHobbyDestination(updates.folder)) return null;
+      const updated = {...note, ...updates, id:note.id, updatedAt:Date.now()};
+      const hobbyNotes = this.hobbyNotes.map(n => n.id === id ? updated : n)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      return this.commitHobbyChanges({hobbyNotes}) ? updated : null;
     }
 
     deleteHobbyNote(id) {
-      if (!id) return false;
-      const targetId = String(id).trim();
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      this.deletedItemIds.add(targetId);
-      const idx = this.hobbyNotes.findIndex(n => n && String(n.id).trim() === targetId);
-      if (idx !== -1) this.hobbyNotes.splice(idx, 1);
-      this.save(true);
-      return true;
+      if (!this.canEditHobby() || !id) return false;
+      return this.deleteHobbyNotesBatch([String(id).trim()]) === 1;
     }
 
     addHobbyFolder(name, icon = '🎨') {
+      if (!this.canEditHobby()) return null;
       const cleanName = (name || '').trim();
       if (!cleanName) return null;
-      const folderId = 'hfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
       const newFolder = {
-        id: folderId,
-        name: cleanName,
-        icon: icon || '🎨'
+        id: 'hfolder-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        name:cleanName, icon:icon || '🎨'
       };
-      this.hobbyFolders.push(newFolder);
-      this.save(true);
-      return newFolder;
+      return this.commitHobbyChanges({hobbyFolders:[...this.hobbyFolders, newFolder]}) ? newFolder : null;
     }
 
     updateHobbyFolder(id, updates) {
+      if (!this.canEditHobby()) return null;
       const folder = this.hobbyFolders.find(f => f.id === id);
       if (!folder) return null;
-      if (updates.name) folder.name = updates.name.trim();
-      if (updates.icon) folder.icon = updates.icon;
-      this.save(true);
-      return folder;
+      const updated = {...folder};
+      if (updates.name) updated.name = updates.name.trim();
+      if (updates.icon) updated.icon = updates.icon;
+      return this.commitHobbyChanges({hobbyFolders:this.hobbyFolders.map(f => f.id === id ? updated : f)}) ? updated : null;
     }
 
     deleteHobbyFolder(id) {
-      const idx = this.hobbyFolders.findIndex(f => f.id === id);
-      if (idx === -1) return false;
-      this.hobbyFolders.splice(idx, 1);
-      // Migrate any notes in this deleted folder to 'general'
-      this.hobbyNotes.forEach(note => {
-        if (note.folder === id) note.folder = 'general';
-      });
+      if (!this.canEditHobby()) return false;
+      // Preserve the existing effective modal policy for default folders.
+      if (['all','general','workout','piano','drawing','reading'].includes(id)) return false;
+      if (!this.hobbyFolders.some(f => f.id === id)) return false;
+      const hobbyFolders = this.hobbyFolders.filter(f => f.id !== id);
+      // Restore the destination only in this explicit operation, never on read.
+      if (!hobbyFolders.some(f => f.id === 'general')) hobbyFolders.push({...DEFAULT_HOBBY_FOLDERS.find(f => f.id === 'general')});
+      if (!this.commitHobbyChanges({hobbyFolders,
+        hobbyNotes:this.hobbyNotes.map(n => n.folder === id ? {...n, folder:'general', updatedAt:Date.now()} : n),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), 'hobby-folder:' + id])]
+      })) return false;
       if (this.activeHobbyFolder === id) this.activeHobbyFolder = 'all';
-      this.save(true);
       return true;
     }
 
     // --- Batch Move & Delete for Health & Hobby Notes ---
     moveHealthNotesToFolder(noteIds, targetFolder) {
-      if (!Array.isArray(noteIds) || !noteIds.length || !targetFolder) return 0;
-      let count = 0;
-      this.healthNotes.forEach(n => {
-        if (noteIds.includes(n.id)) {
-          n.folder = targetFolder;
-          n.updatedAt = Date.now();
-          count++;
-        }
-      });
-      this.save(true);
-      return count;
+      if (!this.canEditHealth() || !Array.isArray(noteIds) || !noteIds.length || !this.isHealthDestination(targetFolder)) return 0;
+      const ids = new Set(noteIds);
+      if ([...ids].some(id => !this.healthNotes.some(n => n.id === id))) return 0;
+      const healthNotes = this.healthNotes.map(n => ids.has(n.id) ? {...n, folder:targetFolder, updatedAt:Date.now()} : n);
+      return this.commitHealthChanges({healthNotes}, true) ? ids.size : 0;
     }
 
     deleteHealthNotesBatch(noteIds) {
-      if (!Array.isArray(noteIds) || !noteIds.length) return 0;
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      noteIds.forEach(id => this.deletedItemIds.add(String(id).trim()));
-      const initialLen = this.healthNotes.length;
-      this.healthNotes = this.healthNotes.filter(n => !noteIds.includes(n.id));
-      const deletedCount = initialLen - this.healthNotes.length;
-      this.save(true);
-      return deletedCount;
+      if (!this.canEditHealth() || !Array.isArray(noteIds) || !noteIds.length) return 0;
+      const ids = new Set(noteIds);
+      if ([...ids].some(id => !this.healthNotes.some(n => n.id === id))) return 0;
+      return this.commitHealthChanges({healthNotes:this.healthNotes.filter(n => !ids.has(n.id)),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), ...ids])]
+      }, true) ? ids.size : 0;
     }
 
     moveHobbyNotesToFolder(noteIds, targetFolder) {
-      if (!Array.isArray(noteIds) || !noteIds.length || !targetFolder) return 0;
-      let count = 0;
-      this.hobbyNotes.forEach(n => {
-        if (noteIds.includes(n.id)) {
-          n.folder = targetFolder;
-          n.updatedAt = Date.now();
-          count++;
-        }
-      });
-      this.save(true);
-      return count;
+      if (!this.canEditHobby() || !Array.isArray(noteIds) || !noteIds.length || !this.isHobbyDestination(targetFolder)) return 0;
+      const ids = new Set(noteIds);
+      if ([...ids].some(id => !this.hobbyNotes.some(n => n.id === id))) return 0;
+      const hobbyNotes = this.hobbyNotes.map(n => ids.has(n.id) ? {...n, folder:targetFolder, updatedAt:Date.now()} : n);
+      return this.commitHobbyChanges({hobbyNotes}) ? ids.size : 0;
     }
 
     deleteHobbyNotesBatch(noteIds) {
-      if (!Array.isArray(noteIds) || !noteIds.length) return 0;
-      if (!this.deletedItemIds) this.deletedItemIds = new Set();
-      noteIds.forEach(id => this.deletedItemIds.add(String(id).trim()));
-      const initialLen = this.hobbyNotes.length;
-      this.hobbyNotes = this.hobbyNotes.filter(n => !noteIds.includes(n.id));
-      const deletedCount = initialLen - this.hobbyNotes.length;
-      this.save(true);
-      return deletedCount;
+      if (!this.canEditHobby() || !Array.isArray(noteIds) || !noteIds.length) return 0;
+      const ids = new Set(noteIds);
+      if ([...ids].some(id => !this.hobbyNotes.some(n => n.id === id))) return 0;
+      return this.commitHobbyChanges({hobbyNotes:this.hobbyNotes.filter(n => !ids.has(n.id)),
+        deletedItemIds:[...new Set([...(this.deletedItemIds || []), ...ids])]
+      }) ? ids.size : 0;
     }
 
     // --- AI Study & Knowledge Hub Methods ---
@@ -2934,7 +3389,7 @@
         const pct = Math.min(100, Math.max(1.5, (totalMB / maxQuotaMB) * 100));
 
         if (cloudDot) {
-          cloudDot.textContent = isLogged ? '🟢 실시간' : '⚪ 로컬 보관';
+          cloudDot.textContent = !isLogged ? '⚪ 로컬 보관' : store.saveStatus === 'confirmed' ? '🟢 동기화 완료' : '🟠 동기화 확인 필요';
           cloudDot.style.color = isLogged ? '#10b981' : 'var(--text-muted)';
           cloudDot.style.background = isLogged ? 'rgba(16,185,129,0.12)' : 'rgba(0,0,0,0.05)';
         }
@@ -2945,7 +3400,7 @@
           cloudProgressBar.style.width = `${pct}%`;
         }
         if (cloudStatusMsg) {
-          cloudStatusMsg.textContent = isLogged ? `키: ${cloudSync.spaceId} 연동 중 🛡️` : '동기화 미연결 (로컬 저장)';
+          cloudStatusMsg.textContent = isLogged ? store.saveMessage : '동기화 미연결 (로컬 저장)';
         }
       } catch (e) {}
 
@@ -3593,7 +4048,7 @@
       (store.vacations || []).forEach(v => {
         if (v.date && v.date.startsWith(currentMonthPrefix)) {
           if (v.type === 'holiday' || v.amount === 0) return; // 휴가는 제외
-          monthVacationDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
+          monthVacationDays += store.getVacationAmount(v);
         }
       });
 
@@ -3652,14 +4107,15 @@
         }
 
         daysVacations.forEach(v => {
-          dayTotalScore += (v.amount || (v.type === 'full' ? 1.0 : 0.5));
+          dayTotalScore += store.getVacationAmount(v);
           const isFull = (v.type === 'full');
           const isAm = (v.type === 'half-am');
-          const vLabel = isFull ? '🌴 연차 (1.0)' : (isAm ? '🌅 오전반차 (0.5)' : '🌇 오후반차 (0.5)');
-          const vClass = isFull ? 'vacation' : 'half-off';
+          const isHoliday = v.type === 'holiday' || v.amount === 0;
+          const vLabel = isHoliday ? '🏖️ 휴가 (0일)' : (isFull ? '🌴 연차 (1.0)' : (isAm ? '🌅 오전반차 (0.5)' : '🌇 오후반차 (0.5)'));
+          const vClass = isFull || isHoliday ? 'vacation' : 'half-off';
           taskChipsHTML += `
             <div class="cal-task-chip ${vClass}" title="${vLabel} ${v.reason ? '- ' + escapeHTML(v.reason) : ''}" data-date="${dateStr}">
-              <span class="cal-chip-icon">${isFull ? '🌴' : '🌿'}</span>
+              <span class="cal-chip-icon">${isHoliday ? '🏖️' : (isFull ? '🌴' : '🌿')}</span>
               <span class="cal-chip-text">${vLabel}</span>
             </div>
           `;
@@ -3757,8 +4213,9 @@
         vacBannerHTML = vacationsForDate.map(v => {
           const isFull = (v.type === 'full');
           const isAm = (v.type === 'half-am');
-          const badgeClass = isFull ? 'full' : (isAm ? 'half-am' : 'half-pm');
-          const badgeLabel = isFull ? '🌴 연차 (1.0일 사용)' : (isAm ? '🌅 오전 반차 (0.5일 사용)' : '🌇 오후 반차 (0.5일 사용)');
+          const isHoliday = v.type === 'holiday' || v.amount === 0;
+          const badgeClass = isHoliday ? 'badge-vacation-holiday' : (isFull ? 'full' : (isAm ? 'half-am' : 'half-pm'));
+          const badgeLabel = isHoliday ? '🏖️ 휴가 (0일 / 개인 확인용)' : (isFull ? '🌴 연차 (1.0일 사용)' : (isAm ? '🌅 오전 반차 (0.5일 사용)' : '🌇 오후 반차 (0.5일 사용)'));
           return `
             <div class="vacation-item-card" style="margin-bottom: 0.5rem; background: linear-gradient(135deg, rgba(255, 243, 191, 0.4), rgba(255, 212, 59, 0.15)); border: 1px solid rgba(250, 176, 5, 0.35);">
               <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -4054,18 +4511,7 @@
     },
 
     getLedgerDisplayData() {
-      const local = store.honeymoonData || INITIAL_HONEYMOON_DATA;
-      // Old clients could persist the empty template as a pending edit. Keep
-      // that original/outbox intact and only preview the preserved server copy.
-      const emptyTemplate = Object.keys(local).length === 0 ||
-        JSON.stringify(local) === JSON.stringify(INITIAL_HONEYMOON_DATA);
-      const conflict = store.localSync?.conflicts?.find(c => c?.key === '["honeymoonData",null]');
-      const remote = conflict?.remote;
-      if (!store.localSyncInvalid && emptyTemplate && remote && typeof remote === 'object' &&
-          !Array.isArray(remote) && this.getLedgerAvailableMonths(remote).length) {
-        return {data: remote, serverPreview: true};
-      }
-      return {data: local, serverPreview: false};
+      return {data: store.honeymoonData || INITIAL_HONEYMOON_DATA};
     },
 
     renderLedger() {
@@ -4101,11 +4547,11 @@
 
       if (budgetTabPanel) budgetTabPanel.style.display = 'flex';
       if (subsTabPanel) subsTabPanel.style.display = 'none';
-      if (openLedgerBtn) openLedgerBtn.style.display = 'inline-flex';
+      if (openLedgerBtn) openLedgerBtn.style.display = LocalSyncProtocol.clientKind() === 'mobile' ? 'none' : 'inline-flex';
       if (openSubBtn) openSubBtn.style.display = 'none';
 
       // Viewing a device must never recalculate synced totals from its local-only bank files.
-      const {data, serverPreview} = this.getLedgerDisplayData();
+      const {data} = this.getLedgerDisplayData();
       const availableMonths = this.getLedgerAvailableMonths(data);
       if (!this.ledgerMonthInitialized && availableMonths.length) {
         if (!availableMonths.includes(store.selectedLedgerMonth)) {
@@ -4119,7 +4565,7 @@
         monthStatus.textContent = availableMonths.includes(targetMonth) ? '' : availableMonths.length
           ? `${targetMonth}월에는 저장된 내역이 없습니다. 내역이 있는 월: ${availableMonths.join(', ')}월. 아래 월 버튼으로 선택해 주세요.`
           : '동기화된 월별 가계부 내역이 아직 없습니다. PC의 저장 상태와 상단 동기화 상태를 확인해 주세요.';
-        if (serverPreview) monthStatus.textContent = '충돌로 보존된 서버 금액을 표시합니다. 이 기기의 원본·미전송 기록은 유지됩니다. ' + monthStatus.textContent;
+        if (LocalSyncProtocol.clientKind() === 'mobile') monthStatus.textContent = '가계부 금액은 PC 웹 기준으로 자동 동기화됩니다. ' + monthStatus.textContent;
         monthStatus.hidden = !monthStatus.textContent;
       }
       const mData = data[targetMonth] || { income: { total: 0, items: [] }, fixed: { total: 0, items: [] }, variable: { total: 0, items: [] } };
@@ -5294,244 +5740,7 @@
     // =========================================================================
     // 🏖️ Vacation Manager (연차관리)
     // =========================================================================
-    renderVacation() {
-      const stats = store.getVacationStats();
-      const totalEl = document.getElementById('vacation-stat-total');
-      const usedEl = document.getElementById('vacation-stat-used');
-      const remainEl = document.getElementById('vacation-stat-remain');
-      const holidayEl = document.getElementById('vacation-stat-holiday');
-      const barEl = document.getElementById('vacation-progress-bar');
-      const textEl = document.getElementById('vacation-progress-text');
-      const listEl = document.getElementById('vacation-history-list');
-      const emptyEl = document.getElementById('vacation-empty-state');
-      const countEl = document.getElementById('vacation-history-count');
-      const yearSelect = document.getElementById('vacation-filter-year');
-
-      if (totalEl) totalEl.innerHTML = `${stats.total.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
-      if (usedEl) usedEl.innerHTML = `${stats.used.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
-      if (remainEl) remainEl.innerHTML = `${stats.remain.toFixed(1)}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">일</span>`;
-      if (holidayEl) holidayEl.innerHTML = `${stats.holidayCount}<span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted); margin-left: 2px;">건</span>`;
-      if (barEl) barEl.style.width = `${stats.pct}%`;
-      if (textEl) textEl.textContent = `${stats.pct}% (${stats.used.toFixed(1)}일 / ${stats.total.toFixed(1)}일) 사용 완료`;
-
-      // 1. Current Selected Filters (이번 달 기본 선택 & 통계 카드 필터)
-      const currentSelectedYear = store.selectedVacationYear || '2026';
-      const currentSelectedMonth = store.selectedVacationMonth || String(new Date().getMonth() + 1);
-      const currentTypeFilter = store.vacationTypeFilter || 'all';
-
-      // Update Active State of Top 4 Stat Boxes
-      document.querySelectorAll('.clickable-vstat-box').forEach(box => {
-        const f = box.dataset.vtypeFilter;
-        if (f === currentTypeFilter || (currentTypeFilter === 'all' && f === 'all')) {
-          box.classList.add('active');
-        } else {
-          box.classList.remove('active');
-        }
-      });
-
-      // 2. Populate Year Select Options dynamically from data
-      if (yearSelect) {
-        const yearsSet = new Set(['2026', '2025']);
-        (store.vacations || []).forEach(v => {
-          if (v.date) {
-            const y = v.date.split('-')[0];
-            if (y) yearsSet.add(y);
-          }
-        });
-        const sortedYears = Array.from(yearsSet).sort().reverse();
-        yearSelect.innerHTML = `<option value="all" ${currentSelectedYear === 'all' ? 'selected' : ''}>전체 년도</option>` + sortedYears.map(y => `<option value="${y}" ${y === currentSelectedYear ? 'selected' : ''}>${y}년</option>`).join('');
-      }
-
-      // 3. Update Month Pills Active Class
-      document.querySelectorAll('#vacation-month-pills .vac-m-pill').forEach(pill => {
-        if (pill.dataset.vMonth === currentSelectedMonth) {
-          pill.classList.add('active');
-        } else {
-          pill.classList.remove('active');
-        }
-      });
-
-      // 4. Filter Vacations by Year & Month
-      let periodFiltered = (store.vacations || []).slice();
-      if (currentSelectedYear !== 'all') {
-        periodFiltered = periodFiltered.filter(v => v.date && v.date.startsWith(currentSelectedYear));
-      }
-      if (currentSelectedMonth !== 'all') {
-        const mStr = String(currentSelectedMonth).padStart(2, '0');
-        periodFiltered = periodFiltered.filter(v => {
-          if (!v.date) return false;
-          const parts = v.date.split('-');
-          return parts[1] === mStr;
-        });
-      }
-
-      // Calculate period-wide stats before type filtering
-      let periodUsedDays = 0;
-      let periodHolidayCount = 0;
-      periodFiltered.forEach(v => {
-        if (v.type === 'holiday' || v.amount === 0) {
-          periodHolidayCount += 1;
-          return;
-        }
-        periodUsedDays += (typeof v.amount === 'number') ? v.amount : (v.type === 'full' ? 1.0 : 0.5);
-      });
-
-      // 5. Apply Top Stat Box Type Filter (총 발생연차 / 사용한 연차 / 휴가 사용)
-      let filtered = periodFiltered.slice();
-      let typeFilterLabel = '';
-      if (currentTypeFilter === 'used') {
-        filtered = filtered.filter(v => v.type === 'full' || v.type === 'half-am' || v.type === 'half-pm');
-        typeFilterLabel = ' [연차/반차만 보기]';
-      } else if (currentTypeFilter === 'holiday') {
-        // 사용자의 요구사항: 휴가사용(별도) 선택 시 전체 년도(모든 월 포함) 사용내역 모두 표시
-        filtered = (store.vacations || []).filter(v => v.type === 'holiday' || v.amount === 0);
-        typeFilterLabel = ' [전체 기간 휴가]';
-      }
-
-      // 6. 사용날짜(date) 최신순 자동 정렬 (등록일과 무관하게 사용날짜 순으로 정렬)
-      filtered.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
-
-      // Update Month Summary Banner (예: 8월 총 연차 2.0개 사용 / 휴가 1개 사용)
-      const sumPeriodTitleEl = document.getElementById('vac-summary-period-title');
-      const sumDetailsEl = document.getElementById('vac-summary-details');
-      const sumBadgeEl = document.getElementById('vac-summary-badge');
-
-      const periodLabel = currentSelectedMonth === 'all' 
-        ? `${currentSelectedYear === 'all' ? '전체' : currentSelectedYear + '년'}` 
-        : `${currentSelectedMonth}월`;
-
-      if (currentTypeFilter === 'holiday') {
-        if (sumPeriodTitleEl) sumPeriodTitleEl.textContent = '🏖️ 전체 기간(모든 년도/월) 휴가 현황:';
-        if (sumDetailsEl) sumDetailsEl.textContent = `총 휴가 ${filtered.length}개 사용 완료 (0일 차감 / 개인 일정)`;
-        if (sumBadgeEl) sumBadgeEl.textContent = `총 ${filtered.length}건`;
-        if (countEl) countEl.textContent = `전체 휴가 ${filtered.length}건 (0일 차감)`;
-      } else {
-        if (sumPeriodTitleEl) {
-          sumPeriodTitleEl.textContent = `🌸 ${periodLabel} 사용 현황${typeFilterLabel}:`;
-        }
-        if (sumDetailsEl) {
-          sumDetailsEl.textContent = `총 연차 ${periodUsedDays.toFixed(1)}개 사용 / 휴가 ${periodHolidayCount}개 사용`;
-        }
-        if (sumBadgeEl) {
-          sumBadgeEl.textContent = `총 ${filtered.length}건`;
-        }
-        if (countEl) {
-          const holidayNote = periodHolidayCount > 0 ? ` · 휴가 ${periodHolidayCount}건` : '';
-          countEl.textContent = `총 ${filtered.length}건 (연차 ${periodUsedDays.toFixed(1)}일${holidayNote})`;
-        }
-      }
-
-      if (!listEl) return;
-
-      if (filtered.length === 0) {
-        listEl.innerHTML = '';
-        if (emptyEl) emptyEl.style.display = 'flex';
-      } else {
-        if (emptyEl) emptyEl.style.display = 'none';
-        listEl.innerHTML = filtered.map(v => {
-          const isHoliday = (v.type === 'holiday');
-          const isFull = (v.type === 'full');
-          const isAm = (v.type === 'half-am');
-          
-          let badgeClass = 'half-pm';
-          let badgeLabel = '🌇 오후 반차 (0.5일)';
-          if (isHoliday) {
-            badgeClass = 'badge-vacation-holiday';
-            badgeLabel = '🏖️ 휴가 (0일 / 개인 확인용)';
-          } else if (isFull) {
-            badgeClass = 'full';
-            badgeLabel = '🌴 연차 (1.0일 차감)';
-          } else if (isAm) {
-            badgeClass = 'half-am';
-            badgeLabel = '🌅 오전 반차 (0.5일 차감)';
-          }
-
-          const dateStr = v.date ? v.date.replace(/-/g, '.') : '';
-
-          return `
-            <div class="vacation-item-card" data-vacation-id="${v.id}">
-              <div style="display: flex; align-items: center; gap: 0.85rem; flex: 1;">
-                <span class="vacation-type-badge ${badgeClass}">${badgeLabel}</span>
-                <div>
-                  <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
-                    <span>${dateStr}</span>
-                    ${v.reason ? `<span style="font-weight: 500; font-size: 0.85rem; color: var(--text-muted);">| ${escapeHTML(v.reason)}</span>` : ''}
-                  </div>
-                </div>
-              </div>
-              <div style="display: flex; align-items: center; gap: 0.35rem;">
-                <button type="button" class="task-action-btn edit-btn" data-action="edit-vacation" data-vacation-id="${v.id}" title="연차 기록 수정">
-                  ✏️
-                </button>
-                <button type="button" class="task-action-btn delete-btn" data-action="delete-vacation" data-vacation-id="${v.id}" title="연차 기록 삭제">
-                  🗑️
-                </button>
-              </div>
-            </div>
-          `;
-        }).join('');
-      }
-
-      this.renderSidebar();
-    },
-
-    openVacationModal(vacationId = null) {
-      const modal = document.getElementById('vacation-modal');
-      const form = document.getElementById('vacation-form');
-      const titleEl = document.getElementById('vacation-modal-title');
-      const hiddenId = document.getElementById('vacation-edit-id');
-      const typeSelect = document.getElementById('vacation-input-type');
-      const dateInput = document.getElementById('vacation-input-date');
-      const reasonInput = document.getElementById('vacation-input-reason');
-      const submitBtn = document.getElementById('btn-submit-vacation');
-      if (!modal || !form) return;
-      form.reset();
-
-      if (vacationId) {
-        const vac = (store.vacations || []).find(v => v.id === vacationId);
-        if (!vac) return;
-        if (titleEl) titleEl.textContent = '🏖️ 연차 / 반차 내역 수정 💖';
-        if (hiddenId) hiddenId.value = vac.id;
-        if (typeSelect) typeSelect.value = vac.type || 'full';
-        if (dateInput) dateInput.value = vac.date || getRealTodayStr();
-        if (reasonInput) reasonInput.value = vac.reason || '';
-        if (submitBtn) submitBtn.textContent = '연차 내역 수정하기 💾';
-      } else {
-        if (titleEl) titleEl.textContent = '🏖️ 연차 / 반차 등록 💖';
-        if (hiddenId) hiddenId.value = '';
-        if (dateInput) dateInput.value = getRealTodayStr();
-        if (submitBtn) submitBtn.textContent = '연차 등록하기 💖';
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (dateInput) setTimeout(() => dateInput.focus(), 60);
-    },
-
-    closeVacationModal() {
-      const modal = document.getElementById('vacation-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
-
-    openTotalVacationModal() {
-      const modal = document.getElementById('total-vacation-modal');
-      const input = document.getElementById('input-total-vacation-days');
-      if (!modal) return;
-      if (input) input.value = store.totalVacationDays || 15;
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-    },
-
-    closeTotalVacationModal() {
-      const modal = document.getElementById('total-vacation-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
+    ...window.createVacationView({ store, getRealTodayStr, escapeHTML }),
 
     // =======================================================================
     // 🎯 인생 프로젝트 & 마일스톤 (Life Project & Roadmap) Engine
@@ -5848,1272 +6057,36 @@
     // =========================================================================
     // 🌐 Sites / Bookmarks & Folder Manager (사이트 바로가기 & 폴더 관리)
     // =========================================================================
-    renderSites() {
-      const tabsBar = document.getElementById('site-folder-tabs');
-      const grid = document.getElementById('sites-grid-container');
-      const emptyEl = document.getElementById('sites-empty-state');
-      const curFolderBadge = document.getElementById('site-cur-folder-badge');
-      const curFolderDesc = document.getElementById('site-cur-folder-desc');
-      const countBadge = document.getElementById('site-count-badge');
-      if (!grid) return;
-
-      const activeFolder = store.activeSiteFolder || 'all';
-      const folders = store.siteFolders || DEFAULT_SITE_FOLDERS;
-      const allSites = store.sites || [];
-
-      // 1. Render Folder Tabs
-      if (tabsBar) {
-        tabsBar.innerHTML = folders.map(f => {
-          const isActive = (f.id === activeFolder);
-          const count = f.id === 'all' 
-            ? allSites.length 
-            : allSites.filter(s => (s.folder || 'portal') === f.id).length;
-
-          const editBtn = (f.id !== 'all')
-            ? `<span class="site-folder-edit-btn" data-action="open-edit-site-folder" data-id="${f.id}" onclick="event.stopPropagation(); UI.openSiteFolderModal('${f.id}');" title="?대뜑 ?섏젙/??젣">✏️</span>`
-            : '';
-
-          return `
-            <button type="button" class="site-folder-tab ${isActive ? 'active' : ''}" data-action="select-site-folder" data-id="${f.id}">
-              <span class="folder-tab-icon">${f.icon || '📁'}</span>
-              <span class="folder-tab-name">${escapeHTML(f.name)}</span>
-              <span class="folder-tab-count">${count}</span>
-              ${editBtn}
-            </button>
-          `;
-        }).join('');
-      }
-
-      // 2. Filter Sites based on activeFolder
-      const filteredSites = (activeFolder === 'all')
-        ? allSites
-        : allSites.filter(s => (s.folder || 'portal') === activeFolder);
-
-      // 3. Update Summary Bar
-      const currentFolderObj = folders.find(f => f.id === activeFolder) || { name: '전체보기', icon: '🌐' };
-      if (curFolderBadge) {
-        curFolderBadge.innerHTML = `${currentFolderObj.icon || '📁'} ${escapeHTML(currentFolderObj.name)}`;
-      }
-      if (curFolderDesc) {
-        curFolderDesc.textContent = activeFolder === 'all'
-          ? `총 ${filteredSites.length}개의 사이트 바로가기가 등록되어 있습니다.`
-          : `'${currentFolderObj.name}' 폴더에 ${filteredSites.length}개의 사이트가 보관 중입니다.`;
-      }
-      if (countBadge) {
-        countBadge.textContent = `총 ${filteredSites.length}건`;
-      }
-
-      // 4. Render Grid / Empty State
-      if (filteredSites.length === 0) {
-        grid.innerHTML = '';
-        if (emptyEl) emptyEl.style.display = 'flex';
-      } else {
-        if (emptyEl) emptyEl.style.display = 'none';
-        grid.innerHTML = filteredSites.map(site => {
-          let hostname = '';
-          try {
-            hostname = new URL(site.url).hostname;
-          } catch (e) {
-            hostname = site.url;
-          }
-
-          const siteFolder = folders.find(f => f.id === (site.folder || 'portal')) || { name: '포털/검색', icon: '🔍' };
-
-          return `
-            <div class="site-card" data-site-id="${site.id}">
-              <div class="site-card-header">
-                <div class="site-title-box">
-                  <div class="site-favicon-bubble">${siteFolder.icon || '🌐'}</div>
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-                      <h4 class="site-title-text">${escapeHTML(site.title)}</h4>
-                      <span class="badge" style="font-size: 0.68rem; padding: 2px 6px; background: rgba(255, 107, 139, 0.12); color: var(--primary); font-weight: 700; border-radius: 6px;">${siteFolder.icon || '📁'} ${escapeHTML(siteFolder.name)}</span>
-                    </div>
-                    <span style="font-size: 0.75rem; color: var(--text-muted);">${escapeHTML(hostname)}</span>
-                  </div>
-                </div>
-                <div style="display: flex; gap: 0.35rem;">
-                  <button type="button" class="task-action-btn edit-btn" data-action="edit-site" data-site-id="${site.id}" title="사이트 수정">✏️</button>
-                  <button type="button" class="task-action-btn delete-btn" data-action="delete-site" data-site-id="${site.id}" title="사이트 삭제">🗑️</button>
-                </div>
-              </div>
-
-              ${site.memo ? `<div class="site-memo-box">📝 ${escapeHTML(site.memo)}</div>` : ''}
-
-              <div class="site-card-footer">
-                <a href="${escapeHTML(site.url)}" target="_blank" rel="noopener noreferrer" class="site-url-link" title="새 탭으로 열기">
-                  <span>🚀 바로가기</span>
-                  <span style="font-size: 0.72rem; opacity: 0.85;">↗</span>
-                </a>
-                <button type="button" class="btn btn-sm" style="font-size: 0.74rem; background: rgba(0,0,0,0.04); color: var(--text-muted); padding: 3px 7px;" data-action="copy-site-url" data-url="${escapeHTML(site.url)}" title="URL 복사">
-                  📋 복사
-                </button>
-              </div>
-            </div>
-          `;
-        }).join('');
-      }
-
-      this.renderSidebar();
-    },
-
-    openSiteModal(siteId = null) {
-      const modal = document.getElementById('site-modal');
-      const form = document.getElementById('site-form');
-      const titleEl = document.getElementById('site-modal-title');
-      const hiddenId = document.getElementById('site-edit-id');
-      const inputTitle = document.getElementById('site-input-title');
-      const inputUrl = document.getElementById('site-input-url');
-      const inputFolder = document.getElementById('site-input-folder');
-      const inputMemo = document.getElementById('site-input-memo');
-      if (!modal || !form) return;
-
-      form.reset();
-
-      // Populate Folder select options
-      if (inputFolder) {
-        const folders = (store.siteFolders || DEFAULT_SITE_FOLDERS).filter(f => f.id !== 'all');
-        inputFolder.innerHTML = folders.map(f => `
-          <option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>
-        `).join('');
-      }
-
-      if (siteId) {
-        const site = store.sites.find(s => s.id === siteId);
-        if (!site) return;
-        if (titleEl) titleEl.textContent = '🌐 사이트 바로가기 수정 💖';
-        if (hiddenId) hiddenId.value = site.id;
-        if (inputTitle) inputTitle.value = site.title || '';
-        if (inputUrl) inputUrl.value = site.url || '';
-        if (inputFolder) inputFolder.value = site.folder || 'portal';
-        if (inputMemo) inputMemo.value = site.memo || '';
-      } else {
-        if (titleEl) titleEl.textContent = '🌐 새 사이트 바로가기 등록 💖';
-        if (hiddenId) hiddenId.value = '';
-        if (inputFolder) inputFolder.value = (store.activeSiteFolder && store.activeSiteFolder !== 'all') ? store.activeSiteFolder : 'portal';
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (inputTitle) setTimeout(() => inputTitle.focus(), 60);
-    },
-
-    closeSiteModal() {
-      const modal = document.getElementById('site-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
-
-    openSiteFolderModal(folderId = null) {
-      const modal = document.getElementById('site-folder-modal');
-      const titleEl = document.getElementById('site-folder-modal-title');
-      const hiddenId = document.getElementById('site-folder-edit-id');
-      const nameInput = document.getElementById('site-folder-input-name');
-      const iconInput = document.getElementById('site-folder-selected-icon');
-      const deleteBtn = document.getElementById('btn-delete-site-folder');
-      const emojiContainer = document.getElementById('site-folder-emoji-picker');
-
-      if (!modal) return;
-
-      let selectedIcon = '📁';
-      if (folderId) {
-        const folder = store.siteFolders.find(f => f.id === folderId);
-        if (!folder) return;
-        if (titleEl) titleEl.textContent = '📁 사이트 폴더 수정';
-        if (hiddenId) hiddenId.value = folder.id;
-        if (nameInput) nameInput.value = folder.name;
-        selectedIcon = folder.icon || '📁';
-        if (deleteBtn) deleteBtn.style.display = 'inline-block';
-      } else {
-        if (titleEl) titleEl.textContent = '📁 새 사이트 폴더 추가';
-        if (hiddenId) hiddenId.value = '';
-        if (nameInput) nameInput.value = '';
-        selectedIcon = '🌐';
-        if (deleteBtn) deleteBtn.style.display = 'none';
-      }
-
-      if (iconInput) iconInput.value = selectedIcon;
-
-      // Render emoji picker grid
-      if (emojiContainer) {
-        emojiContainer.innerHTML = SITE_EMOJI_LIST.map(emoji => `
-          <button type="button" class="vault-emoji-option-btn ${emoji === selectedIcon ? 'selected' : ''}" data-emoji="${emoji}">
-            ${emoji}
-          </button>
-        `).join('');
-
-        emojiContainer.querySelectorAll('.vault-emoji-option-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            emojiContainer.querySelectorAll('.vault-emoji-option-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            if (iconInput) iconInput.value = btn.dataset.emoji;
-          });
-        });
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (nameInput) setTimeout(() => nameInput.focus(), 80);
-    },
-
-    closeSiteFolderModal() {
-      const modal = document.getElementById('site-folder-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
+    ...window.createSitesView({ store, DEFAULT_SITE_FOLDERS, SITE_EMOJI_LIST, escapeHTML }),
 
     // =========================================================================
     // 🏥 건강관리 (Health Manager & Folder Notes Engine)
     // =========================================================================
-    renderHealth() {
-      const tabsBar = document.getElementById('health-folder-tabs');
-      const gridContainer = document.getElementById('health-notes-grid-container');
-      const emptyState = document.getElementById('health-empty-state');
-      const curFolderBadge = document.getElementById('health-cur-folder-badge');
-      const curFolderDesc = document.getElementById('health-cur-folder-desc');
-      const notesCountBadge = document.getElementById('health-notes-count-badge');
+    healthAttachments: window.createHealthAttachments({showError: message => UI.showToast(message, 'danger')}),
 
-      if (!gridContainer) return;
-
-      const activeFolder = store.activeHealthFolder || 'all';
-      const folders = store.healthFolders || DEFAULT_HEALTH_FOLDERS;
-      const allNotes = store.healthNotes || [];
-      const nonAllFolders = folders.filter(f => f.id !== 'all');
-
-      // 1. Render Folder Tabs (with edit pencil icon for editable folders)
-      if (tabsBar) {
-        tabsBar.innerHTML = folders.map(f => {
-          const isActive = (f.id === activeFolder);
-          const count = f.id === 'all' 
-            ? allNotes.length 
-            : allNotes.filter(n => n.folder === f.id).length;
-          
-          const editBtn = (f.id !== 'all')
-            ? `<span class="health-folder-edit-btn" data-action="open-edit-health-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
-            : '';
-
-          return `
-            <button type="button" class="health-folder-tab ${isActive ? 'active' : ''}" data-health-folder-id="${f.id}">
-              <span>${f.icon || '📁'}</span>
-              <span>${escapeHTML(f.name)}</span>
-              <span class="badge" style="font-size: 0.72rem; padding: 1px 6px; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)'}; color: ${isActive ? '#fff' : 'var(--text-muted)'}; border-radius: 10px;">${count}</span>
-              ${editBtn}
-            </button>
-          `;
-        }).join('');
-      }
-
-      // 2. Filter Notes by active folder
-      const filtered = (activeFolder === 'all')
-        ? allNotes
-        : allNotes.filter(n => n.folder === activeFolder);
-
-      const activeFolderObj = folders.find(f => f.id === activeFolder) || folders[0];
-      if (curFolderBadge) {
-        curFolderBadge.textContent = `${activeFolderObj.icon || '📁'} ${activeFolderObj.name}`;
-      }
-      if (curFolderDesc) {
-        curFolderDesc.textContent = activeFolder === 'all'
-          ? `총 ${allNotes.length}개의 건강 기록 메모가 보관 중입니다.`
-          : `'${activeFolderObj.name}' 폴더에 ${filtered.length}건의 진료 및 건강 메모가 있습니다.`;
-      }
-      if (notesCountBadge) {
-        notesCountBadge.textContent = `총 ${filtered.length}건`;
-      }
-
-      // 2.5. Batch Action Toolbar (선택된 메모 이동 / 삭제)
-      const selectedIds = Array.from(store.selectedHealthNotes || []).filter(id => filtered.some(n => n.id === id));
-      const isAllSelected = filtered.length > 0 && selectedIds.length === filtered.length;
-
-      let batchBarHTML = '';
-      if (filtered.length > 0) {
-        const folderOptionsHTML = nonAllFolders.map(f => `<option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>`).join('');
-        batchBarHTML = `
-          <div class="note-batch-toolbar ${selectedIds.length > 0 ? 'is-active' : ''}">
-            <div class="batch-left">
-              <label class="batch-check-label" title="전체 선택/해제">
-                <input type="checkbox" id="health-check-all" class="batch-checkbox-all" ${isAllSelected ? 'checked' : ''}>
-                <span>${selectedIds.length > 0 ? `선택됨 <strong>${selectedIds.length}</strong>개` : '전체 선택'}</span>
-              </label>
-            </div>
-            <div class="batch-right" style="${selectedIds.length > 0 ? 'display: flex;' : 'display: none;'}">
-              <span class="batch-action-hint">선택 항목 이동:</span>
-              <select id="health-batch-target-folder" class="batch-select-dropdown">
-                <option value="">📁 이동할 폴더 선택...</option>
-                ${folderOptionsHTML}
-              </select>
-              <button type="button" class="btn btn-sm btn-primary" data-action="batch-move-health-notes" title="선택한 메모들을 선택한 폴더로 이동합니다">
-                <span>이동 ✨</span>
-              </button>
-              <button type="button" class="btn btn-sm" style="background: rgba(255, 77, 77, 0.12); color: #ff4d4d; border: 1px solid rgba(255,77,77,0.25);" data-action="batch-delete-health-notes" title="선택한 메모들을 삭제합니다">
-                <span>일괄 삭제 🗑️</span>
-              </button>
-            </div>
-          </div>
-        `;
-      }
-
-      // 3. Render Large Notes Grid
-      if (filtered.length === 0) {
-        gridContainer.innerHTML = '';
-        if (emptyState) emptyState.style.display = 'flex';
-      } else {
-        if (emptyState) emptyState.style.display = 'none';
-        const cardsHTML = filtered.map(note => {
-          const noteFolder = folders.find(f => f.id === note.folder) || { name: '일반/기타', icon: '💊' };
-          const dateFormatted = note.date ? note.date.replace(/-/g, '.') : '';
-          const isChecked = store.selectedHealthNotes && store.selectedHealthNotes.has(note.id);
-          
-          return `
-            <div class="health-note-card ${isChecked ? 'is-selected' : ''}" data-health-note-id="${note.id}">
-              <div class="health-note-header">
-                <div class="health-note-top-row">
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <label class="note-card-checkbox-label" title="메모 선택" onclick="event.stopPropagation();">
-                      <input type="checkbox" class="health-item-checkbox" data-id="${note.id}" ${isChecked ? 'checked' : ''}>
-                      <span class="custom-card-check"></span>
-                    </label>
-                    <span class="health-folder-badge">
-                      <span>${noteFolder.icon || '🩺'}</span>
-                      <span>${escapeHTML(noteFolder.name)}</span>
-                    </span>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 0.35rem;">
-                    <!-- 퀵 폴더 이동 버튼 -->
-                    <button type="button" class="task-action-btn move-folder-btn" data-action="quick-move-health-note" data-id="${note.id}" title="다른 폴더로 이동">📁⇄</button>
-                    <button type="button" class="task-action-btn edit-btn" data-action="edit-health-note" data-id="${note.id}" title="메모 수정">✏️</button>
-                    <button type="button" class="task-action-btn delete-btn" data-action="delete-health-note" data-id="${note.id}" title="메모 삭제">🗑️</button>
-                  </div>
-                </div>
-
-                <h3 class="health-note-title">${escapeHTML(note.title)}</h3>
-
-                <div class="health-note-submeta">
-                  <span>📅 ${dateFormatted}</span>
-                  ${note.hospital ? `<span>🏥 ${escapeHTML(note.hospital)}</span>` : ''}
-                  ${note.cost ? `<span class="health-cost-chip">💳 ${escapeHTML(note.cost)}</span>` : ''}
-                </div>
-              </div>
-
-              <div class="health-note-body">${escapeHTML(note.content)}</div>
-
-              ${note.fileName ? `
-                <div class="health-file-badge-card">
-                  <div class="health-file-info-left">
-                    <span class="health-file-name">📑 ${escapeHTML(note.fileName)}</span>
-                    ${note.fileMemo ? `<span class="health-file-memo-text">💬 ${escapeHTML(note.fileMemo)}</span>` : ''}
-                  </div>
-                  ${note.fileUrl ? `
-                    <a href="${escapeHTML(note.fileUrl)}" download="${escapeHTML(note.fileName)}" class="btn btn-sm" style="font-size: 0.74rem; background: #10b981; color: #fff; padding: 4px 9px; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 3px;" title="결과표 다운로드/열기">
-                      <span>📥 다운로드</span>
-                    </a>
-                  ` : ''}
-                </div>
-              ` : ''}
-
-              <div class="health-note-footer">
-                <span>등록일: ${new Date(note.createdAt || Date.now()).toLocaleDateString('ko-KR')}</span>
-                <button type="button" class="btn btn-sm" style="font-size: 0.72rem; padding: 2px 7px; background: rgba(0,0,0,0.04); color: var(--primary);" data-action="copy-health-note" data-id="${note.id}" title="내용 복사">
-                  📋 복사
-                </button>
-              </div>
-            </div>
-          `;
-        }).join('');
-
-        gridContainer.innerHTML = batchBarHTML + cardsHTML;
-      }
-
-      this.renderSidebar();
-    },
-
-    openHealthNoteModal(noteId = null) {
-      const modal = document.getElementById('health-note-modal');
-      const form = document.getElementById('health-note-form');
-      const titleEl = document.getElementById('health-note-modal-title');
-      const editIdEl = document.getElementById('health-note-edit-id');
-      const folderSelect = document.getElementById('health-input-folder');
-      const dateInput = document.getElementById('health-input-date');
-      const titleInput = document.getElementById('health-input-title');
-      const hospitalInput = document.getElementById('health-input-hospital');
-      const costInput = document.getElementById('health-input-cost');
-      const contentInput = document.getElementById('health-input-content');
-
-      const fileSection = document.getElementById('health-checkup-file-section');
-      const fileInput = document.getElementById('health-input-file');
-      const fileNameEl = document.getElementById('health-file-data-name');
-      const fileSizeEl = document.getElementById('health-file-data-size');
-      const fileTypeEl = document.getElementById('health-file-data-type');
-      const fileUrlEl = document.getElementById('health-file-data-url');
-      const fileMemoInput = document.getElementById('health-input-file-memo');
-      const filePreviewStatus = document.getElementById('health-file-preview-status');
-      const clearFileBtn = document.getElementById('btn-health-clear-file');
-
-      if (!modal || !form) return;
-      form.reset();
-
-      function updateCheckupSection(currentFolderVal) {
-        if (fileSection) {
-          fileSection.style.display = (currentFolderVal === 'checkup') ? 'block' : 'none';
-        }
-      }
-
-      // Populate folders in select dropdown
-      if (folderSelect) {
-        const folders = (store.healthFolders || DEFAULT_HEALTH_FOLDERS).filter(f => f.id !== 'all');
-        folderSelect.innerHTML = folders.map(f => `
-          <option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>
-        `).join('');
-
-        folderSelect.onchange = () => {
-          updateCheckupSection(folderSelect.value);
-        };
-      }
-
-      if (fileNameEl) fileNameEl.value = '';
-      if (fileSizeEl) fileSizeEl.value = '';
-      if (fileTypeEl) fileTypeEl.value = '';
-      if (fileUrlEl) fileUrlEl.value = '';
-      if (fileMemoInput) fileMemoInput.value = '';
-      if (filePreviewStatus) {
-        filePreviewStatus.textContent = '';
-        filePreviewStatus.style.display = 'none';
-      }
-      if (clearFileBtn) clearFileBtn.style.display = 'none';
-
-      if (noteId) {
-        const note = store.healthNotes.find(n => n.id === noteId);
-        if (!note) return;
-        if (titleEl) titleEl.textContent = '🏥 건강 메모 수정 💖';
-        if (editIdEl) editIdEl.value = note.id;
-        if (folderSelect) folderSelect.value = note.folder || 'general';
-        if (dateInput) dateInput.value = note.date || getRealTodayStr();
-        if (titleInput) titleInput.value = note.title || '';
-        if (hospitalInput) hospitalInput.value = note.hospital || '';
-        if (costInput) costInput.value = note.cost || '';
-        if (contentInput) contentInput.value = note.content || '';
-
-        if (note.fileName) {
-          if (fileNameEl) fileNameEl.value = note.fileName;
-          if (fileSizeEl) fileSizeEl.value = note.fileSize || '';
-          if (fileTypeEl) fileTypeEl.value = note.fileType || '';
-          if (fileUrlEl) fileUrlEl.value = note.fileUrl || '';
-          if (fileMemoInput) fileMemoInput.value = note.fileMemo || '';
-          if (filePreviewStatus) {
-            filePreviewStatus.textContent = `현재 첨부: 📑 ${note.fileName}`;
-            filePreviewStatus.style.display = 'block';
-          }
-          if (clearFileBtn) clearFileBtn.style.display = 'inline-flex';
-        }
-        updateCheckupSection(note.folder || 'general');
-      } else {
-        if (titleEl) titleEl.textContent = '🏥 건강 메모 작성 💖';
-        if (editIdEl) editIdEl.value = '';
-        const initialFolder = (store.activeHealthFolder && store.activeHealthFolder !== 'all') ? store.activeHealthFolder : 'obgyn';
-        if (folderSelect) folderSelect.value = initialFolder;
-        if (dateInput) dateInput.value = getRealTodayStr();
-        updateCheckupSection(initialFolder);
-      }
-
-      // Clear file button handler
-      if (clearFileBtn) {
-        clearFileBtn.onclick = () => {
-          if (fileInput) fileInput.value = '';
-          if (fileNameEl) fileNameEl.value = '';
-          if (fileSizeEl) fileSizeEl.value = '';
-          if (fileTypeEl) fileTypeEl.value = '';
-          if (fileUrlEl) fileUrlEl.value = '';
-          if (filePreviewStatus) {
-            filePreviewStatus.textContent = '';
-            filePreviewStatus.style.display = 'none';
-          }
-          clearFileBtn.style.display = 'none';
-        };
-      }
-
-      // File input change handler (Convert to Base64 DataURL for offline & sync safe storage)
-      if (fileInput) {
-        fileInput.onchange = (e) => {
-          const file = e.target.files && e.target.files[0];
-          if (!file) return;
-          if (file.size > 15 * 1024 * 1024) {
-            alert('파일 용량은 최대 15MB까지 첨부할 수 있습니다.');
-            fileInput.value = '';
-            return;
-          }
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (fileNameEl) fileNameEl.value = file.name;
-            if (fileSizeEl) fileSizeEl.value = file.size;
-            if (fileTypeEl) fileTypeEl.value = file.type;
-            if (fileUrlEl) fileUrlEl.value = reader.result;
-            if (filePreviewStatus) {
-              filePreviewStatus.textContent = `선택됨: 📑 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-              filePreviewStatus.style.display = 'block';
-            }
-            if (clearFileBtn) clearFileBtn.style.display = 'inline-flex';
-          };
-          reader.readAsDataURL(file);
-        };
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (titleInput) setTimeout(() => titleInput.focus(), 60);
-      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
-    },
-
-    closeHealthNoteModal() {
-      const modal = document.getElementById('health-note-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
-
-    openHealthFolderModal(folderId = null) {
-      const modal = document.getElementById('health-folder-modal');
-      const form = document.getElementById('health-folder-form');
-      const titleEl = document.getElementById('health-folder-modal-title');
-      const editIdEl = document.getElementById('health-folder-edit-id');
-      const iconInput = document.getElementById('health-input-folder-icon');
-      const nameInput = document.getElementById('health-input-folder-name');
-      const grid = document.getElementById('health-folder-emoji-grid');
-      const deleteBtn = document.getElementById('btn-delete-health-folder');
-      const submitBtn = document.getElementById('btn-submit-health-folder');
-
-      if (!modal || !form) return;
-      form.reset();
-
-      let currentIcon = '🩺';
-      let currentName = '';
-
-      if (folderId) {
-        const folder = (store.healthFolders || DEFAULT_HEALTH_FOLDERS).find(f => f.id === folderId);
-        if (!folder) return;
-        currentIcon = folder.icon || '🩺';
-        currentName = folder.name || '';
-        if (titleEl) titleEl.textContent = '📁 건강 폴더 수정 & 삭제 💖';
-        if (editIdEl) editIdEl.value = folder.id;
-        if (nameInput) nameInput.value = currentName;
-        if (iconInput) iconInput.value = currentIcon;
-        if (deleteBtn) {
-          // 'all' (전체보기) 제외하고 모든 폴더 삭제 허용!
-          const isProtected = (folder.id === 'all');
-          deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
-          deleteBtn.dataset.id = folder.id;
-        }
-        if (submitBtn) submitBtn.textContent = '수정 완료 ✨';
-      } else {
-        if (titleEl) titleEl.textContent = '📁 새 건강 폴더 추가';
-        if (editIdEl) editIdEl.value = '';
-        if (nameInput) nameInput.value = '';
-        if (iconInput) iconInput.value = currentIcon;
-        if (deleteBtn) deleteBtn.style.display = 'none';
-        if (submitBtn) submitBtn.textContent = '폴더 생성 📁';
-      }
-
-      // Render 24 Emoji Picker Buttons
-      if (grid) {
-        grid.innerHTML = HEALTH_EMOJI_LIST.map(emoji => {
-          const isSel = (emoji === currentIcon);
-          return `
-            <button type="button" class="health-emoji-option-btn ${isSel ? 'selected' : ''}" data-emoji="${emoji}" title="${emoji}">
-              ${emoji}
-            </button>
-          `;
-        }).join('');
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (nameInput) setTimeout(() => nameInput.focus(), 60);
-      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
-    },
-
-    closeHealthFolderModal() {
-      const modal = document.getElementById('health-folder-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
+    ...window.createHealthView({
+      store, DEFAULT_HEALTH_FOLDERS, HEALTH_EMOJI_LIST, getRealTodayStr, escapeHTML
+    }),
 
     // =========================================================================
     // 🎨 취미활동 (Hobby & Life Activity Journal Engine)
     // =========================================================================
-    renderHobby() {
-      const tabsBar = document.getElementById('hobby-folder-tabs');
-      const gridContainer = document.getElementById('hobby-notes-grid-container');
-      const emptyState = document.getElementById('hobby-empty-state');
-      const curFolderBadge = document.getElementById('hobby-cur-folder-badge');
-      const curFolderDesc = document.getElementById('hobby-cur-folder-desc');
-      const notesCountBadge = document.getElementById('hobby-notes-count-badge');
-
-      if (!gridContainer) return;
-
-      const activeFolder = store.activeHobbyFolder || 'all';
-      const folders = store.hobbyFolders || DEFAULT_HOBBY_FOLDERS;
-      const allNotes = store.hobbyNotes || [];
-      const nonAllFolders = folders.filter(f => f.id !== 'all');
-
-      // 1. Render Folder Tabs (with edit pencil icon for editable folders)
-      if (tabsBar) {
-        tabsBar.innerHTML = folders.map(f => {
-          const isActive = (f.id === activeFolder);
-          const count = f.id === 'all' 
-            ? allNotes.length 
-            : allNotes.filter(n => n.folder === f.id).length;
-          
-          const editBtn = (f.id !== 'all')
-            ? `<span class="hobby-folder-edit-btn" data-action="open-edit-hobby-folder" data-id="${f.id}" title="폴더 이름/아이콘 수정 및 삭제">✏️</span>`
-            : '';
-
-          return `
-            <button type="button" class="hobby-folder-tab ${isActive ? 'active' : ''}" data-hobby-folder-id="${f.id}">
-              <span>${f.icon || '🎨'}</span>
-              <span>${escapeHTML(f.name)}</span>
-              <span class="badge" style="font-size: 0.72rem; padding: 1px 6px; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)'}; color: ${isActive ? '#fff' : 'var(--text-muted)'}; border-radius: 10px;">${count}</span>
-              ${editBtn}
-            </button>
-          `;
-        }).join('');
-      }
-
-      // 2. Filter Notes by active folder
-      const filtered = (activeFolder === 'all')
-        ? allNotes
-        : allNotes.filter(n => n.folder === activeFolder);
-
-      const activeFolderObj = folders.find(f => f.id === activeFolder) || folders[0];
-      if (curFolderBadge) {
-        curFolderBadge.textContent = `${activeFolderObj.icon || '🎨'} ${activeFolderObj.name}`;
-      }
-      if (curFolderDesc) {
-        curFolderDesc.textContent = activeFolder === 'all'
-          ? `총 ${allNotes.length}개의 취미 활동 일지가 보관 중입니다.`
-          : `'${activeFolderObj.name}' 폴더에 ${filtered.length}건의 취미 기록이 있습니다.`;
-      }
-      if (notesCountBadge) {
-        notesCountBadge.textContent = `총 ${filtered.length}건`;
-      }
-
-      // 2.5. Batch Action Toolbar (선택된 취미 일지 이동 / 삭제)
-      const selectedIds = Array.from(store.selectedHobbyNotes || []).filter(id => filtered.some(n => n.id === id));
-      const isAllSelected = filtered.length > 0 && selectedIds.length === filtered.length;
-
-      let batchBarHTML = '';
-      if (filtered.length > 0) {
-        const folderOptionsHTML = nonAllFolders.map(f => `<option value="${f.id}">${f.icon || '🎨'} ${escapeHTML(f.name)}</option>`).join('');
-        batchBarHTML = `
-          <div class="note-batch-toolbar ${selectedIds.length > 0 ? 'is-active' : ''}">
-            <div class="batch-left">
-              <label class="batch-check-label" title="전체 선택/해제">
-                <input type="checkbox" id="hobby-check-all" class="batch-checkbox-all" ${isAllSelected ? 'checked' : ''}>
-                <span>${selectedIds.length > 0 ? `선택됨 <strong>${selectedIds.length}</strong>개` : '전체 선택'}</span>
-              </label>
-            </div>
-            <div class="batch-right" style="${selectedIds.length > 0 ? 'display: flex;' : 'display: none;'}">
-              <span class="batch-action-hint">선택 항목 이동:</span>
-              <select id="hobby-batch-target-folder" class="batch-select-dropdown">
-                <option value="">📁 이동할 폴더 선택...</option>
-                ${folderOptionsHTML}
-              </select>
-              <button type="button" class="btn btn-sm btn-primary" data-action="batch-move-hobby-notes" title="선택한 일지들을 선택한 폴더로 이동합니다">
-                <span>이동 ✨</span>
-              </button>
-              <button type="button" class="btn btn-sm" style="background: rgba(255, 77, 77, 0.12); color: #ff4d4d; border: 1px solid rgba(255,77,77,0.25);" data-action="batch-delete-hobby-notes" title="선택한 일지들을 삭제합니다">
-                <span>일괄 삭제 🗑️</span>
-              </button>
-            </div>
-          </div>
-        `;
-      }
-
-      // 3. Render Large Hobby Notes Grid
-      if (filtered.length === 0) {
-        gridContainer.innerHTML = '';
-        if (emptyState) emptyState.style.display = 'flex';
-      } else {
-        if (emptyState) emptyState.style.display = 'none';
-        const cardsHTML = filtered.map(note => {
-          const noteFolder = folders.find(f => f.id === note.folder) || { name: '기타취미', icon: '✨' };
-          const dateFormatted = note.date ? note.date.replace(/-/g, '.') : '';
-          const isChecked = store.selectedHobbyNotes && store.selectedHobbyNotes.has(note.id);
-          
-          return `
-            <div class="hobby-note-card ${isChecked ? 'is-selected' : ''}" data-hobby-note-id="${note.id}">
-              <div class="hobby-note-header">
-                <div class="hobby-note-top-row">
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <label class="note-card-checkbox-label" title="일지 선택" onclick="event.stopPropagation();">
-                      <input type="checkbox" class="hobby-item-checkbox" data-id="${note.id}" ${isChecked ? 'checked' : ''}>
-                      <span class="custom-card-check"></span>
-                    </label>
-                    <span class="hobby-folder-badge">
-                      <span>${noteFolder.icon || '🎨'}</span>
-                      <span>${escapeHTML(noteFolder.name)}</span>
-                    </span>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 0.35rem;">
-                    <!-- 퀵 폴더 이동 버튼 -->
-                    <button type="button" class="task-action-btn move-folder-btn" data-action="quick-move-hobby-note" data-id="${note.id}" title="다른 폴더로 이동">📁⇄</button>
-                    <button type="button" class="task-action-btn edit-btn" data-action="edit-hobby-note" data-id="${note.id}" title="일지 수정">✏️</button>
-                    <button type="button" class="task-action-btn delete-btn" data-action="delete-hobby-note" data-id="${note.id}" title="일지 삭제">🗑️</button>
-                  </div>
-                </div>
-
-                <h3 class="hobby-note-title">${escapeHTML(note.title)}</h3>
-
-                <div class="hobby-note-submeta">
-                  <span>📅 ${dateFormatted}</span>
-                  ${note.place ? `<span>📍 ${escapeHTML(note.place)}</span>` : ''}
-                  ${note.duration ? `<span class="hobby-duration-chip">⏱️ ${escapeHTML(note.duration)}</span>` : ''}
-                </div>
-              </div>
-
-              <div class="hobby-note-body">${escapeHTML(note.content)}</div>
-
-              <div class="hobby-note-footer">
-                <span>등록일: ${new Date(note.createdAt || Date.now()).toLocaleDateString('ko-KR')}</span>
-                <button type="button" class="btn btn-sm" style="font-size: 0.72rem; padding: 2px 7px; background: rgba(0,0,0,0.04); color: var(--primary);" data-action="copy-hobby-note" data-id="${note.id}" title="내용 복사">
-                  📋 복사
-                </button>
-              </div>
-            </div>
-          `;
-        }).join('');
-
-        gridContainer.innerHTML = batchBarHTML + cardsHTML;
-      }
-
-      this.renderSidebar();
-    },
-
-    openHobbyFolderModal(folderId = null) {
-      const modal = document.getElementById('hobby-folder-modal');
-      const form = document.getElementById('hobby-folder-form');
-      const titleEl = document.getElementById('hobby-folder-modal-title');
-      const editIdEl = document.getElementById('hobby-folder-edit-id');
-      const iconInput = document.getElementById('hobby-input-folder-icon');
-      const nameInput = document.getElementById('hobby-input-folder-name');
-      const grid = document.getElementById('hobby-folder-emoji-grid');
-      const deleteBtn = document.getElementById('btn-delete-hobby-folder');
-      const submitBtn = document.getElementById('btn-submit-hobby-folder');
-
-      if (!modal || !form) return;
-      form.reset();
-
-      let currentIcon = '🎨';
-      let currentName = '';
-
-      if (folderId) {
-        const folder = (store.hobbyFolders || DEFAULT_HOBBY_FOLDERS).find(f => f.id === folderId);
-        if (!folder) return;
-        currentIcon = folder.icon || '🎨';
-        currentName = folder.name || '';
-        if (titleEl) titleEl.textContent = '📁 취미 폴더 수정 & 삭제 💖';
-        if (editIdEl) editIdEl.value = folder.id;
-        if (nameInput) nameInput.value = currentName;
-        if (iconInput) iconInput.value = currentIcon;
-        if (deleteBtn) {
-          // 'all' (전체보기) 제외하고 모든 폴더 삭제 허용!
-          const isProtected = (folder.id === 'all');
-          deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
-          deleteBtn.dataset.id = folder.id;
-        }
-        if (submitBtn) submitBtn.textContent = '수정 완료 ✨';
-      } else {
-        if (titleEl) titleEl.textContent = '📁 새 취미 폴더 추가';
-        if (editIdEl) editIdEl.value = '';
-        if (nameInput) nameInput.value = '';
-        if (iconInput) iconInput.value = currentIcon;
-        if (deleteBtn) deleteBtn.style.display = 'none';
-        if (submitBtn) submitBtn.textContent = '폴더 생성 📁';
-      }
-
-      // Render 24 Emoji Picker Buttons
-      if (grid) {
-        grid.innerHTML = HOBBY_EMOJI_LIST.map(emoji => {
-          const isSel = (emoji === currentIcon);
-          return `
-            <button type="button" class="hobby-emoji-option-btn ${isSel ? 'selected' : ''}" data-hobby-emoji="${emoji}" title="${emoji}">
-              ${emoji}
-            </button>
-          `;
-        }).join('');
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (nameInput) setTimeout(() => nameInput.focus(), 60);
-      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
-    },
-
-    closeHobbyFolderModal() {
-      const modal = document.getElementById('hobby-folder-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
-
-    openHobbyNoteModal(noteId = null) {
-      const modal = document.getElementById('hobby-note-modal');
-      const form = document.getElementById('hobby-note-form');
-      const titleEl = document.getElementById('hobby-note-modal-title');
-      const editIdEl = document.getElementById('hobby-note-edit-id');
-      const folderSelect = document.getElementById('hobby-input-folder');
-      const dateInput = document.getElementById('hobby-input-date');
-      const titleInput = document.getElementById('hobby-input-title');
-      const placeInput = document.getElementById('hobby-input-place');
-      const durationInput = document.getElementById('hobby-input-duration');
-      const contentInput = document.getElementById('hobby-input-content');
-
-      if (!modal || !form) return;
-      form.reset();
-
-      // Populate folders in select dropdown
-      if (folderSelect) {
-        const folders = (store.hobbyFolders || DEFAULT_HOBBY_FOLDERS).filter(f => f.id !== 'all');
-        folderSelect.innerHTML = folders.map(f => `
-          <option value="${f.id}">${f.icon || '🎨'} ${escapeHTML(f.name)}</option>
-        `).join('');
-      }
-
-      if (noteId) {
-        const note = store.hobbyNotes.find(n => n.id === noteId);
-        if (!note) return;
-        if (titleEl) titleEl.textContent = '🎨 취미 기록 수정 💖';
-        if (editIdEl) editIdEl.value = note.id;
-        if (folderSelect) folderSelect.value = note.folder || 'general';
-        if (dateInput) dateInput.value = note.date || getRealTodayStr();
-        if (titleInput) titleInput.value = note.title || '';
-        if (placeInput) placeInput.value = note.place || '';
-        if (durationInput) durationInput.value = note.duration || '';
-        if (contentInput) contentInput.value = note.content || '';
-      } else {
-        if (titleEl) titleEl.textContent = '🎨 취미 기록 작성 💖';
-        if (editIdEl) editIdEl.value = '';
-        if (folderSelect) {
-          folderSelect.value = (store.activeHobbyFolder && store.activeHobbyFolder !== 'all') ? store.activeHobbyFolder : 'workout';
-        }
-        if (dateInput) dateInput.value = getRealTodayStr();
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (titleInput) setTimeout(() => titleInput.focus(), 60);
-      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
-    },
-
-    closeHobbyNoteModal() {
-      const modal = document.getElementById('hobby-note-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
-
-    openHobbyFolderModal(folderId = null) {
-      const modal = document.getElementById('hobby-folder-modal');
-      const form = document.getElementById('hobby-folder-form');
-      const titleEl = document.getElementById('hobby-folder-modal-title');
-      const editIdEl = document.getElementById('hobby-folder-edit-id');
-      const iconInput = document.getElementById('hobby-input-folder-icon');
-      const nameInput = document.getElementById('hobby-input-folder-name');
-      const grid = document.getElementById('hobby-folder-emoji-grid');
-      const deleteBtn = document.getElementById('btn-delete-hobby-folder');
-      const submitBtn = document.getElementById('btn-submit-hobby-folder');
-
-      if (!modal || !form) return;
-      form.reset();
-
-      let currentIcon = '🎨';
-      let currentName = '';
-
-      if (folderId) {
-        const folder = (store.hobbyFolders || DEFAULT_HOBBY_FOLDERS).find(f => f.id === folderId);
-        if (!folder) return;
-        currentIcon = folder.icon || '🎨';
-        currentName = folder.name || '';
-        if (titleEl) titleEl.textContent = '📁 취미 폴더 수정 💖';
-        if (editIdEl) editIdEl.value = folder.id;
-        if (nameInput) nameInput.value = currentName;
-        if (iconInput) iconInput.value = currentIcon;
-        if (deleteBtn) {
-          const isProtected = (folder.id === 'general' || folder.id === 'workout' || folder.id === 'piano' || folder.id === 'drawing' || folder.id === 'reading' || folder.id === 'all');
-          deleteBtn.style.display = isProtected ? 'none' : 'inline-flex';
-          deleteBtn.dataset.id = folder.id;
-        }
-        if (submitBtn) submitBtn.textContent = '수정 완료 ✨';
-      } else {
-        if (titleEl) titleEl.textContent = '📁 새 취미 폴더 추가';
-        if (editIdEl) editIdEl.value = '';
-        if (nameInput) nameInput.value = '';
-        if (iconInput) iconInput.value = currentIcon;
-        if (deleteBtn) deleteBtn.style.display = 'none';
-        if (submitBtn) submitBtn.textContent = '폴더 생성 📁';
-      }
-
-      // Render 24 Hobby Emoji Picker Buttons
-      if (grid) {
-        grid.innerHTML = HOBBY_EMOJI_LIST.map(emoji => {
-          const isSel = (emoji === currentIcon);
-          return `
-            <button type="button" class="hobby-emoji-option-btn ${isSel ? 'selected' : ''}" data-hobby-emoji="${emoji}" title="${emoji}">
-              ${emoji}
-            </button>
-          `;
-        }).join('');
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (nameInput) setTimeout(() => nameInput.focus(), 60);
-      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
-    },
-
-    closeHobbyFolderModal() {
-      const modal = document.getElementById('hobby-folder-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
+    ...window.createHobbyView({
+      store, DEFAULT_HOBBY_FOLDERS, HOBBY_EMOJI_LIST, getRealTodayStr, escapeHTML
+    }),
 
     // =========================================================================
     // 🤖 AI 스터디 & 지식 노트 (AI Study Hub UI Engine)
     // =========================================================================
-    renderAiStudyEmptyState() {
-      const empty = document.getElementById('aistudy-empty-state');
-      if (!empty || empty.style.display !== 'flex') return;
-      const title = document.getElementById('aistudy-empty-title');
-      const description = document.getElementById('aistudy-empty-description');
-      const filtered = (store.activeAiStudyCategory || 'all') !== 'all' || !!store.aiStudySearchQuery?.trim();
-      const unconfirmed = store.saveStatus !== 'confirmed';
-      if (title) title.textContent = filtered ? '검색 조건에 맞는 AI 노트가 없어요'
-        : unconfirmed ? 'AI 노트의 동기화 확인이 필요해요' : '등록된 AI 스터디 노트가 없어요';
-      if (description) description.textContent = filtered
-        ? '전체 탭을 선택하거나 검색어를 지우면 다른 노트를 확인할 수 있습니다.'
-        : unconfirmed ? '서버 확인이 완료되지 않아 노트가 없는 것으로 단정할 수 없습니다. 상단 동기화 상태를 확인하고 다시 시도해 주세요.'
-        : '자주 쓰는 프롬프트, AI 팁, 코드 스니펫을 첫 번째 노트로 기록해보세요 ✨';
-    },
-
-    renderAiStudy() {
-      const tabsBar = document.getElementById('aistudy-category-tabs');
-      const gridContainer = document.getElementById('aistudy-grid-container');
-      const emptyState = document.getElementById('aistudy-empty-state');
-      const countBadge = document.getElementById('aistudy-count-badge');
-      const searchInput = document.getElementById('aistudy-search-input');
-
-      if (!gridContainer) return;
-
-      const activeCat = store.activeAiStudyCategory || 'all';
-      const categories = DEFAULT_AI_STUDY_CATEGORIES;
-      const allNotes = store.aiStudyNotes || [];
-      const filteredNotes = store.getFilteredAiStudyNotes();
-
-      // 1. Render Category Tabs
-      if (tabsBar) {
-        tabsBar.innerHTML = categories.map(cat => {
-          const isActive = (cat.id === activeCat);
-          const count = (cat.id === 'all')
-            ? allNotes.length
-            : allNotes.filter(n => n.category === cat.id).length;
-          
-          return `
-            <button type="button" class="aistudy-cat-tab ${isActive ? 'active' : ''}" data-aistudy-cat="${cat.id}">
-              <span>${cat.icon}</span>
-              <span>${escapeHTML(cat.name)}</span>
-              <span class="badge" style="font-size: 0.72rem; padding: 1px 6px; background: ${isActive ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)'}; color: ${isActive ? '#fff' : 'var(--text-muted)'}; border-radius: 10px;">${count}</span>
-            </button>
-          `;
-        }).join('');
-      }
-
-      if (countBadge) {
-        countBadge.textContent = `총 ${filteredNotes.length}개`;
-      }
-
-      if (searchInput && searchInput.value !== (store.aiStudySearchQuery || '')) {
-        searchInput.value = store.aiStudySearchQuery || '';
-      }
-
-      // 2. Empty State
-      if (filteredNotes.length === 0) {
-        if (gridContainer) gridContainer.innerHTML = '';
-        if (emptyState) emptyState.style.display = 'flex';
-        this.renderAiStudyEmptyState();
-        return;
-      }
-
-      if (emptyState) emptyState.style.display = 'none';
-
-      // 3. Render Cards
-      const dateFormatter = new Intl.DateTimeFormat('ko-KR', {year:'numeric', month:'short', day:'numeric'});
-      gridContainer.innerHTML = filteredNotes.map(note => {
-        const catObj = categories.find(c => c.id === note.category) || categories[1];
-        const date = new Date(note.updatedAt || note.createdAt || Date.now());
-        const dateStr = Number.isNaN(date.getTime()) ? 'Invalid Date' : dateFormatter.format(date);
-        // Full code, tags and source links are rendered only in the detail modal.
-
-        return `
-          <div class="aistudy-card ${note.pinned ? 'is-pinned' : ''}" data-aistudy-id="${note.id}" role="button" tabindex="0" aria-label="${escapeHTML(note.title)} 상세 보기">
-            <div class="aistudy-card-header">
-              <div class="aistudy-card-meta">
-                <span class="aistudy-cat-badge" style="background: ${catObj.color}15; color: ${catObj.color}; border: 1px solid ${catObj.color}35;">
-                  ${catObj.icon} ${escapeHTML(catObj.name)}
-                </span>
-                <span class="aistudy-date">📅 ${dateStr}</span>
-                ${note.pinned ? `<span class="aistudy-pin-badge" title="상단 고정됨">📌 고정</span>` : ''}
-              </div>
-              <div class="aistudy-card-actions">
-                <button type="button" class="aistudy-action-btn ${note.pinned ? 'active' : ''}" data-action="toggle-pin-aistudy" data-id="${note.id}" title="${note.pinned ? '고정 해제' : '상단 고정'}">
-                  📌
-                </button>
-                <button type="button" class="aistudy-action-btn" data-action="edit-aistudy" data-id="${note.id}" title="수정">
-                  ✏️
-                </button>
-                <button type="button" class="aistudy-action-btn delete-btn" data-action="delete-aistudy" data-id="${note.id}" title="삭제">
-                  🗑️
-                </button>
-              </div>
-            </div>
-
-            <h3 class="aistudy-card-title">${escapeHTML(note.title)}</h3>
-
-            ${note.summary ? `
-              <div class="aistudy-summary-box">
-                <span class="aistudy-summary-icon">💡</span>
-                <div class="aistudy-summary-text">${escapeHTML(note.summary)}</div>
-              </div>
-            ` : ''}
-
-            <span class="aistudy-detail-hint">자세히 보기 →</span>
-          </div>
-        `;
-      }).join('');
-
-      this.renderSidebar();
-    },
-
-    openAiStudyModal(noteId = null) {
-      const modal = document.getElementById('aistudy-modal');
-      const titleInput = document.getElementById('aistudy-modal-title');
-      const catSelect = document.getElementById('aistudy-modal-category');
-      const summaryInput = document.getElementById('aistudy-modal-summary');
-      const contentInput = document.getElementById('aistudy-modal-content');
-      const codeInput = document.getElementById('aistudy-modal-code');
-      const langSelect = document.getElementById('aistudy-modal-lang');
-      const tagsInput = document.getElementById('aistudy-modal-tags');
-      const urlInput = document.getElementById('aistudy-modal-url');
-      const pinCheckbox = document.getElementById('aistudy-modal-pinned');
-      const modalHeaderTitle = document.getElementById('aistudy-modal-header-title');
-      const editIdHidden = document.getElementById('aistudy-modal-edit-id');
-
-      if (!modal) return;
-
-      if (noteId) {
-        const note = (store.aiStudyNotes || []).find(n => n.id === noteId);
-        if (!note) return;
-        if (modalHeaderTitle) modalHeaderTitle.textContent = '✏️ AI 스터디 노트 수정';
-        if (editIdHidden) editIdHidden.value = note.id;
-        if (titleInput) titleInput.value = note.title || '';
-        if (catSelect) catSelect.value = note.category || 'llm';
-        if (summaryInput) summaryInput.value = note.summary || '';
-        if (contentInput) contentInput.value = note.content || '';
-        if (codeInput) codeInput.value = note.codeSnippet || '';
-        if (langSelect) langSelect.value = note.snippetLang || 'Prompt';
-        if (tagsInput) tagsInput.value = Array.isArray(note.tags) ? note.tags.join(', ') : (note.tags || '');
-        if (urlInput) urlInput.value = note.refUrl || '';
-        if (pinCheckbox) pinCheckbox.checked = !!note.pinned;
-      } else {
-        if (modalHeaderTitle) modalHeaderTitle.textContent = '💡 새 AI 스터디 노트 작성';
-        if (editIdHidden) editIdHidden.value = '';
-        if (titleInput) titleInput.value = '';
-        if (catSelect) catSelect.value = store.activeAiStudyCategory !== 'all' ? store.activeAiStudyCategory : 'llm';
-        if (summaryInput) summaryInput.value = '';
-        if (contentInput) contentInput.value = '';
-        if (codeInput) codeInput.value = '';
-        if (langSelect) langSelect.value = 'Prompt';
-        if (tagsInput) tagsInput.value = '';
-        if (urlInput) urlInput.value = '';
-        if (pinCheckbox) pinCheckbox.checked = false;
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (titleInput) setTimeout(() => titleInput.focus(), 60);
-      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
-    },
-
-    closeAiStudyModal() {
-      const modal = document.getElementById('aistudy-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
-
-    openAiStudyDetailModal(noteId) {
-      const note = (store.aiStudyNotes || []).find(n => n.id === noteId);
-      const modal = document.getElementById('aistudy-detail-modal');
-      const titleEl = document.getElementById('aistudy-detail-modal-title');
-      const contentEl = document.getElementById('aistudy-detail-modal-content');
-      if (!note || !modal || !titleEl || !contentEl) return;
-
-      const category = DEFAULT_AI_STUDY_CATEGORIES.find(item => item.id === note.category) || DEFAULT_AI_STUDY_CATEGORIES[0];
-      const date = new Date(note.updatedAt || note.createdAt || Date.now()).toLocaleDateString('ko-KR', {
-        year: 'numeric', month: 'short', day: 'numeric'
-      });
-      const tagsHtml = Array.isArray(note.tags) && note.tags.length
-        ? `<div class="aistudy-detail-tags">${note.tags.map(tag => `<span class="aistudy-tag-chip">${escapeHTML(tag)}</span>`).join('')}</div>`
-        : '';
-      const codeHtml = note.codeSnippet && note.codeSnippet.trim()
-        ? `<section class="aistudy-detail-section"><h4>💻 ${escapeHTML(note.snippetLang || 'Code')}</h4><pre class="aistudy-detail-code"><code>${escapeHTML(note.codeSnippet)}</code></pre></section>`
-        : '';
-      const linkHtml = note.refUrl && note.refUrl.trim()
-        ? `<a href="${escapeHTML(note.refUrl.trim())}" target="_blank" rel="noopener noreferrer" class="aistudy-detail-link">🔗 참고 문서 열기</a>`
-        : '';
-
-      titleEl.textContent = note.title || 'AI 스터디 노트';
-      contentEl.innerHTML = `
-        <div class="aistudy-detail-meta">
-          <span class="aistudy-cat-badge" style="background: ${category.color}15; color: ${category.color}; border: 1px solid ${category.color}35;">${category.icon} ${escapeHTML(category.name)}</span>
-          <span>📅 ${date}</span>
-          ${note.pinned ? '<span>📌 고정</span>' : ''}
-        </div>
-        ${note.summary ? `<section class="aistudy-detail-section"><h4>💡 핵심 요약</h4><p>${escapeHTML(note.summary)}</p></section>` : ''}
-        ${note.content ? `<section class="aistudy-detail-section"><h4>📝 상세 메모</h4><p class="aistudy-detail-text">${escapeHTML(note.content).replace(/\n/g, '<br>')}</p></section>` : ''}
-        ${codeHtml}
-        ${tagsHtml}
-        ${linkHtml}
-      `;
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-    },
-
-    closeAiStudyDetailModal() {
-      const modal = document.getElementById('aistudy-detail-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
-
-    async copyAiStudySnippet(noteId, targetBtn) {
-      const note = (store.aiStudyNotes || []).find(n => n.id === noteId);
-      if (!note || !note.codeSnippet) return;
-
-      try {
-        await navigator.clipboard.writeText(note.codeSnippet);
-        if (targetBtn) {
-          const originalHTML = targetBtn.innerHTML;
-          targetBtn.innerHTML = '<span>✓</span><span>복사됨!</span>';
-          targetBtn.classList.add('copied');
-          setTimeout(() => {
-            targetBtn.innerHTML = originalHTML;
-            targetBtn.classList.remove('copied');
-          }, 1800);
-        }
-        UI.showToast('프롬프트/코드가 클립보드에 복사되었어요! 📋✨', 'success');
-      } catch (err) {
-        const textarea = document.createElement('textarea');
-        textarea.value = note.codeSnippet;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        UI.showToast('프롬프트/코드가 클립보드에 복사되었어요! 📋✨', 'success');
-      }
-    },
+    ...window.createAiStudyView({
+      store, DEFAULT_AI_STUDY_CATEGORIES, escapeHTML,
+      showToast: (...args) => UI.showToast(...args),
+    }),
 
     // =========================================================================
     // 🚀 개발기록 (Dev Log Engine)
     // =========================================================================
-    renderDevLog() {
-      const container = document.getElementById('devlog-timeline-list');
-      if (!container) return;
-
-      container.innerHTML = DEVLOG_DATA.map((log, index) => {
-        const isLatest = (index === 0);
-        return `
-          <div class="devlog-card ${isLatest ? 'highlight-latest' : ''}" data-devlog-ver="${log.version}">
-            <div class="devlog-card-header">
-              <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
-                <span class="devlog-version-badge" style="background: ${log.badgeColor || 'var(--primary)'};">
-                  ${log.version}
-                </span>
-                <span style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted);">
-                  📅 ${log.dateFormatted}
-                </span>
-                <span class="badge" style="background: rgba(255, 107, 139, 0.1); color: var(--primary); font-weight: 800; font-size: 0.72rem; padding: 2px 7px;">
-                  ${log.badge}
-                </span>
-              </div>
-              <button type="button" class="btn btn-sm btn-devlog-popup" style="font-size: 0.78rem; background: linear-gradient(135deg, rgba(255,107,139,0.12), rgba(112,72,232,0.12)); color: var(--primary); font-weight: 800; padding: 5px 12px; border-radius: 8px; border: 1px solid rgba(255,107,139,0.25);" onclick="UI.openDevLogModal('${log.version}')">
-                🔍 팝업상세
-              </button>
-            </div>
-
-            <h3 class="devlog-card-title">${log.title}</h3>
-            <div class="devlog-summary-box">💬 ${log.summary}</div>
-
-            <div style="display: flex; justify-content: flex-end; margin-top: 0.25rem;">
-              <button type="button" class="btn btn-sm btn-primary" style="font-size: 0.82rem; padding: 0.45rem 1.15rem; font-weight: 700;" onclick="UI.openDevLogModal('${log.version}')">
-                <span>📋 상세 개발 내역 팝업 보기</span>
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      this.renderSidebar();
-    },
-
-    openDevLogModal(version = 'v1.1') {
-      const log = DEVLOG_DATA.find(d => d.version === version) || DEVLOG_DATA[0];
-      if (!log) return;
-
-      const modal = document.getElementById('devlog-detail-modal');
-      const badgeEl = document.getElementById('devlog-modal-version-badge');
-      const titleEl = document.getElementById('devlog-modal-title');
-      const dateEl = document.getElementById('devlog-modal-date');
-      const summaryEl = document.getElementById('devlog-modal-summary');
-      const listEl = document.getElementById('devlog-modal-details-list');
-
-      if (!modal) return;
-
-      if (badgeEl) {
-        badgeEl.textContent = log.version;
-        badgeEl.style.background = log.badgeColor || 'var(--primary)';
-      }
-      if (titleEl) titleEl.textContent = log.title;
-      if (dateEl) dateEl.textContent = log.dateFormatted;
-      if (summaryEl) summaryEl.textContent = `💡 ${log.summary}`;
-      if (listEl) {
-        listEl.innerHTML = log.details.map(d => `<li>${d}</li>`).join('');
-      }
-
-      modal.style.display = 'flex';
-      modal.classList.add('active');
-      if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
-    },
-
-    closeDevLogModal() {
-      const modal = document.getElementById('devlog-detail-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-    },
+    ...window.createDevLogView({ DEVLOG_DATA }),
 
     // =======================================================================
     // 🌸 스마트 다이어리 비서 (Chatbot UI Engine)
@@ -7464,7 +6437,7 @@
       if (['할 일', '남은', '현황', '연차', '브리핑', '요약'].some(k => text.includes(k))) {
         const activeTasks = store.tasks.filter(t => t.status !== 'completed').length;
         const todayTasks = store.tasks.filter(t => t.dueDate === TODAY_STR && t.status !== 'completed').length;
-        const remainingVac = (store.totalVacationDays || 15.0) - (store.vacations || []).reduce((s, v) => s + (v.amount || 1.0), 0);
+        const remainingVac = store.getVacationStats().remain;
 
         return {
           type: 'status-summary',
@@ -7599,6 +6572,7 @@
 
   // Smart Forward-Fill Parser for Merged Cells (A열: 구분, B열: 항목, C~N열: 1~12월, I열=7월)
   async function parseHoneymoonExcelFile(file, selectedMonth = 'auto', manualAmount = 0, note = '') {
+    if (LocalSyncProtocol.clientKind() === 'mobile') throw new Error('가계부 금액은 PC 웹에서 수정해 주세요.');
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -7767,8 +6741,7 @@
 
   // =========================================================================
   // 9. Bank Statement Analyzer (PDF → Excel → 자동 항목 분류 → 월별 대시보드)
-  // localStorage 전용: ledgerCategoryRules, ledgerBankStatements
-  // 기존 store / Firebase 동기화 흐름 완전 독립
+  // Existing local keys are retained as originals; all new writes use Store.
   // =========================================================================
 
   const BANK_RULES_KEY = 'ledgerCategoryRules';
@@ -7776,17 +6749,17 @@
 
   function bankLoadRules(filterBank = '') {
     try {
-      const all = JSON.parse(localStorage.getItem(BANK_RULES_KEY) || '[]');
+      const all = LocalSyncProtocol.clone(store.ledgerCategoryRules ?? JSON.parse(localStorage.getItem(BANK_RULES_KEY) || '[]'));
       if (!filterBank || filterBank === 'all') return all;
       return all.filter(r => (r.bank === filterBank) || (!r.bank && filterBank === 'shinhan'));
     } catch(e) { return []; }
   }
   function bankSaveRules(rules) {
-    localStorage.setItem(BANK_RULES_KEY, JSON.stringify(rules));
+    if (!store.commitSyncedCollection('ledgerCategoryRules',rules)) throw new Error('분류 규칙을 저장하지 못했습니다. 입력 내용을 유지합니다.');
   }
   function bankLoadStatements() {
     try {
-      const raw = JSON.parse(localStorage.getItem(BANK_DATA_KEY) || '[]');
+      const raw = LocalSyncProtocol.clone(store.ledgerBankStatements ?? JSON.parse(localStorage.getItem(BANK_DATA_KEY) || '[]'));
       if (!Array.isArray(raw) || raw.length === 0) return [];
 
       const seen = new Set();
@@ -7822,7 +6795,7 @@
     } catch(e) { return []; }
   }
   function bankSaveStatements(data) {
-    localStorage.setItem(BANK_DATA_KEY, JSON.stringify(data));
+    if (!store.commitSyncedCollection('ledgerBankStatements',data)) throw new Error('은행 내역을 저장하지 못했습니다. 입력 내용을 유지합니다.');
   }
 
   // PDF 텍스트 추출 (PDF.js) - Y좌표 행 그룹화 및 X좌표 좌->우 정렬 알고리즘
@@ -9262,6 +8235,7 @@
   // 3. 출금액은 항목별/대분류별 집계, 입금액은 항목별 수입 집계
   function syncBankToHoneymoonData() {
     if (!window.store) return;
+    if (LocalSyncProtocol.clientKind() === 'mobile') return;
     if (store.localLoadFailed || store.localSyncInvalid || store.localWriteFailed || store.writerBlocked) return;
     const statements = (typeof bankLoadStatements === 'function') ? bankLoadStatements() : [];
     if (!statements || statements.length === 0) return;
@@ -11184,11 +10158,12 @@
       if (modal) modal.classList.add('active');
     });
 
-    const settingsBtn = document.getElementById('btn-settings-modal');
-    if (settingsBtn) settingsBtn.addEventListener('click', () => {
-      const modal = document.getElementById('settings-modal');
-      if (modal) modal.classList.add('active');
-    });
+    for (const id of ['btn-settings-modal','btn-open-data-settings']) {
+      document.getElementById(id)?.addEventListener('click', () => {
+        UI.closeCloudModal();
+        document.getElementById('settings-modal')?.classList.add('active');
+      });
+    }
 
     const openFileBtn = document.getElementById('btn-open-file-upload');
     if (openFileBtn) openFileBtn.addEventListener('click', () => UI.openFileUploadModal());
@@ -12018,7 +10993,7 @@
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const folderId = target.closest('#btn-delete-health-folder').dataset.id;
         if (folderId && folderId !== 'all' && confirm('정말 이 건강 폴더를 삭제하시겠습니까?\n(폴더 안의 메모는 [일반/기타] 폴더로 안전하게 이동됩니다)')) {
-          store.deleteHealthFolder(folderId);
+          if (!store.deleteHealthFolder(folderId)) return;
           sounds.playDelete();
           UI.closeHealthFolderModal();
           UI.showToast('폴더가 삭제되었고 메모는 안전하게 보관되었어요.', 'info');
@@ -12038,13 +11013,14 @@
           if (selectEl) selectEl.focus();
           return;
         }
-        const noteIds = Array.from(store.selectedHealthNotes || []);
+        const noteIds = store.getSelectedVisibleHealthIds();
         if (!noteIds.length) {
           alert('이동할 메모를 먼저 체크박스로 선택해 주세요!');
           return;
         }
         const count = store.moveHealthNotesToFolder(noteIds, targetFolder);
-        store.selectedHealthNotes.clear();
+        if (!count) return;
+        noteIds.forEach(id => store.selectedHealthNotes.delete(id));
         sounds.playComplete();
         confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
         UI.showToast(`총 ${count}개의 건강 메모가 성공적으로 이동되었어요! 📁✨`, 'success');
@@ -12055,11 +11031,12 @@
       // 0.5. Batch Delete Health Notes
       if (target.closest('[data-action="batch-delete-health-notes"]')) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
-        const noteIds = Array.from(store.selectedHealthNotes || []);
+        const noteIds = store.getSelectedVisibleHealthIds();
         if (!noteIds.length) return;
         if (confirm(`선택한 ${noteIds.length}개의 건강 메모를 정말 모두 삭제하시겠습니까?`)) {
           const count = store.deleteHealthNotesBatch(noteIds);
-          store.selectedHealthNotes.clear();
+          if (!count) return;
+          noteIds.forEach(id => store.selectedHealthNotes.delete(id));
           sounds.playDelete();
           UI.showToast(`총 ${count}개의 건강 메모가 삭제되었어요. 🗑️`, 'info');
           UI.renderHealth();
@@ -12083,7 +11060,7 @@
             const num = parseInt(chosen.trim(), 10);
             if (num >= 1 && num <= nonAllFolders.length) {
               const selectedF = nonAllFolders[num - 1];
-              store.moveHealthNotesToFolder([note.id], selectedF.id);
+              if (!store.moveHealthNotesToFolder([note.id], selectedF.id)) return;
               sounds.playComplete();
               UI.showToast(`'${selectedF.name}' 폴더로 메모가 이동되었어요! ✨`, 'success');
               UI.renderHealth();
@@ -12098,6 +11075,7 @@
       if (healthTab && healthTab.dataset.healthFolderId) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
         store.activeHealthFolder = healthTab.dataset.healthFolderId;
+        store.selectedHealthNotes?.clear();
         UI.renderHealth();
         return;
       }
@@ -12117,7 +11095,7 @@
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const hId = deleteHealthBtn.dataset.id;
         if (hId && confirm('이 건강 기록 메모를 정말 삭제하시겠습니까?')) {
-          store.deleteHealthNote(hId);
+          if (!store.deleteHealthNote(hId)) return;
           sounds.playDelete();
           UI.showToast('건강 메모가 삭제되었어요.', 'danger');
           UI.renderHealth();
@@ -12194,7 +11172,7 @@
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const folderId = target.closest('#btn-delete-hobby-folder').dataset.id;
         if (folderId && folderId !== 'all' && confirm('정말 이 취미 폴더를 삭제하시겠습니까?\n(폴더 안의 일지는 [기타취미] 폴더로 안전하게 이동됩니다)')) {
-          store.deleteHobbyFolder(folderId);
+          if (!store.deleteHobbyFolder(folderId)) return;
           sounds.playDelete();
           UI.closeHobbyFolderModal();
           UI.showToast('취미 폴더가 삭제되었고 기록은 안전하게 보관되었어요.', 'info');
@@ -12214,13 +11192,14 @@
           if (selectEl) selectEl.focus();
           return;
         }
-        const noteIds = Array.from(store.selectedHobbyNotes || []);
+        const noteIds = store.getSelectedVisibleHobbyIds();
         if (!noteIds.length) {
           alert('이동할 일지를 먼저 체크박스로 선택해 주세요!');
           return;
         }
         const count = store.moveHobbyNotesToFolder(noteIds, targetFolder);
-        store.selectedHobbyNotes.clear();
+        if (!count) return;
+        noteIds.forEach(id => store.selectedHobbyNotes.delete(id));
         sounds.playComplete();
         confetti.burst(window.innerWidth / 2, window.innerHeight / 3, 40);
         UI.showToast(`총 ${count}개의 취미 일지가 성공적으로 이동되었어요! 🎨✨`, 'success');
@@ -12231,11 +11210,12 @@
       // Batch Delete Hobby Notes
       if (target.closest('[data-action="batch-delete-hobby-notes"]')) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
-        const noteIds = Array.from(store.selectedHobbyNotes || []);
+        const noteIds = store.getSelectedVisibleHobbyIds();
         if (!noteIds.length) return;
         if (confirm(`선택한 ${noteIds.length}개의 취미 일지를 정말 모두 삭제하시겠습니까?`)) {
           const count = store.deleteHobbyNotesBatch(noteIds);
-          store.selectedHobbyNotes.clear();
+          if (!count) return;
+          noteIds.forEach(id => store.selectedHobbyNotes.delete(id));
           sounds.playDelete();
           UI.showToast(`총 ${count}개의 취미 일지가 삭제되었어요. 🗑️`, 'info');
           UI.renderHobby();
@@ -12259,7 +11239,7 @@
             const num = parseInt(chosen.trim(), 10);
             if (num >= 1 && num <= nonAllFolders.length) {
               const selectedF = nonAllFolders[num - 1];
-              store.moveHobbyNotesToFolder([note.id], selectedF.id);
+              if (!store.moveHobbyNotesToFolder([note.id], selectedF.id)) return;
               sounds.playComplete();
               UI.showToast(`'${selectedF.name}' 폴더로 일지가 이동되었어요! ✨`, 'success');
               UI.renderHobby();
@@ -12274,6 +11254,7 @@
       if (hobbyTab && hobbyTab.dataset.hobbyFolderId) {
         if (typeof e.preventDefault === 'function') e.preventDefault();
         store.activeHobbyFolder = hobbyTab.dataset.hobbyFolderId;
+        store.selectedHobbyNotes?.clear();
         UI.renderHobby();
         return;
       }
@@ -12294,7 +11275,7 @@
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
         const hId = deleteHobbyBtn.dataset.id;
         if (hId && confirm('이 취미 활동 일지를 정말 삭제하시겠습니까?')) {
-          store.deleteHobbyNote(hId);
+          if (!store.deleteHobbyNote(hId)) return;
           sounds.playDelete();
           UI.showToast('취미 기록이 삭제되었어요.', 'danger');
           UI.renderHobby();
@@ -12678,7 +11659,7 @@
         const btn = target.closest('[data-action="delete-vacation"]');
         const vId = btn.dataset.vacationId;
         if (vId && confirm('이 연차/반차 기록을 삭제하시겠습니까?')) {
-          store.deleteVacation(vId);
+          if (!store.deleteVacation(vId)) return;
           sounds.playDelete();
           UI.showToast('연차 기록이 삭제되었어요 🗑️', 'danger');
           UI.renderVacation();
@@ -12748,7 +11729,7 @@
         const btn = target.closest('[data-action="delete-site"]');
         const siteId = btn.dataset.siteId;
         if (siteId && confirm('이 사이트 바로가기를 삭제하시겠습니까?')) {
-          store.deleteSite(siteId);
+          if (!store.deleteSite(siteId)) return;
           sounds.playDelete();
           UI.showToast('사이트 바로가기가 삭제되었어요 🗑️', 'danger');
           UI.renderSites();
@@ -12815,10 +11796,8 @@
       // Health Note Check All
       if (target.id === 'health-check-all') {
         if (!store.selectedHealthNotes) store.selectedHealthNotes = new Set();
-        const activeFolder = store.activeHealthFolder || 'all';
-        const allNotes = store.healthNotes || [];
-        const filtered = (activeFolder === 'all') ? allNotes : allNotes.filter(n => n.folder === activeFolder);
-        
+        const filtered = store.getVisibleHealthNotes();
+
         if (target.checked) {
           filtered.forEach(n => store.selectedHealthNotes.add(n.id));
         } else {
@@ -12844,10 +11823,8 @@
       // Hobby Note Check All
       if (target.id === 'hobby-check-all') {
         if (!store.selectedHobbyNotes) store.selectedHobbyNotes = new Set();
-        const activeFolder = store.activeHobbyFolder || 'all';
-        const allNotes = store.hobbyNotes || [];
-        const filtered = (activeFolder === 'all') ? allNotes : allNotes.filter(n => n.folder === activeFolder);
-        
+        const filtered = store.getVisibleHobbyNotes();
+
         if (target.checked) {
           filtered.forEach(n => store.selectedHobbyNotes.add(n.id));
         } else {
@@ -12916,12 +11893,12 @@
         const reason = document.getElementById('vacation-input-reason')?.value || '';
 
         if (editId) {
-          store.updateVacation(editId, { type, date, reason });
+          if (!store.updateVacation(editId, { type, date, reason })) return;
           sounds.playComplete();
           UI.closeVacationModal();
           UI.showToast('연차/휴가 내역이 성공적으로 수정되었어요 ✏️✨', 'success');
         } else {
-          store.addVacation({ type, date, reason });
+          if (!store.addVacation({ type, date, reason })) return;
           sounds.playComplete();
           UI.closeVacationModal();
           if (type === 'holiday') {
@@ -12939,7 +11916,7 @@
       totalVacationForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const days = document.getElementById('input-total-vacation-days')?.value;
-        store.setTotalVacationDays(days);
+        if (store.setTotalVacationDays(days) === null) return;
         UI.closeTotalVacationModal();
         UI.showToast('총 연차 일수가 설정되었어요 ⚙️✨', 'success');
         UI.renderVacation();
@@ -12957,10 +11934,10 @@
         const memo = document.getElementById('site-input-memo')?.value;
 
         if (id) {
-          store.updateSite(id, { title, url, folder, memo });
+          if (!store.updateSite(id, { title, url, folder, memo })) return;
           UI.showToast('사이트 정보가 수정되었어요 🌐✨', 'info');
         } else {
-          store.addSite({ title, url, folder, memo });
+          if (!store.addSite({ title, url, folder, memo })) return;
           sounds.playComplete();
           UI.showToast('새 사이트 바로가기가 등록되었어요 🚀💖', 'success');
         }
@@ -12978,10 +11955,10 @@
         const icon = document.getElementById('site-folder-selected-icon')?.value || '📁';
 
         if (id) {
-          store.updateSiteFolder(id, { name, icon });
+          if (!store.updateSiteFolder(id, { name, icon })) return;
           UI.showToast('사이트 폴더가 수정되었어요 📁✨', 'info');
         } else {
-          store.addSiteFolder(name, icon);
+          if (!store.addSiteFolder(name, icon)) return;
           sounds.playComplete();
           UI.showToast('새 사이트 폴더가 생성되었어요 📂💖', 'success');
         }
@@ -12996,7 +11973,7 @@
         const id = document.getElementById('site-folder-edit-id')?.value;
         if (!id) return;
         if (confirm('정말 이 사이트 폴더를 삭제하시겠습니까?\n(폴더 안의 사이트들은 포털/검색 폴더로 안전하게 이관됩니다)')) {
-          store.deleteSiteFolder(id);
+          if (!store.deleteSiteFolder(id)) return;
           sounds.playDelete();
           UI.showToast('사이트 폴더가 삭제되고 사이트들이 안전하게 이동되었어요 🗑️', 'danger');
           UI.closeSiteFolderModal();
@@ -13011,24 +11988,27 @@
       healthNoteForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const id = document.getElementById('health-note-edit-id')?.value;
-        const folder = document.getElementById('health-input-folder')?.value || 'general';
+        const folder = document.getElementById('health-input-folder')?.value || '';
+        if (!folder && !id) { UI.showToast('먼저 건강 폴더를 추가해 주세요. 작성한 내용은 유지됩니다.', 'info'); return; }
         const date = document.getElementById('health-input-date')?.value || getRealTodayStr();
         const title = document.getElementById('health-input-title')?.value || '';
         const hospital = document.getElementById('health-input-hospital')?.value || '';
         const cost = document.getElementById('health-input-cost')?.value || '';
         const content = document.getElementById('health-input-content')?.value || '';
 
-        const fileName = document.getElementById('health-file-data-name')?.value || '';
-        const fileSize = parseInt(document.getElementById('health-file-data-size')?.value || '0', 10);
-        const fileType = document.getElementById('health-file-data-type')?.value || '';
-        const fileUrl = document.getElementById('health-file-data-url')?.value || '';
-        const fileMemo = document.getElementById('health-input-file-memo')?.value || '';
-
+        const attachmentChanges = UI.healthAttachments.changes();
+        if (attachmentChanges === null) return;
+        if (id && store.getHealthNoteFingerprint(id) !== UI._healthNoteEditSnapshot) {
+          UI.showToast('이 기록이 다른 곳에서 변경되었습니다. 입력 내용은 유지됩니다. 최신 기록을 확인한 뒤 다시 편집해 주세요.', 'danger');
+          return;
+        }
+        const updates = {date, title, hospital, cost, content, ...attachmentChanges};
+        if (folder) updates.folder = folder;
         if (id) {
-          store.updateHealthNote(id, { folder, date, title, hospital, cost, content, fileName, fileSize, fileType, fileUrl, fileMemo });
+          if (!store.updateHealthNote(id, updates)) return;
           UI.showToast('건강 메모가 수정되었어요 🩺✨', 'info');
         } else {
-          store.addHealthNote({ folder, date, title, hospital, cost, content, fileName, fileSize, fileType, fileUrl, fileMemo });
+          if (!store.addHealthNote({...updates, folder})) return;
           sounds.playComplete();
           UI.showToast('새 건강 메모가 등록되었어요 🏥💖', 'success');
         }
@@ -13047,11 +12027,11 @@
         if (!name.trim()) return;
 
         if (id) {
-          store.updateHealthFolder(id, { name: name.trim(), icon });
+          if (!store.updateHealthFolder(id, { name: name.trim(), icon })) return;
           sounds.playComplete();
           UI.showToast(`'${name.trim()}' 건강 폴더가 수정되었어요 ✨`, 'info');
         } else {
-          store.addHealthFolder(name.trim(), icon);
+          if (!store.addHealthFolder(name.trim(), icon)) return;
           sounds.playAdd();
           UI.showToast(`'${name.trim()}' 건강 폴더가 추가되었어요 📁✨`, 'success');
         }
@@ -13066,7 +12046,8 @@
       hobbyNoteForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const id = document.getElementById('hobby-note-edit-id')?.value;
-        const folder = document.getElementById('hobby-input-folder')?.value || 'general';
+        const folder = document.getElementById('hobby-input-folder')?.value || '';
+        if (!folder && !id) { UI.showToast('먼저 취미 폴더를 추가해 주세요. 작성한 내용은 유지됩니다.', 'info'); return; }
         const date = document.getElementById('hobby-input-date')?.value || getRealTodayStr();
         const title = document.getElementById('hobby-input-title')?.value || '';
         const place = document.getElementById('hobby-input-place')?.value || '';
@@ -13074,10 +12055,13 @@
         const content = document.getElementById('hobby-input-content')?.value || '';
 
         if (id) {
-          store.updateHobbyNote(id, { folder, date, title, place, duration, content });
+          const updates = {date, title, place, duration, content};
+          // A legacy record without a folder keeps that field unchanged.
+          if (folder) updates.folder = folder;
+          if (!store.updateHobbyNote(id, updates)) return;
           UI.showToast('취미 기록이 수정되었어요 🎨✨', 'info');
         } else {
-          store.addHobbyNote({ folder, date, title, place, duration, content });
+          if (!store.addHobbyNote({ folder, date, title, place, duration, content })) return;
           sounds.playComplete();
           UI.showToast('새 취미 기록이 등록되었어요 🏃💖', 'success');
         }
@@ -13096,11 +12080,11 @@
         if (!name.trim()) return;
 
         if (id) {
-          store.updateHobbyFolder(id, { name: name.trim(), icon });
+          if (!store.updateHobbyFolder(id, { name: name.trim(), icon })) return;
           sounds.playComplete();
           UI.showToast(`'${name.trim()}' 취미 폴더가 수정되었어요 ✨`, 'info');
         } else {
-          store.addHobbyFolder(name.trim(), icon);
+          if (!store.addHobbyFolder(name.trim(), icon)) return;
           sounds.playAdd();
           UI.showToast(`'${name.trim()}' 취미 폴더가 추가되었어요 📁✨`, 'success');
         }
@@ -13832,6 +12816,24 @@
       const button = document.getElementById(id);
       if (button) button.addEventListener('click', () => cloudSync.requestManualSync());
     }
+
+    document.getElementById('btn-export-sync-recovery')?.addEventListener('click', async () => {
+      const status = document.getElementById('sync-recovery-result');
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw !== store._lastLocalRaw || !store.hasConfirmedLocalData()) {
+          status.textContent = '최신 로컬 저장을 확인한 뒤 다시 내보내 주세요.'; return;
+        }
+        const saved = JSON.parse(raw);
+        const data = {format:'todolist-sync-recovery',version:1,createdAt:new Date().toISOString(),
+          data:LocalSyncProtocol.select(saved),localSync:saved.localSync,
+          originals:await window.SyncOriginals.getAll(),vaultFiles:await cloudSync.getAllVaultFiles(true,true)};
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+        const link = document.createElement('a');link.href = url;link.download = 'todolist-sync-recovery-' + Date.now() + '.json';link.click();
+        setTimeout(() => URL.revokeObjectURL(url),1000);
+        status.textContent = '자동 보관한 원문을 다운로드했습니다. 개인적으로 보관해 주세요.';
+      } catch { status.textContent = '원문 파일을 저장하지 못했습니다. 이 기기의 보관 내용은 유지됩니다.'; }
+    });
 
     if (window.MemoTransfer) window.MemoTransfer.bind({store,cloud:cloudSync,p:LocalSyncProtocol,key:STORAGE_KEY});
 

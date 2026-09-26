@@ -32,6 +32,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
         }});
         window.fetch = () => { throw Error('View attempted a network request'); };
         window.INITIAL_HONEYMOON_DATA = {};
+        window.LocalSyncProtocol = {clientKind:()=> 'desktop-web'};
         window.store = {honeymoonData: structuredClone(data), selectedLedgerMonth: 9,
           ledgerFiles: [], subscriptions: [], save() { throw Error('View attempted Store.save'); }};
         window.UI = {};
@@ -80,20 +81,20 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
       assert.equal(await page.locator('#ledger-month-data-status').isVisible(), false);
       assert.deepEqual(await page.evaluate(() => store.honeymoonData), data);
       assert.deepEqual(await page.evaluate(() => testWrites), []);
-      // A legacy device may have a pending empty ledger and a preserved remote
-      // conflict. The visible numbers must use that copy without writing data.
+      // After automatic reconciliation, display active PC amounts while keeping
+      // the archived template intact. Rendering itself never changes storage.
       await page.evaluate(data => {
-        store.honeymoonData = {};
-        store.localSync = {pending:[{key:'["honeymoonData",null]',changeId:'keep-me'}],
-          conflicts:[{key:'["honeymoonData",null]',remote:structuredClone(data)}]};
+        store.honeymoonData = structuredClone(data);
+        store.localSync = {pending:[],conflicts:[],recovery:[{local:{honeymoonData:{}}}]};
+        LocalSyncProtocol.clientKind=()=> 'mobile';
         UI.ledgerMonthInitialized = false;
         UI.renderLedger();
       }, data);
       assert.equal(await page.locator('#stat-val-income-total').textContent(), '8,000,000원');
       assert.equal(await page.locator('#stat-val-expense-total').textContent(), '775,000원');
-      assert.match(await page.locator('#ledger-month-data-status').textContent(), /보존된 서버 금액/);
-      assert.deepEqual(await page.evaluate(() => store.honeymoonData), {});
-      assert.equal(await page.evaluate(() => store.localSync.pending[0].changeId), 'keep-me');
+      assert.match(await page.locator('#ledger-month-data-status').textContent(), /PC 웹 기준/);
+      assert.deepEqual(await page.evaluate(() => store.honeymoonData), data);
+      assert.deepEqual(await page.evaluate(() => store.localSync.recovery[0].local.honeymoonData), {});
       assert.deepEqual(await page.evaluate(() => testWrites), []);
     }
     assert.deepEqual(errors, []);

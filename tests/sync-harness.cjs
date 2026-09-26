@@ -59,6 +59,7 @@ function harness(raw, { code = source, failRead = false, extras = {} } = {}) {
     setInterval() { throw Error('Unexpected polling'); },
     fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, headers:{get:()=> '"1"'}, json: async () => null }; },
     E2EESecurityEngine: { encrypt: async data => ({isEncrypted:true, iv:'fake',payload:JSON.stringify(data)}), decrypt: async data => data.isEncrypted ? JSON.parse(data.payload) : data },
+    SyncOriginals: { preserve: async () => true, getAll: async () => [] },
     normalizeArray: value => Array.isArray(value) ? value : [],
     UI: { renderTasks() {}, renderSidebar() {}, initChatbot() {} },
     bindEvents() { context.bound = true; },
@@ -69,6 +70,8 @@ function harness(raw, { code = source, failRead = false, extras = {} } = {}) {
   vm.runInContext(constants, context);
   vm.runInContext(code.slice(code.indexOf('  const LocalSyncProtocol'), code.indexOf('  // IndexedDB Vault Storage Engine')) +
     '\nvar cloudSync = new CloudSyncManager();', context);
+  // Default synthetic device is a PC web client. Mobile/file cases override it.
+  vm.runInContext("LocalSyncProtocol.clientKind = () => 'desktop-web';", context);
   vm.runInContext(code.slice(code.indexOf('  const INITIAL_HONEYMOON_DATA'), code.indexOf('  // 6. UI View Engine')), context);
   vm.runInContext(code.slice(code.indexOf('  function initApp()'), code.lastIndexOf("  if (document.readyState === 'loading')")), context);
   vm.runInContext('globalThis.subject = store; globalThis.protocol = LocalSyncProtocol;', context);

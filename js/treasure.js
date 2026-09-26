@@ -129,38 +129,30 @@ class TreasureVaultManager {
   load() {
     try {
       const raw = localStorage.getItem(TREASURE_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const existingIds = new Set(parsed.map(t => t.id));
-        DEFAULT_TREASURES.forEach(defT => {
-          if (!existingIds.has(defT.id)) {
-            parsed.unshift(defT);
-          } else {
-            // Update default content if matches default IDs
-            const idx = parsed.findIndex(p => p.id === defT.id);
-            if (idx !== -1 && !parsed[idx].userModified) {
-              parsed[idx].title = defT.title;
-              parsed[idx].desc = defT.desc;
-              parsed[idx].code = defT.code;
-            }
-          }
-        });
-        this.treasures = parsed;
-        this.save();
-      } else {
-        this.treasures = [...DEFAULT_TREASURES];
-        this.save();
-      }
+      const parsed = window.store?.treasures ?? (raw === null ? [] : JSON.parse(raw));
+      if (!Array.isArray(parsed)) throw new Error('Invalid treasures');
+      this.treasures = JSON.parse(JSON.stringify(parsed));
     } catch (e) {
-      this.treasures = [...DEFAULT_TREASURES];
+      this.loadFailed = true;
+      window.UI?.showToast('보물 지식 원본을 읽지 못했습니다. 원본을 유지합니다.','warning');
     }
   }
 
-  save() {
-    try {
-      localStorage.setItem(TREASURE_STORAGE_KEY, JSON.stringify(this.treasures));
-    } catch (e) {}
+  refreshFromStore() {
+    if (!Array.isArray(window.store?.treasures)) return;
+    this.treasures = JSON.parse(JSON.stringify(window.store.treasures));
     this.updateBadge();
+    if (document.getElementById('treasure-modal')?.classList.contains('active')) this.render();
+  }
+
+  save() {
+    if (this.loadFailed || !window.store?.commitSyncedCollection('treasures',this.treasures)) {
+      this.load();
+      window.UI?.showToast('보물 지식을 저장하지 못했습니다. 입력 내용을 유지합니다.','warning');
+      return false;
+    }
+    this.updateBadge();
+    return true;
   }
 
   add(title, desc, code = '', category = 'study') {
@@ -174,7 +166,7 @@ class TreasureVaultManager {
       createdAt: Date.now()
     };
     this.treasures.unshift(newTreasure);
-    this.save();
+    if (!this.save()) return null;
     this.render();
     return newTreasure;
   }
@@ -183,7 +175,7 @@ class TreasureVaultManager {
     const idx = this.treasures.findIndex(t => t.id === id);
     if (idx !== -1) {
       this.treasures.splice(idx, 1);
-      this.save();
+      if (!this.save()) return false;
       this.render();
       return true;
     }
@@ -587,7 +579,7 @@ class TreasureVaultManager {
       if (delBtn) {
         const tId = delBtn.dataset.id;
         if (tId && confirm('정말 삭제하시겠습니까?')) {
-          this.delete(tId);
+          if (!this.delete(tId)) return;
           if (window.sounds && window.sounds.playDelete) window.sounds.playDelete();
           if (window.UI && window.UI.showToast) window.UI.showToast('보물 노트가 삭제되었어요.', 'danger');
         }
@@ -666,7 +658,7 @@ class TreasureVaultManager {
           return;
         }
 
-        this.add(title, desc, code, cat);
+        if (!this.add(title, desc, code, cat)) return;
         this.currentPage = 1;
         if (window.sounds && window.sounds.playAdd) window.sounds.playAdd();
         if (window.confetti && window.confetti.burst) window.confetti.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
@@ -737,7 +729,7 @@ class TreasureVaultManager {
           const midY = rect.top + rect.height / 2;
           const insertIdx = (e.clientY < midY) ? toIdx : toIdx + 1;
           this.treasures.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, moved);
-          this.save();
+          if (!this.save()) return;
           this.render();
           if (window.UI && window.UI.showToast) {
             window.UI.showToast('보물 지식 순서가 변경되었어요! ✨', 'info');
@@ -772,7 +764,7 @@ window.addTreasureStudy = function(title, desc, code = '', category = 'study') {
     window.treasureVault = treasureVaultInstance;
   }
   const item = treasureVaultInstance.add(title, desc, code, category);
-  if (window.UI && window.UI.showToast) {
+  if (item && window.UI && window.UI.showToast) {
     window.UI.showToast(`💎 보물함에 새로운 학습 노트('${title}')가 추가되었어요!`, 'success');
   }
   return item;

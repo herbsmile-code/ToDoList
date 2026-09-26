@@ -153,16 +153,17 @@ test('Firebase failure, browser restart, stale remote and retry keep transferred
   assert.ok(reopened.server.data.notes.some(n=>n.id==='D'));
 });
 
-test('different server edit during backup remains a conflict, never a silent overwrite',async()=>{
+test('different server edit during backup is automatically preserved in recovery',async()=>{
   const h=setup(),source=addD();source.notes[0].content='Local priority';
   await h.cloud.requestMemoTransfer(h.makeFile(source),async protection=>{
     h.server.data.notes[0].content='Another PC changed this during backup';h.server.rev++;
     return h.backup(protection);
   });
-  assert.equal(await h.cloud.requestManualSync(),false);assert.equal(putCount(h),0);
-  assert.equal(h.server.data.notes[0].content,'Another PC changed this during backup');
+  assert.equal(await h.cloud.requestManualSync(),true);
+  // Independent imported rows upload and both same-ID originals remain recoverable.
+  assert.equal(putCount(h),1);
   assert.ok(saved(h).notes.some(n=>n.content==='Local priority'));
-  assert.ok(saved(h).localSync.conflicts.length);
+  assert.ok(saved(h).localSync.recovery.some(r=>r.remote.notes?.[0]?.content==='Another PC changed this during backup'));
 });
 
 test('server 412 during subsequent PUT preserves local import and newer server data',async()=>{

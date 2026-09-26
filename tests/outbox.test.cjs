@@ -109,16 +109,16 @@ test('A pending D plus B added E both survive', async () => {
   assert.ok(s.data.notes.some(n=>n.id===e.id));
 });
 
-test('same-note conflict retains local body, server body and durable conflict copy', async () => {
+test('same-note edits converge with a durable copy of both originals', async () => {
   const s=server(),a=s.attach(harness(JSON.stringify(fixture))); await sync(a);
   const b=restart(a,s);
   a.store.updateNote('user-note',{content:'A version'});
   b.store.updateNote('user-note',{content:'B version'});await sync(b);
-  assert.equal(await sync(a),false);
-  assert.equal(saved(a).notes.find(n=>n.id==='user-note').content,'A version');
+  assert.equal(await sync(a),true);
+  assert.equal(saved(a).notes.find(n=>n.id==='user-note').content,'B version');
   assert.equal(s.data.notes.find(n=>n.id==='user-note').content,'B version');
-  assert.ok(saved(a).localSync.conflicts.some(c=>c.remote?.content==='B version'));
-  assert.ok(saved(a).localSync.pending.length);
+  assert.ok(saved(a).localSync.recovery.some(c=>c.local.notes?.[0]?.content==='A version' && c.remote.notes?.[0]?.content==='B version'));
+  assert.equal(saved(a).localSync.pending.length,0);
 });
 
 test('conditional PUT rejects a B edit made after A GET; retry preserves both', async () => {
@@ -305,6 +305,27 @@ test('full application script loads with fake DOM and keeps existing storage byt
   h.context.document.readyState='loading';
   h.context.document.addEventListener=()=>{};
   h.context.addEventListener=()=>{};
+  const devlogView = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/devlog/view.js'),'utf8');
+  vm.runInContext(devlogView,h.context);
+  const aiStudyView = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/ai-study/view.js'),'utf8');
+  vm.runInContext(aiStudyView,h.context);
+  const sitesView = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/sites/view.js'),'utf8');
+  vm.runInContext(sitesView,h.context);
+  const vacationView = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/vacation/view.js'),'utf8');
+  vm.runInContext(vacationView,h.context);
+  const hobbyView = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/hobby/view.js'),'utf8');
+  vm.runInContext(hobbyView,h.context);
+  const healthAttachments = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/health/attachments.js'),'utf8');
+  vm.runInContext(healthAttachments,h.context);
+  const healthView = require('node:fs').readFileSync(
+    require('node:path').join(__dirname,'../js/features/health/view.js'),'utf8');
+  vm.runInContext(healthView,h.context);
   vm.runInContext(source,h.context);
   assert.equal(h.values.get(key),raw);
   assert.equal(typeof h.context.UI.openAiStudyModal,'function');
@@ -334,6 +355,7 @@ test('hanging request is aborted and leaves durable pending data for later retry
   h.context.setTimeout=(callback,delay)=>{timeouts.push({callback,delay});return timeouts.length;};
   h.context.fetch=(url,opts)=>new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(Error('aborted'))));
   const work=sync(h);
+  for (let i=0;i<20 && !timeouts.length;i++) await Promise.resolve();
   assert.equal(timeouts[0].delay,15000);timeouts[0].callback();
   assert.equal(await work,false);
   assert.ok(saved(h).localSync.pending.length);
@@ -500,17 +522,18 @@ test('manual: server 412 preserves a different device edit, retry merges both ad
   assert.ok(s.data.notes.some(n=>n.id===d.id));assert.ok(s.data.notes.some(n=>n.id==='E'));
 });
 
-test('manual: same-note conflict does not upload or discard either device version', async () => {
+test('manual: same-note edits automatically converge without discarding either original', async () => {
   const s=server(),a=s.attach(harness(JSON.stringify(fixture)));await sync(a);
   const b=restart(a,s);a.store.updateNote('user-note',{content:'A'});
   b.store.updateNote('user-note',{content:'B'});await sync(b);
   const before=puts(a).length,{toasts}=mountSyncControls(a);
-  assert.equal(await a.context.cloudSync.requestManualSync(),false);
-  assert.equal(puts(a).length,before);
-  assert.equal(saved(a).notes.find(n=>n.id==='user-note').content,'A');
+  assert.equal(await a.context.cloudSync.requestManualSync(),true);
+  assert.equal(puts(a).length,before+1);
+  assert.equal(saved(a).notes.find(n=>n.id==='user-note').content,'B');
   assert.equal(s.data.notes.find(n=>n.id==='user-note').content,'B');
-  assert.ok(saved(a).localSync.pending.length);assert.ok(saved(a).localSync.conflicts.length);
-  assert.ok(toasts.every(t=>t.type!=='success'));
+  assert.equal(saved(a).localSync.pending.length,0);assert.equal(saved(a).localSync.conflicts.length,0);
+  assert.ok(saved(a).localSync.recovery.some(r=>r.local.notes?.[0]?.content==='A' && r.remote.notes?.[0]?.content==='B'));
+  assert.ok(toasts.some(t=>t.type==='success'));
 });
 
 test('manual: damaged metadata and read failure preserve original bytes and block network', async () => {
@@ -610,17 +633,19 @@ test('automatic upload: a saved change shows pending, then syncing until the PUT
   assert.equal(s.data.notes.find(n=>n.id===note.id).content,'New pending memo');
 });
 
-test('idle polling: unresolved conflicts never flash syncing or clear pending records', async () => {
+test('idle polling: resolved edits remain confirmed without repeated uploads or archives', async () => {
   const s=server(),a=s.attach(harness(JSON.stringify(fixture)));await sync(a);
   const b=restart(a,s);a.store.updateNote('user-note',{content:'A'});
   b.store.updateNote('user-note',{content:'B'});await sync(b);await sync(a);
   const {elements}=mountSyncControls(a),pending=clone(saved(a).localSync.pending),states=[];
   const render=a.store.renderSaveStatus.bind(a.store);
   a.store.renderSaveStatus=()=>{render();states.push(elements['manual-sync-state'].textContent);};
-  assert.equal(await sync(a),false);
-  assert.ok(states.every(state=>state==='동기화 필요'));
+  const count=puts(a).length,archives=clone(saved(a).localSync.recovery);
+  assert.equal(await sync(a),true);
+  assert.ok(states.every(state=>state==='동기화 완료'));
   assert.deepEqual(saved(a).localSync.pending,pending);
-  assert.equal(saved(a).notes.find(n=>n.id==='user-note').content,'A');
+  assert.equal(saved(a).notes.find(n=>n.id==='user-note').content,'B');
+  assert.equal(puts(a).length,count);assert.deepEqual(saved(a).localSync.recovery,archives);
 });
 
 test('idle polling: local save failure still blocks all network requests and shows local failure', async () => {
@@ -719,7 +744,8 @@ test('light sync: restart and verification-cache expiry each require a full chec
   assert.equal(await sync(h),true);assert.equal(reads,1);
   const reboot=restart(h,s);assert.equal(reboot.context.cloudSync._idleSyncCache,null);
   reboot.context.cloudSync.getAllVaultFiles=async()=>{reads++;return [];};
-  assert.equal(await sync(reboot),true);assert.equal(reads,2);
+  // A new session also reads the original file bodies for the protected backup.
+  assert.equal(await sync(reboot),true);assert.equal(reads,3);
 });
 
 test('light sync: missing ETag or malformed response never reuses an older success', async () => {
@@ -776,6 +802,14 @@ test('light sync: opening a fake vault fails without leaving cache or a write co
   engine.getDB=async()=>{throw Error('fake open failure');};
   for(const method of ['addFiles','saveAll','delete'])assert.equal(await engine[method]([]),false);
   assert.equal(h.context.cloudSync._vaultWritesInFlight,0);assert.equal(h.context.cloudSync._idleSyncCache,null);
+});
+
+test('vault sync guard is checked after opening IDB and before any clearing transaction', async () => {
+  const {h}=await cachedClient(),{engine,transactions}=fakeVaultEngine(h),cloud=h.context.cloudSync;
+  const open=engine.getDB,version=cloud._vaultChangeVersion;
+  engine.getDB=async()=>{cloud._vaultChangeVersion++;return open();};
+  assert.equal(await engine.saveAll([{id:'old-snapshot'}],()=>cloud._vaultChangeVersion===version+1),false);
+  assert.equal(transactions.length,0);assert.equal(cloud._vaultWritesInFlight,0);
 });
 
 test('light sync: a vault write during GET forces a full read and retains the new file contents', async () => {
@@ -841,6 +875,6 @@ test('light sync: a vault write already in progress prevents seeding a new verif
   const {h}=await cachedClient(),{engine,started}=fakeVaultEngine(h),cloud=h.context.cloudSync;
   const work=engine.addFiles([{id:'pending-file'}]),tx=await started;
   assert.equal(cloud._vaultWritesInFlight,1);
-  assert.equal(await sync(h),true);assert.equal(cloud._idleSyncCache,null);
+  assert.equal(await sync(h),false);assert.equal(cloud._idleSyncCache,null);
   tx.oncomplete();await work;assert.equal(cloud._vaultWritesInFlight,0);
 });

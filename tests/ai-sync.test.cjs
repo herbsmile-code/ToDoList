@@ -4,14 +4,13 @@ const {server,client,saved,puts,sync,clone,key,localData,remoteData} = require('
 
 test('reproduction: unrelated vacation conflict no longer blocks a new remote AI note', async () => {
   const s=server(),h=client(s),remoteBefore=clone(s.data),localBefore=localData();
-  h.context.cloudSync.getAllVaultFiles=()=>{throw Error('Partial receive must not touch vault files');};
-  assert.equal(await sync(h),false); // Partial receive is never advertised as full sync.
+  assert.equal(await sync(h),true);
   assert.deepEqual(saved(h).aiStudyNotes,s.data.aiStudyNotes);
   assert.deepEqual(saved(h).notes,localBefore.notes);
-  assert.equal(saved(h).totalVacationDays,15);
-  assert.equal(saved(h).localSync.conflicts[0].key, '["totalVacationDays",null]');
-  assert.equal(h.store.saveStatus,'conflict');
-  assert.deepEqual(s.data,remoteBefore);assert.equal(puts(h).length,0);
+  assert.equal(saved(h).totalVacationDays,20);
+  assert.ok(saved(h).localSync.recovery.some(r=>r.local.totalVacationDays===15 && r.remote.totalVacationDays===20));
+  assert.equal(h.store.saveStatus,'confirmed');
+  assert.deepEqual(s.data.aiStudyNotes,remoteBefore.aiStudyNotes);
 });
 
 test('partial receive persists across restart, repeats without duplication and keeps metadata valid', async () => {
@@ -34,33 +33,29 @@ async function knownConflict() {
   return {s,h};
 }
 
-test('known baseline: unsent D survives receipt of E with original pending IDs/bases', async () => {
+test('known baseline: D and E converge, automatic choices archive originals and clear acknowledged pending', async () => {
   const {s,h}=await knownConflict(),pending=clone(h.store.localSync.pending),beforePuts=puts(h).length;
-  assert.equal(await sync(h),false);
+  assert.equal(await sync(h),true);
   const after=saved(h);
   assert.equal(after.aiStudyNotes.find(n=>n.id==='local-D').content,'Keep latest D');
   assert.equal(after.aiStudyNotes.find(n=>n.id==='remote-ai').content,'Original remote AI body');
-  assert.equal(after.localSync.pending.length,pending.length);
-  for(const p of pending) {
-    const next=after.localSync.pending.find(n=>n.key===p.key);
-    assert.equal(next.changeId,p.changeId);assert.equal(next.base,p.base);
-    if(p.key!=='["aiStudyNotes","$order"]')assert.deepEqual(next,p);
-  }
+  assert.equal(after.localSync.pending.length,0);
+  assert.ok(s.data.aiStudyNotes.some(n=>n.id==='local-D'));
+  assert.ok(after.localSync.recovery.some(r=>r.local.totalVacationDays===16 && r.remote.totalVacationDays===20));
   const reboot=client(s,h.values.get(key));
   assert.equal(reboot.store.localSyncInvalid,false);
-  assert.equal(await sync(reboot),false);
-  assert.equal(puts(h).length,beforePuts);assert.equal(puts(reboot).length,0);
+  assert.equal(await sync(reboot),true);
+  assert.equal(puts(h).length,beforePuts+1);assert.equal(puts(reboot).length,0);
 });
 
 test('same-ID AI conflict preserves both bodies while a different new note can arrive', async () => {
   const local=localData();local.aiStudyNotes=[{id:'remote-ai',title:'Local title',content:'Local original'}];
   const s=server();s.data.aiStudyNotes.push({id:'remote-E',title:'E',content:'New E'});
   const h=client(s,JSON.stringify(local));
-  assert.equal(await sync(h),false);
-  assert.equal(saved(h).aiStudyNotes.find(n=>n.id==='remote-ai').content,'Local original');
+  assert.equal(await sync(h),true);
+  assert.equal(saved(h).aiStudyNotes.find(n=>n.id==='remote-ai').content,'Original remote AI body');
   assert.equal(saved(h).aiStudyNotes.find(n=>n.id==='remote-E').content,'New E');
-  assert.ok(saved(h).localSync.conflicts.some(c=>c.remote?.content==='Original remote AI body'));
-  assert.equal(puts(h).length,0);
+  assert.ok(saved(h).localSync.recovery.some(c=>c.local.aiStudyNotes?.[0]?.content==='Local original' && c.remote.aiStudyNotes?.[0]?.content==='Original remote AI body'));
 });
 
 test('local and remote tombstones prevent resurrection of incoming notes', async () => {
@@ -69,8 +64,9 @@ test('local and remote tombstones prevent resurrection of incoming notes', async
     (side==='local'?local:s.data).deletedItemIds.push('remote-ai');
     const h=client(s,JSON.stringify(local));await sync(h);
     assert.deepEqual(saved(h).aiStudyNotes,[]);
-    assert.deepEqual(saved(h).deletedItemIds,local.deletedItemIds);
-    assert.equal(puts(h).length,0);
+    assert.ok(saved(h).deletedItemIds.includes('remote-ai'));
+    assert.ok(s.data.deletedItemIds.includes('remote-ai'));
+    assert.ok(!s.data.aiStudyNotes.some(n=>n.id==='remote-ai'));
   }
 });
 
@@ -79,9 +75,10 @@ test('an explicit pending removal is not inferred to be a missing downloaded not
   const s=server(initial),h=client(s,JSON.stringify(initial));await sync(h);
   h.store.aiStudyNotes=[];h.store.totalVacationDays=16;h.store.saveLocalOnly();
   s.data.totalVacationDays=20;s.rev++;
-  assert.equal(await sync(h),false);
+  assert.equal(await sync(h),true);
   assert.deepEqual(saved(h).aiStudyNotes,[]);
-  assert.ok(saved(h).localSync.pending.some(p=>p.key==='["aiStudyNotes","remote-ai"]' && p.localHash==='absent'));
+  assert.ok(!s.data.aiStudyNotes.some(n=>n.id==='remote-ai'));
+  assert.ok(!saved(h).localSync.pending.some(p=>p.key==='["aiStudyNotes","remote-ai"]'));
 });
 
 test('partial local save failure leaves original memory, durable data and pending intact', async () => {
@@ -119,18 +116,19 @@ test('a local edit during GET defers partial receive without erasing the new edi
   s.beforeGET=()=>{h.store.aiStudyNotes.push({id:'D',content:'During request'});h.store.saveLocalOnly();};
   assert.equal(await sync(h),false);
   assert.deepEqual(saved(h).aiStudyNotes,[{id:'D',content:'During request'}]);
-  assert.equal(await sync(h),false);
+  assert.equal(await sync(h),true);
   assert.equal(saved(h).aiStudyNotes.length,2);
   assert.equal(client(s,h.values.get(key)).store.localSyncInvalid,false);
 });
 
 test('after conflict resolution, failed PUT retains pending; confirmed retry syncs D and E once', async () => {
   const {s,h}=await knownConflict();await sync(h);
+  h.store.aiStudyNotes.push({id:'new-pending',content:'Added after partial acknowledgement'});h.store.saveLocalOnly();
   s.data.totalVacationDays=16;s.rev++;s.failPUT=true;
   assert.equal(await sync(h),false);assert.ok(saved(h).localSync.pending.length);
   s.failPUT=false;
   assert.equal(await sync(h),true);
-  assert.deepEqual(new Set(s.data.aiStudyNotes.map(n=>n.id)),new Set(['local-D','remote-ai']));
+  assert.deepEqual(new Set(s.data.aiStudyNotes.map(n=>n.id)),new Set(['local-D','remote-ai','new-pending']));
   assert.equal(saved(h).localSync.pending.length,0);assert.equal(h.store.saveStatus,'confirmed');
   assert.equal(Object.hasOwn(s.data,'localSync'),false);
 });
@@ -150,10 +148,10 @@ test('login distinguishes accepted credentials from failed data synchronization'
   assert.equal(puts(h).length,0);
 });
 
-test('login with conflict receives new AI note but still reports incomplete sync', async () => {
+test('login automatically preserves differing originals and confirms received AI notes', async () => {
   const s=server(),h=client(s);
   const result=await h.context.cloudSync.verifyAndLogin('on3257','fake-test-pin');
-  assert.equal(result.success,true);assert.equal(result.synced,false);
+  assert.equal(result.success,true);assert.equal(result.synced,true);
   assert.deepEqual(saved(h).aiStudyNotes,s.data.aiStudyNotes);
 });
 

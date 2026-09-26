@@ -8,7 +8,7 @@
 
   function validate(data, p) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('백업 데이터 형식을 확인할 수 없습니다.');
-    p.slots(data); // Reject duplicate IDs and malformed lists instead of dropping items.
+    p.slots(data,true); // File imports keep strict duplicate validation.
     if (data.deletedItemIds !== undefined && (!Array.isArray(data.deletedItemIds) || data.deletedItemIds.some(id => typeof id !== 'string'))) {
       throw new Error('삭제 기록 형식을 확인할 수 없습니다.');
     }
