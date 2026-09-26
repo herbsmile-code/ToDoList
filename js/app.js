@@ -955,6 +955,8 @@
       this._showSyncProgress = forceWrite || store.saveStatus !== 'confirmed';
       const target = LocalSyncProtocol.hash([this.activeUrl, this.getStorageKey()]);
       const sessionPin = this.pin;
+      const startedAt = Date.now(), retryAttempt = this.failures || 0;
+      this._lastUploadBytes = 0;
       const url = this.activeUrl + '/spaces/' + this.getStorageKey() + '.json';
       try {
         if (store.localSync.targetFingerprint && store.localSync.targetFingerprint !== target) {
@@ -1125,6 +1127,8 @@
             put = await this.requestCloud(url,options);
           }
           if (put.status === 412) {
+            window.SyncDiagnostics?.record({outcome:'deferred',stage:'upload',status:412,attempt:retryAttempt,
+              durationMs:Date.now()-startedAt,uploadBytes:this._lastUploadBytes});
             this._syncAgain = true;
             store.setSaveStatus('pending');
             return false; // Another device saved first: re-read and merge automatically.
@@ -1198,6 +1202,8 @@
         this.lastSyncedRevision = store.syncRevision;
         this.failures = 0; this.retryAfter = 0;
         this.lastSyncFailure = null;
+        if (shouldWrite || retryAttempt) window.SyncDiagnostics?.record({outcome:retryAttempt?'recovered':'saved',stage:'local-save',
+          attempt:retryAttempt,durationMs:Date.now()-startedAt,uploadBytes:this._lastUploadBytes,downloadBytes:wire.length});
         store._localSaveFailures = 0;
         if (result.waitingForDesktop) {
           store.setSaveStatus('pending','다른 기록은 동기화했습니다. 가계부는 원본이 있는 PC 웹에서 접속하면 자동으로 맞춰집니다.');
@@ -1221,6 +1227,7 @@
         const kind = e?.kind || (e?.name === 'AbortError' ? 'timeout' : 'unknown');
         this.lastSyncFailure = {stage:this._syncStage,status:Number(httpStatus)||0,kind,at:Date.now(),
           uploadBytes:this._syncStage === 'upload' ? this._lastUploadBytes || 0 : 0};
+        window.SyncDiagnostics?.record({...this.lastSyncFailure,outcome:'failed',attempt:this.failures,durationMs:Date.now()-startedAt});
         if (kind === 'size-limit') reason = '서버가 전송 자료의 크기 제한으로 저장을 거절했습니다';
         else if (kind === 'request-option') reason = '서버가 전송 요청 옵션을 거절했습니다';
         else if (kind === 'permission') reason = '서버가 데이터 접근 권한을 거절했습니다';
@@ -13038,6 +13045,8 @@
         status.textContent = '자동 보관한 원문을 다운로드했습니다. 개인적으로 보관해 주세요.';
       } catch { status.textContent = '원문 파일을 저장하지 못했습니다. 이 기기의 보관 내용은 유지됩니다.'; }
     });
+
+    document.getElementById('btn-export-sync-diagnostics')?.addEventListener('click', () => window.SyncDiagnostics?.download());
 
     if (window.MemoTransfer) window.MemoTransfer.bind({store,cloud:cloudSync,p:LocalSyncProtocol,key:STORAGE_KEY,storage:mainStorage});
 
