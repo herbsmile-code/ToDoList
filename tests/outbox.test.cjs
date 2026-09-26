@@ -356,7 +356,7 @@ test('hanging request is aborted and leaves durable pending data for later retry
   h.context.fetch=(url,opts)=>new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(Error('aborted'))));
   const work=sync(h);
   for (let i=0;i<20 && !timeouts.length;i++) await Promise.resolve();
-  assert.equal(timeouts[0].delay,15000);timeouts[0].callback();
+  assert.equal(timeouts[0].delay,60000);timeouts[0].callback();
   assert.equal(await work,false);
   assert.ok(saved(h).localSync.pending.length);
   assert.equal(h.context.cloudSync.isPushing,false);
@@ -791,7 +791,7 @@ test('light sync: all actual vault writer entry points invalidate cache until th
       cloud._idleSyncCache={mustBeInvalidated:true};
       if(failure){
         transactions[0].error=Error('fake transaction failed');transactions[0].onerror();
-        if(method==='delete')assert.equal(await work,false);else await assert.rejects(work);
+        await assert.rejects(work); // No failed transaction may look completed to its caller.
       }else{transactions[0].oncomplete();assert.equal(await work,true);}
       assert.equal(cloud._vaultWritesInFlight,0);assert.equal(cloud._idleSyncCache,null);
     }

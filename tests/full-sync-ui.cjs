@@ -23,6 +23,7 @@ const server=http.createServer(async(req,res)=>{
       if(req.headers['if-match']!==String(revision)) {res.writeHead(412,{'Content-Type':'application/json'});res.end('null');return;}
       body=JSON.parse(text);assert.equal(body.isEncrypted,true);revision++;puts++;
       for(const stream of streams)stream.write('event: put\ndata: '+JSON.stringify({path:'/',data:body.iv})+'\n\n');
+      assert.equal(url.searchParams.get('print'),'silent');res.writeHead(204);res.end();return;
     }
     res.writeHead(200,{'Content-Type':'application/json',ETag:String(revision)});res.end(JSON.stringify(body));return;
   }
@@ -42,6 +43,12 @@ async function open(browser,origin,entry,label,mobile=false) {
     honeymoonData:{9:{hasData:true,income:{total:label==='pc'?100:9999,items:[]}}}};
   for(const f of ['tasks','notes','aiStudyNotes','healthNotes','hobbyNotes','wishlist','photos','sites','vacations','projects','subscriptions','ledgerFiles']) {
     data[f].push({id:f+'-'+label,title:label,content:label,category:'personal',folder:'general',type:'todo'});
+  }
+  // Previously tests received large files into an empty profile. Existing
+  // devices must also start automatically with a nearly full legacy snapshot.
+  if(label==='pc') {
+    data.photos.at(-1).dataUrl='data:image/png;base64,'+'A'.repeat(2400000);
+    data.ledgerFiles.at(-1).dataUrl='data:application/pdf;base64,'+'B'.repeat(2200000);
   }
   await page.evaluate(async({data,key,origin,label})=>{
     localStorage.setItem(key,JSON.stringify(data));
@@ -88,6 +95,9 @@ async function consistent(apps,expected) {
       const apps=[pc,mobile,second];await consistent(apps,3);
       for(const app of apps) {
         assert.equal(await app.page.evaluate(()=>store.honeymoonData[9].income.total),100);
+        assert.deepEqual(await app.page.evaluate(key=>({photo:store.photos.find(r=>r.id==='photos-pc').dataUrl.length,
+          ledger:store.ledgerFiles.find(r=>r.id==='ledgerFiles-pc').dataUrl.length,compact:localStorage.getItem(key).length<100000}),key),
+          {photo:2400022,ledger:2200028,compact:true});
         const sizes=await app.page.evaluate(async()=>Object.fromEntries((await cloudSync.getAllVaultFiles(true,true)).map(f=>[f.id,f.dataUrl?.length])));
         assert.ok(sizes['file-pc']>700000);assert.ok(sizes['file-mobile']);assert.ok(sizes['file-second-pc']);
         const originals=await app.page.evaluate(()=>SyncOriginals.getAll());assert.equal(originals.length,2);

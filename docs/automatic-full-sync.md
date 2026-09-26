@@ -13,11 +13,14 @@
 - 32KB를 넘는 복구 항목은 기존 IndexedDB 원문 저장소에 보관을 확인한 후 작은 참조만 `localSync.recovery`에 남긴다. 해당 원문은 설정의 원문 내보내기에 포함된다. 큰 첨부 수정본이 localStorage 용량을 중복 소비하는 것을 방지한다.
 - 사진·가계부 파일 등 큰 첨부 원문도 중앙 저장 어댑터에서 IndexedDB에 확인 저장하고 localStorage에는 참조를 둔다. 메모 객체, 중앙 Store, 서버 암호화 형식은 유지한다. 서버 업로드와 내보내기에는 전체 원문이 들어간다. 앱 시작 시 참조의 원문·내용 해시를 확인하며, 구버전 앱이 참조를 본문으로 업로드하지 못하도록 쓰기를 차단한다.
 - IndexedDB 열기·원문 보관·파일 읽기가 응답하지 않을 때 15초 뒤 실패를 표시하고 재시도한다. 완료되지 않은 보관을 성공으로 간주하지 않는다.
+- 파일 쓰기·삭제도 15초 뒤 미완료 트랜잭션을 중단하고 동기화 쓰기 잠금을 해제한다. 단순 중단(`abort`)도 실패로 처리한다. 화면 이벤트 연결이 실패해도 검증된 중앙 동기화는 시작하며, 진행 중인 단계와 재시도를 표시한다.
+- 큰 전체 자료의 송수신에는 60초 제한을 두고, 조건부 PUT은 `print=silent`로 성공 시 204 응답만 받는다. 업로드한 암호문 전체를 응답에서 다시 받는 통신을 없앤다. [Firebase REST 공식 문서](https://firebase.google.com/docs/database/rest/save-data#improving_write_performance)에 따른 응답 최적화이며, 조건부 쓰기·원문 보존·미전송 확인은 유지한다.
 
 ## 검증
 
 - `node --test tests/*.test.cjs`: 저장 실패 복구 회귀 검사를 포함한다.
 - `tests/full-sync-ui.cjs`: 두 HTML에서 가상 PC 2대와 모바일 1대, 실제 IndexedDB·암호화·로컬 SSE 서버로 자동 병합, 큰 파일 전송, 일시 실패 재시도, 삭제 후 재시작 검증.
+- `tests/sync-progress.test.cjs`: 화면 초기화 오류가 있어도 동기화 시작, 지연 중 단계 표시, 전송 중 추가 편집의 재시도, 빈 204 응답으로 저장 확인. `full-sync-ui.cjs`는 PC가 460만 자의 기존 첨부를 가진 상태에서 자동 시작한다.
 - `tests/automatic-sync-ui.cjs`: PC·모바일·로컬 HTML, 수정본 보관, 저장 실패, 재실행, 원문 내보내기.
 - `tests/sync-storage-recovery.test.cjs`: 일시적인 저장 실패 후 자동 재전송과 대용량 복구 원문 보관 실패 시 원본 유지. 브라우저 검사는 실제 localStorage 용량을 채우고 IndexedDB 보관 원문의 크기까지 확인한다.
 - `tests/main-storage-ui.cjs`: 합성 첨부 540만 자로 기존 방식의 실제 `QuotaExceededError`를 재현하고, 새 방식의 양방향 메모 일치·첨부 전체 보존·오프라인 재실행·구버전 쓰기 차단·첨부 누락 시 보호를 두 HTML에서 확인한다. `STORAGE_REPRO_BEFORE=1`은 새 어댑터를 제외한 재현 모드다.

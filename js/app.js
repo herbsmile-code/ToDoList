@@ -488,11 +488,23 @@
     }
 
     init() {
+      if (this._initialized) return;
+      this._initialized = true;
       if (this.spaceId && this.pin) {
         this.fetchLatestFromCloud(true);
         this.startRealtimePolling();
       }
       this.updateUIStatus();
+    }
+
+    setSyncStage(stage) {
+      this._syncStage = stage;
+      if (!this._showSyncProgress || store.localWriteFailed) return;
+      const message = {originals:'기기 원문을 보관하고 있습니다',download:'서버 자료를 받고 있습니다',
+        decrypt:'받은 자료를 확인하고 있습니다',merge:'양쪽 기록을 합치고 있습니다',
+        files:'첨부파일 원문을 확인하고 있습니다',upload:'서버에 변경을 보내고 있습니다',
+        'local-save':'이 기기에 저장하고 있습니다'}[stage];
+      if (message) store.setSaveStatus('syncing', '동기화 중 · ' + message + '.');
     }
 
     async hashPin(pin) {
@@ -660,10 +672,11 @@
 
     async requestCloud(url, options = {}) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
+      const {timeoutMs = 15000, ...requestOptions} = options;
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetch(url, {...options, signal:controller.signal});
-        const body = await response.json();
+        const response = await fetch(url, {...requestOptions, signal:controller.signal});
+        const body = response.status === 204 ? null : await response.json();
         return {ok:response.ok,status:response.status,headers:response.headers,json:async () => body};
       }
       finally { clearTimeout(timer); }
@@ -753,11 +766,11 @@
 
     async commitSyncLocal(data, meta) {
       const raw = store._lastLocalRaw;
-      this._syncStage = 'originals';
+      this.setSyncStage('originals');
       const compacted = await this.compactRecovery(meta);
       if (window.MainStorage) await window.MainStorage.prepare({...data,localSync:compacted});
       if (raw !== store._lastLocalRaw || store.writerBlocked || store.localLoadFailed) return false;
-      this._syncStage = 'local-save';
+      this.setSyncStage('local-save');
       return store.commitLocal(data,compacted);
     }
 
@@ -782,7 +795,7 @@
       if (raw !== store._lastLocalRaw || mainStorage.getItem(STORAGE_KEY) !== raw ||
           vaultVersion !== this._vaultChangeVersion || this._vaultWritesInFlight ||
           target !== LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()])) return false;
-      this._syncStage = 'merge';
+      this.setSyncStage('merge');
       const data = store.buildLocalData(), meta = LocalSyncProtocol.clone(store.localSync);
       const imported = {...meta.legacyImported};
       for (const [field,text] of Object.entries(auxiliary)) {
@@ -902,6 +915,7 @@
       }
       if (this.retryAfter && Date.now() < this.retryAfter) return false;
       this.isPushing = true;
+      this._showSyncProgress = forceWrite || store.saveStatus !== 'confirmed';
       const target = LocalSyncProtocol.hash([this.activeUrl, this.getStorageKey()]);
       const sessionPin = this.pin;
       const url = this.activeUrl + '/spaces/' + this.getStorageKey() + '.json';
@@ -909,11 +923,11 @@
         if (store.localSync.targetFingerprint && store.localSync.targetFingerprint !== target) {
           store.setSaveStatus('conflict'); return false;
         }
-        this._syncStage = 'originals';
+        this.setSyncStage('originals');
         if (!await this.prepareDeviceData(target)) return false;
         // Persist unsaved mutations/outbox before ANY network request.
         // Routine checks keep the last visible status until there is work or an error.
-        this._syncStage = 'local-save';
+        this.setSyncStage('local-save');
         if (!store.saveLocalOnly(null, null, {showPending:false, skipUnchanged:!forceWrite})) return false;
         if (forceWrite) store.setSaveStatus('syncing');
         else if (store.localSync.pending.length && store.saveStatus === 'confirmed') store.setSaveStatus('pending');
@@ -921,8 +935,8 @@
         const vaultVersion = this._vaultChangeVersion;
         const vaultStamp = this.vaultMetadataStamp();
         const cached = this._idleSyncCache;
-        this._syncStage = 'download';
-        const response = await this.requestCloud(url, { headers: { 'X-Firebase-ETag': 'true' } });
+        this.setSyncStage('download');
+        const response = await this.requestCloud(url, { headers: { 'X-Firebase-ETag': 'true' }, timeoutMs:60000 });
         this._lastRemoteCheckAt = Date.now();
         if (!response.ok) throw new Error('Cloud GET failed: ' + response.status);
         const etag = response.headers.get('ETag');
@@ -951,13 +965,13 @@
         const captured = LocalSyncProtocol.clone(store._committedData);
         const meta = LocalSyncProtocol.clone(store.localSync);
         const local = LocalSyncProtocol.select(captured);
-        this._syncStage = 'decrypt';
+        this.setSyncStage('decrypt');
         const decoded = encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted, sessionPin);
         if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid cloud object');
         if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked ||
             LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
         const remote = LocalSyncProtocol.select(decoded); // NEVER import remote.localSync.
-        this._syncStage = 'originals';
+        this.setSyncStage('originals');
         if (this._protectedRemoteTarget !== target) {
           const protectedOriginal = await window.SyncOriginals.preserve({id:'server-before-union-v1-' + target,version:1,
             createdAt:new Date().toISOString(),data:decoded});
@@ -965,7 +979,7 @@
           if (store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked) return false;
           this._protectedRemoteTarget = target;
         }
-        this._syncStage = 'merge';
+        this.setSyncStage('merge');
         const result = LocalSyncProtocol.automaticPlan(local, remote, meta, decoded);
         if (JSON.stringify(meta.recovery || []) !== JSON.stringify(result.recovery)) {
           // Preserve both originals durably BEFORE changing the active copy or
@@ -978,7 +992,7 @@
         // Vault original bytes stay coordinated with IndexedDB. Never replace them
         // with a cloud metadata-only list. Existing file helpers own IDB writes.
         const readVaultVersion = this._vaultChangeVersion;
-        this._syncStage = 'files';
+        this.setSyncStage('files');
         const vaultUnchanged = () => this._vaultChangeVersion === readVaultVersion && !this._vaultWritesInFlight;
         if (!vaultUnchanged()) { store.setSaveStatus('pending'); return false; }
         const localVault = await this.getAllVaultFiles(true, true);
@@ -1023,8 +1037,8 @@
           LocalSyncProtocol.hash({...result.data, vaultFiles,syncVersions:result.versions,ledgerAuthority:result.ledgerAuthority});
         const shouldWrite = changed || forceWrite;
         if (shouldWrite) {
-          this._syncStage = 'upload';
-          store.setSaveStatus('syncing');
+          this._showSyncProgress = true;
+          this.setSyncStage('upload');
           const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, sessionPin);
           if (!encryptedBody?.isEncrypted || !encryptedBody.payload || !encryptedBody.iv) throw new Error('Encryption failed; plaintext upload blocked');
           if (store.localLoadFailed || store._lastLocalRaw !== capturedRaw || store.localWriteFailed || store.writerBlocked) return false;
@@ -1033,7 +1047,10 @@
             store.setSaveStatus('conflict', '동기화 계정이 변경되어 전송을 중단했습니다. 기존 데이터를 유지합니다.');
             return false;
           }
-          const put = await this.requestCloud(url, { method:'PUT', headers:{'Content-Type':'application/json','if-match':etag}, body:JSON.stringify(encryptedBody) });
+          // Keep the conditional write; ask only for its acknowledgement instead
+          // of receiving the entire multi-megabyte encrypted payload again.
+          const put = await this.requestCloud(url + '?print=silent', { method:'PUT', headers:{'Content-Type':'application/json','if-match':etag},
+            body:JSON.stringify(encryptedBody), timeoutMs:60000 });
           if (put.status === 412) {
             this._syncAgain = true;
             store.setSaveStatus('pending');
@@ -1084,12 +1101,13 @@
         }
         const mergedVault = [...vaultMap.values()].filter(f => !(result.data.deletedItemIds || []).includes(f.id));
         if (LocalSyncProtocol.hash(localVault) !== LocalSyncProtocol.hash(mergedVault)) {
+          this.setSyncStage('files');
           await this.saveVaultFiles(mergedVault, true, () =>
             this._vaultChangeVersion === readVaultVersion + 1 && this._vaultWritesInFlight === 1);
           if (store._lastLocalRaw !== capturedRaw || store.localLoadFailed || store.writerBlocked) return false;
           if (this._vaultChangeVersion > readVaultVersion + 1 || this._vaultWritesInFlight) { store.setSaveStatus('pending'); return false; }
         }
-        this._syncStage = 'local-save';
+        this.setSyncStage('local-save');
         if (!await this.commitSyncLocal(next, acknowledged)) return false;
         window.treasureVault?.refreshFromStore();
         // Only a fully validated GET can seed this cache; a PUT changes its ETag.
@@ -1115,10 +1133,14 @@
         this._idleSyncCache = null;
         this.failures = (this.failures || 0) + 1;
         this.retryAfter = Date.now() + Math.min(60000, 1000 * 2 ** Math.min(this.failures,6));
-        const reason = {originals:'복구 원문 보관을 확인하지 못했습니다',download:'서버 데이터를 받지 못했습니다',
+        let reason = {originals:'복구 원문 보관을 확인하지 못했습니다',download:'서버 데이터를 받지 못했습니다',
           decrypt:'서버 데이터의 암호를 확인하지 못했습니다',merge:'기존 항목 형식을 확인하지 못했습니다',
           upload:'서버 저장 응답을 확인하지 못했습니다',files:'첨부파일 원문을 읽지 못했습니다',
           'local-save':'기기 저장을 확인하지 못했습니다'}[this._syncStage] || '처리를 완료하지 못했습니다';
+        const httpStatus = /^Cloud (?:GET|PUT) failed: (\d{3})$/.exec(e?.message || '')?.[1];
+        if (e?.name === 'AbortError') reason += ' (서버 응답 제한시간 초과)';
+        else if (httpStatus) reason += ' (서버 응답 ' + httpStatus + ')';
+        else if (e?.name === 'TypeError' && ['download','upload'].includes(this._syncStage)) reason += ' (네트워크 연결 오류)';
         store.setSaveStatus(store.localWriteFailed ? 'failed' : 'syncFailed', store.localWriteFailed ? undefined :
           '동기화 재시도 중 · ' + reason + '. 기존 원문을 유지합니다.');
         // Do not log request URLs, credentials or record contents.
@@ -1126,7 +1148,12 @@
         return false;
       } finally {
         this.isPushing = false;
-        if (store.saveStatus === 'syncing') store.setSaveStatus('pending');
+        if (store.saveStatus === 'syncing' || store.saveStatus === 'pending' && !store.localSync.waitingForDesktop) {
+          const stage = {originals:'원문 보관',download:'서버 수신',decrypt:'자료 확인',merge:'기록 병합',
+            files:'첨부파일 확인',upload:'서버 전송','local-save':'기기 저장'}[this._syncStage] || '최신 자료 확인';
+          store.setSaveStatus('pending', '자동 재시도 중 · ' + stage + ' 단계가 완료되지 않았습니다. 기존 원문과 미전송 변경을 유지합니다.');
+        }
+        this._showSyncProgress = false;
       }
     }
 
@@ -1453,63 +1480,49 @@
       }
     },
 
-    async addFiles(newItems) {
+    async write(run, canSave = null) {
       const finish = cloudSync.beginVaultWrite();
       try {
-        const db = await this.getDB();
-        return new Promise((resolve, reject) => {
+        let db;
+        try {
+          db = await this.getDB();
+          if (canSave && !canSave()) return false;
+        } catch { return false; }
+        return await new Promise((resolve, reject) => {
           const tx = db.transaction(this.storeName, 'readwrite');
-          const store = tx.objectStore(this.storeName);
-          (newItems || []).forEach(file => {
-            if (file && file.id) store.put(file);
-          });
-          tx.oncomplete = () => resolve(true);
-          tx.onerror = () => reject(tx.error);
-        }).finally(finish);
-      } catch (err) {
-        finish();
-        console.warn('IDB addFiles error:', err);
-        return false;
-      }
+          let settled = false;
+          const done = error => {
+            if (settled) return;
+            settled = true; clearTimeout(timer);
+            if (error) reject(error); else resolve(true);
+          };
+          const timer = setTimeout(() => {
+            try { tx.abort(); } catch {}
+            done(new Error('Vault write timed out'));
+          },15000);
+          tx.oncomplete = () => done();
+          tx.onerror = tx.onabort = () => done(new Error('Vault write not confirmed'));
+          try { run(tx.objectStore(this.storeName)); }
+          catch (error) { try { tx.abort(); } catch {} done(error); }
+        });
+      } finally { finish(); }
+    },
+
+    async addFiles(newItems) {
+      return this.write(store => {
+        (newItems || []).forEach(file => { if (file && file.id) store.put(file); });
+      });
     },
 
     async saveAll(files, canSave = null) {
-      const finish = cloudSync.beginVaultWrite();
-      try {
-        const db = await this.getDB();
-        if (canSave && !canSave()) throw new Error('Vault changed before sync transaction');
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(this.storeName, 'readwrite');
-          const store = tx.objectStore(this.storeName);
-          store.clear(); // Clear existing objects so deletions are truly persisted!
-          (files || []).forEach(file => {
-            if (file && file.id) store.put(file);
-          });
-          tx.oncomplete = () => resolve(true);
-          tx.onerror = () => reject(tx.error);
-        }).finally(finish);
-      } catch (err) {
-        finish();
-        console.warn('IDB save error:', err);
-        return false;
-      }
+      return this.write(store => {
+        store.clear(); // Replacements and deletes commit in the same transaction.
+        (files || []).forEach(file => { if (file && file.id) store.put(file); });
+      },canSave);
     },
 
     async delete(id) {
-      const finish = cloudSync.beginVaultWrite();
-      try {
-        const db = await this.getDB();
-        return new Promise((resolve) => {
-          const tx = db.transaction(this.storeName, 'readwrite');
-          const store = tx.objectStore(this.storeName);
-          store.delete(id);
-          tx.oncomplete = () => resolve(true);
-          tx.onerror = () => resolve(false);
-        }).finally(finish);
-      } catch (err) {
-        finish();
-        return false;
-      }
+      return this.write(store => store.delete(id));
     }
   };
 
@@ -13028,6 +13041,9 @@
         });
         return;
       }
+      // Start after local-read and writer-lock validation, before unrelated UI
+      // binding/rendering. A broken screen must not disable all device delivery.
+      cloudSync.init();
       const savedTheme = localStorage.getItem('todolist_jy_theme') || 'light';
       document.documentElement.setAttribute('data-theme', savedTheme);
       const icon = document.getElementById('theme-toggle-icon');
@@ -13036,7 +13052,6 @@
       bindEvents();
       bindBankAnalyzerEvents();
       window.treasureVault?.refreshFromStore();
-      cloudSync.init();
       if (window._pendingFilter) {
         store.activeFilter = window._pendingFilter;
         window._pendingFilter = null;

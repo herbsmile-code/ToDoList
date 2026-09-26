@@ -33,3 +33,23 @@ test('a stalled vault read aborts instead of acknowledging an empty list',async(
   const rejected=assert.rejects(pending);h.expire();await rejected;
   assert.equal(h.aborted,1);
 });
+
+for(const operation of ['addFiles','saveAll','delete']) test('vault '+operation+': stalled or aborted writes release the sync boundary without confirming success',async()=>{
+  const h=fakeDb();let active=0,finished=0;
+  h.c.cloudSync={beginVaultWrite(){active++;return()=>{active--;finished++;};}};
+  h.tx.objectStore=()=>({put(){},clear(){},delete(){}});
+  const api=vault(h),arg=operation==='delete'?'synthetic':[{id:'synthetic',dataUrl:'data:text/plain,original'}];
+  const pending=api[operation](arg);
+  h.requests[0].onsuccess({target:{result:h.db}});
+  for(let i=0;i<5;i++)await Promise.resolve();
+  assert.equal(active,1);
+  const rejected=assert.rejects(pending,/Vault write/);
+  h.expire();await rejected;
+  assert.equal(h.aborted,1);assert.equal(active,0);assert.equal(finished,1);
+  h.tx.oncomplete();assert.equal(finished,1,'late completion cannot acknowledge or release twice');
+  const next=api[operation](arg);
+  for(let i=0;i<5;i++)await Promise.resolve();
+  const abortRejected=assert.rejects(next,/Vault write/);
+  h.tx.onabort();await abortRejected;
+  assert.equal(active,0);assert.equal(finished,2);
+});
