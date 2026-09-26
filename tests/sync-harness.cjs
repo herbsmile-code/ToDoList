@@ -69,6 +69,7 @@ function harness(raw, { code = source, failRead = false, extras = {} } = {}) {
   context.window = context;
   vm.createContext(context);
   vm.runInContext(constants, context);
+  for(const file of ['protocol','manager'])vm.runInContext(fs.readFileSync(path.join(root,'js/sync/'+file+'.js'),'utf8'),context);
   vm.runInContext(code.slice(code.indexOf('  const LocalSyncProtocol'), code.indexOf('  // IndexedDB Vault Storage Engine')) +
     '\nvar cloudSync = new CloudSyncManager();', context);
   // Default synthetic device is a PC web client. Mobile/file cases override it.

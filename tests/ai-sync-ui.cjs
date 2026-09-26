@@ -50,7 +50,8 @@ function section(start,end) {
       },{local:localData(),remote:remoteData(),key});
       await page.addScriptTag({content:read('js/utils/constants.js')});
       await page.addScriptTag({content:read('js/features/ai-study/view.js')});
-      await page.addScriptTag({content:'(()=>{'+
+      for(const file of ['protocol','manager'])await page.addScriptTag({content:read('js/sync/'+file+'.js')});
+      await page.addScriptTag({content:'(()=>{const mainStorage=localStorage;'+
         section('  const LocalSyncProtocol','  // IndexedDB Vault Storage Engine')+
         '\nconst cloudSync=new CloudSyncManager();window.cloudSync=cloudSync;'+
         section('  const INITIAL_HONEYMOON_DATA','  // 6. UI View Engine')+

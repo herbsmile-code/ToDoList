@@ -175,7 +175,7 @@ test('malformed local or remote version metadata blocks replacement and preserve
 });
 
 test('device role uses mobile identity and URL, never desktop viewport size',()=>{
-  const {source}=require('./sync-harness.cjs'),vm=require('node:vm');
+  const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'../js/sync/protocol.js'),'utf8'),vm=require('node:vm');
   const method=source.match(/clientKind\(\) \{[\s\S]*?\n    \}/)[0];
   for(const [protocol,userAgent,maxTouchPoints,kind] of [
     ['https:','Mozilla Windows',0,'desktop-web'],['https:','Android',5,'mobile'],

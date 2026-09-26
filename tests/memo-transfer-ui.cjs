@@ -44,6 +44,7 @@ const section = html.match(/<section aria-labelledby="memo-transfer-heading"[\s\
     },{fixture,key});
     await page.addScriptTag({content:read('js/utils/constants.js')});
     await page.addScriptTag({content:read('js/memo-transfer.js')});
+    for(const file of ['protocol','manager'])await page.addScriptTag({content:read('js/sync/'+file+'.js')});
     await page.addScriptTag({content:'(()=>{const mainStorage=localStorage;'+app.slice(app.indexOf('  const LocalSyncProtocol'),app.indexOf('  // IndexedDB Vault Storage Engine'))+
       '\nconst cloudSync=new CloudSyncManager();window.cloudSync=cloudSync;'+
       app.slice(app.indexOf('  const INITIAL_HONEYMOON_DATA'),app.indexOf('  // 6. UI View Engine'))+
