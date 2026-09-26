@@ -34,6 +34,8 @@
       this._idleSyncCache = null;
       this._vaultChangeVersion = 0;
       this._vaultWritesInFlight = 0;
+      this.objectTransport = window.createSyncObjectTransport?.({protocol:LocalSyncProtocol,crypto:E2EESecurityEngine,
+        request:(url,options)=>this.requestCloud(url,options)});
     }
 
     init() {
@@ -81,9 +83,9 @@
 
       const inputId = spaceId.trim().toLowerCase();
       if (inputId !== 'on3257') {
-        return { 
-          success: false, 
-          message: '⚠️ 등록되지 않은 아이디입니다! 오직 전용 아이디(on3257)로만 접근할 수 있어요 🔒' 
+        return {
+          success: false,
+          message: '⚠️ 등록되지 않은 아이디입니다! 오직 전용 아이디(on3257)로만 접근할 수 있어요 🔒'
         };
       }
 
@@ -111,9 +113,9 @@
       if (cloudRegistered) {
         // 이미 클라우드에 등록된 비밀번호가 있는 경우 엄격하게 비교
         if (cloudRegistered.pinHash !== hashed) {
-          return { 
-            success: false, 
-            message: '⚠️ 비밀번호가 일치하지 않습니다! 🔒' 
+          return {
+            success: false,
+            message: '⚠️ 비밀번호가 일치하지 않습니다! 🔒'
           };
         }
       } else {
@@ -233,8 +235,11 @@
       const {timeoutMs = 15000, ...requestOptions} = options;
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
+        const traffic=this._syncTraffic;
+        if(traffic && typeof requestOptions.body==='string')traffic.uploadBytes+=requestOptions.body.length;
         const response = await fetch(url, {...requestOptions, signal:controller.signal});
         const body = response.status === 204 ? null : await response.json();
+        if(traffic && body!==null)traffic.downloadBytes+=JSON.stringify(body).length;
         // Classify only known server reasons. Raw error messages may include a
         // path or submitted value, so they must never become user-facing logs.
         const message = typeof body?.error === 'string' ? body.error : '';
@@ -245,6 +250,10 @@
         return {ok:response.ok,status:response.status,errorKind,headers:response.headers,json:async () => body};
       }
       finally { clearTimeout(timer); }
+    }
+
+    objectContext(pin,current) {
+      return {base:this.activeUrl,space:this.getStorageKey(),pin,target:LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]),current};
     }
 
     async pushTasksToCloud(immediate = false) {
@@ -439,7 +448,8 @@
         if (!response.ok || !response.headers.get('ETag')) throw new Error('서버 원본을 확인하지 못해 이전을 중단했습니다. 잠시 후 다시 시도해 주세요.');
         const encrypted = await response.json();
         if (encrypted?.isEncrypted && (!encrypted.iv || !encrypted.payload)) throw new Error('서버 암호화 데이터가 불완전합니다.');
-        const decoded = encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted,pin);
+        const decoded = this.objectTransport ? await this.objectTransport.read(encrypted,this.objectContext(pin,()=>{check();return true;}),
+          {...live,vaultFiles:await this.getAllVaultFiles(true,true)}) : encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted,pin);
         if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('서버 원본을 해독하지 못했습니다.');
         check();
         const remote = p.select(decoded);
@@ -485,6 +495,7 @@
       const sessionPin = this.pin;
       const startedAt = Date.now(), retryAttempt = this.failures || 0;
       this._lastUploadBytes = 0;
+      this._syncTraffic = {uploadBytes:0,downloadBytes:0};
       const url = this.activeUrl + '/spaces/' + this.getStorageKey() + '.json';
       try {
         if (getStore().localSync.targetFingerprint && getStore().localSync.targetFingerprint !== target) {
@@ -499,6 +510,11 @@
         if (forceWrite) getStore().setSaveStatus('syncing');
         else if (getStore().localSync.pending.length && getStore().saveStatus === 'confirmed') getStore().setSaveStatus('pending');
         let capturedRaw = getStore()._lastLocalRaw;
+        const objectVaultVersion=this._vaultChangeVersion;
+        const objectContext=this.objectTransport ? this.objectContext(sessionPin,()=>getStore()._lastLocalRaw===capturedRaw &&
+          !getStore().localLoadFailed && !getStore().localWriteFailed && !getStore().writerBlocked &&
+          this._vaultChangeVersion===objectVaultVersion && !this._vaultWritesInFlight &&
+          LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()])===target) : null;
         const cached = this._idleSyncCache;
         this.setSyncStage('download');
         if (!forceWrite && /^[A-Za-z0-9+/]{16}$/.test(cached?.iv || '') && this.canUseIdleCache(cached,target,capturedRaw)) {
@@ -547,7 +563,10 @@
         const meta = LocalSyncProtocol.clone(getStore().localSync);
         const local = LocalSyncProtocol.select(captured);
         this.setSyncStage('decrypt');
-        const decoded = encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted, sessionPin);
+        const receivedVault = encrypted?.v===4 && this.objectTransport ? await this.getAllVaultFiles(true,true) : null;
+        const receivedVaultVersion = this._vaultChangeVersion;
+        const decoded = this.objectTransport ? await this.objectTransport.read(encrypted,objectContext,
+          {...local,...(receivedVault?{vaultFiles:receivedVault}:{})}) : encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted, sessionPin);
         if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid cloud object');
         if (getStore().localLoadFailed || getStore()._lastLocalRaw !== capturedRaw || getStore().localWriteFailed || getStore().writerBlocked ||
             LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
@@ -561,6 +580,9 @@
           this._protectedRemoteTarget = target;
         }
         this.setSyncStage('merge');
+        await LocalSyncProtocol.primeHashes(local,remote);
+        if(getStore()._lastLocalRaw!==capturedRaw || getStore().localLoadFailed || getStore().localWriteFailed || getStore().writerBlocked ||
+            LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()])!==target)return false;
         const result = LocalSyncProtocol.automaticPlan(local, remote, meta, decoded);
         if (JSON.stringify(meta.recovery || []) !== JSON.stringify(result.recovery)) {
           // Preserve both originals durably BEFORE changing the active copy or
@@ -576,7 +598,7 @@
         this.setSyncStage('files');
         const vaultUnchanged = () => this._vaultChangeVersion === readVaultVersion && !this._vaultWritesInFlight;
         if (!vaultUnchanged()) { getStore().setSaveStatus('pending'); return false; }
-        const localVault = await this.getAllVaultFiles(true, true);
+        const localVault = receivedVault && receivedVaultVersion===readVaultVersion ? receivedVault : await this.getAllVaultFiles(true, true);
         if (getStore()._lastLocalRaw !== capturedRaw || getStore().localLoadFailed || !vaultUnchanged()) return false;
         const remoteVault = decoded.vaultFiles || [];
         if (!Array.isArray(remoteVault) || remoteVault.some(f=>!f || typeof f.id !== 'string') ||
@@ -623,12 +645,14 @@
         ]);
         if (getStore().localLoadFailed || getStore().localWriteFailed || getStore().writerBlocked || getStore()._lastLocalRaw !== capturedRaw ||
             !vaultUnchanged() || LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
-        const shouldWrite = remoteHash !== mergedHash || forceWrite;
+        const useObjects = this.objectTransport && (encrypted?.v===4 || window.SyncObjectTransportEnabled!==false);
+        const shouldWrite = remoteHash !== mergedHash || forceWrite || useObjects && encrypted?.v!==4;
         let confirmedIv = encrypted?.iv;
         if (shouldWrite) {
           this._showSyncProgress = true;
           this.setSyncStage('upload');
-          const encryptedBody = await E2EESecurityEngine.encrypt(rawPayload, sessionPin);
+          const encryptedBody = useObjects ? await this.objectTransport.prepare(rawPayload,encrypted,objectContext) :
+            await E2EESecurityEngine.encrypt(rawPayload, sessionPin);
           if (!encryptedBody?.isEncrypted || !encryptedBody.payload || !encryptedBody.iv) throw new Error('Encryption failed; plaintext upload blocked');
           if (getStore().localLoadFailed || getStore()._lastLocalRaw !== capturedRaw || getStore().localWriteFailed || getStore().writerBlocked) return false;
           if (!vaultUnchanged()) { getStore().setSaveStatus('pending'); return false; }
@@ -731,7 +755,7 @@
         this.failures = 0; this.retryAfter = 0;
         this.lastSyncFailure = null;
         if (shouldWrite || retryAttempt) window.SyncDiagnostics?.record({outcome:retryAttempt?'recovered':'saved',stage:'local-save',
-          attempt:retryAttempt,durationMs:Date.now()-startedAt,uploadBytes:this._lastUploadBytes,downloadBytes:wire.length});
+          attempt:retryAttempt,durationMs:Date.now()-startedAt,...this._syncTraffic});
         getStore()._localSaveFailures = 0;
         if (result.waitingForDesktop) {
           getStore().setSaveStatus('pending','다른 기록은 동기화했습니다. 가계부는 원본이 있는 PC 웹에서 접속하면 자동으로 맞춰집니다.');
@@ -745,6 +769,7 @@
         return !result.waitingForDesktop;
       } catch (e) {
         this._idleSyncCache = null;
+        if(e?.syncStale) {this._syncAgain=true;getStore().setSaveStatus('pending');return false;}
         this.failures = (this.failures || 0) + 1;
         this.retryAfter = Date.now() + Math.min(60000, 1000 * 2 ** Math.min(this.failures,6));
         let reason = {originals:'복구 원문 보관을 확인하지 못했습니다',download:'서버 데이터를 받지 못했습니다',
@@ -755,11 +780,12 @@
         const kind = e?.kind || (e?.name === 'AbortError' ? 'timeout' : 'unknown');
         this.lastSyncFailure = {stage:this._syncStage,status:Number(httpStatus)||0,kind,at:Date.now(),
           uploadBytes:this._syncStage === 'upload' ? this._lastUploadBytes || 0 : 0};
-        window.SyncDiagnostics?.record({...this.lastSyncFailure,outcome:'failed',attempt:this.failures,durationMs:Date.now()-startedAt});
+        window.SyncDiagnostics?.record({...this.lastSyncFailure,outcome:'failed',attempt:this.failures,durationMs:Date.now()-startedAt,...this._syncTraffic});
         if (kind === 'size-limit') reason = '서버가 전송 자료의 크기 제한으로 저장을 거절했습니다';
         else if (kind === 'request-option') reason = '서버가 전송 요청 옵션을 거절했습니다';
         else if (kind === 'permission') reason = '서버가 데이터 접근 권한을 거절했습니다';
         else if (kind === 'invalid-data') reason = '서버가 전송 자료 형식을 거절했습니다';
+        else if (kind === 'integrity') reason = '기록 또는 첨부파일 원문을 확인하지 못했습니다';
         if (e?.name === 'AbortError') reason += ' (서버 응답 제한시간 초과)';
         else if (httpStatus) reason += ' (서버 응답 ' + httpStatus + ')';
         else if (e?.name === 'TypeError' && ['download','upload'].includes(this._syncStage)) reason += ' (네트워크 연결 오류)';
@@ -769,6 +795,7 @@
         console.warn('Cloud sync deferred; automatic retry scheduled.');
         return false;
       } finally {
+        this._syncTraffic = null;
         this._uploadNonce = null;
         this.isPushing = false;
         if (getStore().saveStatus === 'syncing' || getStore().saveStatus === 'pending' && !getStore().localSync.waitingForDesktop) {

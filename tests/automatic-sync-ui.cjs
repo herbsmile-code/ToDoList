@@ -10,6 +10,13 @@ const {fixture,key}=require('./sync-harness.cjs');
 const root=path.resolve(__dirname,'..'),origin='http://localhost:4199';
 const cryptoContext={crypto:webcrypto,TextEncoder,TextDecoder,btoa,atob,console};cryptoContext.window=cryptoContext;
 vm.runInNewContext(fs.readFileSync(path.join(root,'js/services/crypto.js'),'utf8'),cryptoContext);
+for(const file of ['protocol','object-transport'])vm.runInNewContext(fs.readFileSync(path.join(root,'js/sync/'+file+'.js'),'utf8'),cryptoContext);
+async function decoded(server) {
+  const p=cryptoContext.createLocalSyncProtocol({getInitialLedger:()=>({})});
+  const transport=cryptoContext.createSyncObjectTransport({protocol:p,crypto:cryptoContext.E2EESecurityEngine,request:async url=>
+    ({ok:true,status:200,json:async()=>server.objects.get(new URL(url).pathname)||null})});
+  return transport.read(server.body,{base:'https://sync.example.invalid',space:'space_fixture-user_fixture-pin',pin:'fixture-pin',target:'test'});
+}
 const seed={...fixture,totalVacationDays:15,healthFolders:[{id:'all',name:'전체'},{id:'general',name:'일반'}],honeymoonData:{9:{hasData:true,income:{total:100,items:[]}}}};
 async function open(browser,entry,width,server,file=false,mobile=false,initial=seed) {
   const context=await browser.newContext({viewport:{width,height:900},serviceWorkers:'block',acceptDownloads:true,...(mobile?{userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'}:{})});
@@ -18,11 +25,23 @@ async function open(browser,entry,width,server,file=false,mobile=false,initial=s
     const req=route.request(),url=new URL(req.url());
     if(url.protocol==='file:'){assert.ok(fileURLToPath(url).startsWith(root+path.sep));return route.continue();}
     if(url.origin==='https://sync.example.invalid') {
+      server.objects ||= new Map();
+      if(url.pathname.startsWith('/sync_objects/')) {
+        if(req.method()==='PUT') {
+          assert.equal(req.headers()['if-match'],'null_etag');
+          if(server.failPUT)return route.fulfill({status:503,contentType:'application/json',body:'null'});
+          if(server.objects.has(url.pathname))return route.fulfill({status:412,contentType:'application/json',body:'null'});
+          const object=req.postDataJSON();assert.equal(object.isEncrypted,true);server.objects.set(url.pathname,object);
+          return route.fulfill({status:204,body:''});
+        }
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(server.objects.get(url.pathname)||null)});
+      }
+      if(url.pathname.endsWith('/iv.json'))return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(server.body?.iv||null)});
       if(req.method()==='PUT') {
         if(server.failPUT)return route.fulfill({status:503,contentType:'application/json',body:'null'});
         if(req.headers()['if-match']!==String(server.rev))return route.fulfill({status:412,contentType:'application/json',body:'null'});
         server.body=req.postDataJSON();assert.equal(server.body.isEncrypted,true);
-        const plain=await cryptoContext.E2EESecurityEngine.decrypt(server.body,'fixture-pin');
+        const plain=await decoded(server);
         assert.equal(Object.hasOwn(plain,'localSync'),false);server.rev++;server.puts++;
       }
       return route.fulfill({status:200,contentType:'application/json',headers:{ETag:String(server.rev),'Access-Control-Expose-Headers':'ETag'},body:JSON.stringify(server.body)});
@@ -57,7 +76,7 @@ const sync=page=>page.evaluate(()=>{cloudSync.retryAfter=0;return cloudSync.fetc
       mobileSeed.honeymoonData[9].income.total=9999;
       const mobile=await open(browser,entry,390,server,false,true,mobileSeed);
       assert.equal(await sync(pc.page),true);assert.equal(await sync(mobile.page),true);
-      let plain=await cryptoContext.E2EESecurityEngine.decrypt(server.body,'fixture-pin');
+      let plain=await decoded(server);assert.equal(server.body.v,4);
       assert.equal(plain.ledgerAuthority.source,'desktop-web');assert.equal(plain.honeymoonData[9].income.total,100);
       assert.equal(await mobile.page.evaluate(()=>store.honeymoonData[9].income.total),100);
       assert.ok(await mobile.page.evaluate(()=>store.localSync.recovery.some(r=>r.local.honeymoonData?.[9]?.income.total===9999)));

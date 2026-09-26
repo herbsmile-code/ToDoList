@@ -147,3 +147,11 @@ test('a file write during durable acknowledgement cannot seed an idle cache or c
   assert.ok(h.store.localSync.pending.length);
   assert.equal(await sync(h),true);assert.equal(h.store.localSync.pending.length,0);
 });
+
+test('native large-record priming preserves synchronous hashes and cannot hide later edits',async()=>{
+  const h=harness(JSON.stringify(fixture)),p=h.context.protocol;h.context.crypto=require('node:crypto').webcrypto;
+  const data={notes:[{id:'large',content:'본문'.repeat(30000)}]};const before=p.hash(data.notes[0]);
+  await p.primeHashes(data);assert.equal(p.hash(data.notes[0]),before);assert.ok(p._largeHashes.size);
+  data.notes[0].content+=' changed';assert.notEqual(p.hash(data.notes[0]),before);
+  const after=p.hash(data.notes[0]);await p.primeHashes(data);assert.equal(p.hash(data.notes[0]),after);
+});

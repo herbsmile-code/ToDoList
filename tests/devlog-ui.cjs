@@ -60,6 +60,7 @@ async function openApp(browser, entry, width, server, localFile = false) {
     return route.abort();
   });
   await context.addInitScript(({key}) => {
+    window.SyncObjectTransportEnabled=false; // Legacy snapshot compatibility suite; v4 uses object-sync-ui.
     localStorage.setItem(key, JSON.stringify({tasks:[],notes:[],aiStudyNotes:[],photos:[],sites:[],
       wishlist:[],vacations:[],healthNotes:[],hobbyNotes:[],projects:[],subscriptions:[],
       ledgerFiles:[],deletedItemIds:[],updatedAt:100,syncRevision:1}));

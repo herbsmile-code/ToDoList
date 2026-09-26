@@ -13,9 +13,12 @@
 - 건강관리 목록·기록/폴더 모달은 `js/features/health/view.js`, 편집 중 첨부파일은 `js/features/health/attachments.js`가 담당한다. 두 HTML에서 첨부 컨트롤러 → 화면 팩토리 → `app.js` 순서로 읽는다. 공통 이벤트와 CRUD는 기존 Store/UI에 남기며 첨부 컨트롤러는 저장·통신하지 않는다.
 - `window.UI`, `window.store`, HTML 인라인 이벤트 호환성을 유지한다. `app.js` 전체 분리·모듈화는 별도 승인 후 단계적으로 진행한다.
 - 단일 `store`를 데이터의 기준으로 유지한다. 기능별 저장소나 별도 Firebase 업로드·암호화·타이머를 만들지 않는다.
+- 공통 병합·미전송 규칙은 `js/sync/protocol.js`, 중앙 전송·재시도·수신은 `js/sync/manager.js`에 있다. `app.js`는 기존 Store/UI/Vault를 getter로 연결한다. 전송 표현 변경은 `js/sync/object-transport.js`, 내용 없는 기기별 진단 기록은 `js/sync/diagnostics.js`에서 처리한다. 두 HTML에서 의존 모듈을 `app.js`보다 먼저 읽는다.
 
 ## 2. 저장과 클라우드 보호
 - 기존 키 `todolist_jy_data_v39`, `todolist_jy_streak_v39`와 메모 객체·AES-GCM/PBKDF2 암호화 방식을 유지한다. 8MiB 이하 암호문은 기존 v2 문자열을 쓰고, 더 큰 암호문은 v3의 1MiB 문자열 배열 `payload`와 전체 길이 `payloadLength`로 전송한다. 내용은 동일한 암호문이며 전체를 기존 ETag 조건으로 한 번에 저장한다. 분할 누락·변형·순서 변경은 복호화 실패로 처리한다. 구버전 읽기 실패를 빈 데이터로 취급하거나 다시 업로드하지 않는다.
+- v4는 위 암호화 봉투로 각 기록·큰 첨부와 최신 목록을 암호화한다. 불변 객체 저장 확인 후에만 원래 스냅샷 경로의 최신 목록을 ETag 조건으로 교체한다. 객체는 생성 조건부 PUT만 사용하고 기존 객체를 덮어쓰거나 자동 삭제하지 않는다. 최초 전환 전 서버의 기존 암호문 전체도 보관한다. 누락·변형·잘못된 참조는 빈 자료로 해석하지 않는다. 형식·구버전 보호·복구 제약은 `docs/sync-objects.md`를 따른다.
+- 최근 동기화 진단 60건은 본문·URL·계정·PIN·임의 오류 메시지 없이 기기에만 보관한다. 진단 저장 실패가 업무 저장이나 동기화를 중단하지 않게 한다.
 - `js/main-storage.js`는 중앙 Store의 저장 어댑터다. 큰 `data:` 첨부는 내용 해시를 키로 `todolist_jy_payloads/blobs`에 확인 저장하고 기존 주 저장 키에는 참조를 둔다. Store·업로드·원문 내보내기는 항상 복원된 원문을 사용한다. 참조 상태의 실제 localStorage에는 구버전 쓰기를 막는 `localSync.version: 0` 표식을 두며, 새 어댑터가 원래 메타데이터를 복원한다. 첨부 원문을 읽거나 검증하지 못하면 빈 첨부로 시작하거나 업로드하지 않는다.
 - `notes`, `aiStudyNotes`, `honeymoonData`, `subscriptions`, `deletedItemIds`, `updatedAt`, `syncRevision`을 중앙 저장 흐름에서 함께 관리한다.
 - `loadLocalOnly()`의 읽기·파싱 실패는 저장·업로드를 차단한다. 정상적으로 읽은 메모를 메모리에 반영하지 않아 빈 값으로 덮어쓰는 회귀를 검사한다.
@@ -68,6 +71,7 @@
 | 동기화 시작·진행·전송 확인 | `sync-progress.test.cjs`, `full-sync-ui.cjs` (화면 초기화 오류와 동기화 분리, 진행 단계, 재시도, 204 응답, 큰 기존 로컬 첨부로 자동 시작) |
 | 암호문 크기·HTTP 400 | `crypto-payload.test.cjs`, `full-sync-ui.cjs`, `sync-progress.test.cjs` (단일 문자열 10MB 제한, v2/v3 왕복, 누락·변형 거부, 거절 사유 분류, 동일 ETag를 유지하는 요청 옵션 복구) |
 | 동기화 반복·대용량 처리 | `sync-stability.test.cjs`, `full-sync-ui.cjs` (삭제 표식 순서, 자기 저장 알림, 경량 확인 중 수정·실패, 응답 유실, 비동기 해시 경합, 23MB 이상 가상 3기기 병합 후 불필요한 전체 전송 없음) |
+| 변경 기록·첨부 분리 전송·진단 | `object-sync.test.cjs`, `object-sync-ui.cjs`, `sync-diagnostics.test.cjs`, `automatic-sync-ui.cjs` (원문 불변 보관, 최신 목록 CAS, 중간 실패·재시작·응답 유실·동시 수정, 첨부 누락·변형, 구버전 미전송 보호, 작은 변경의 전송량, 진단 파일 내보내기) |
 | 메모 이전 | `memo-transfer.test.cjs`, `memo-transfer-ui.cjs` |
 | AI 노트 수신·표시 | `ai-sync.test.cjs`, `ai-sync-ui.cjs` |
 | AI 화면 분리·실제 HTML 로딩·입력 보존 | `ai-study-ui.cjs` (두 HTML, PC/모바일, `file://`, 가상 기기 간 AI 노트 동기화·편집), `ui-performance.cjs` |

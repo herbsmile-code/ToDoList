@@ -7,13 +7,24 @@ const http=require('node:http');
 const {chromium}=require(process.env.AI_TEST_PLAYWRIGHT_PATH || 'playwright');
 const {fixture,key}=require('./sync-harness.cjs');
 const root=path.resolve(__dirname,'..');
-const streams=new Set(),repro=process.env.PAYLOAD_REPRO_BEFORE==='1';
+const streams=new Set(),repro=process.env.PAYLOAD_REPRO_BEFORE==='1',objectMode=process.env.SYNC_OBJECTS_TEST==='1';
 const oldCrypto=repro?require('node:child_process').execFileSync('git',['show','2d56cb7:js/services/crypto.js'],{encoding:'utf8'}):null;
 function largestString(value){return typeof value==='string'?Buffer.byteLength(value):value&&typeof value==='object'?Math.max(0,...Object.values(value).map(largestString)):0;}
+const objects=new Map();let objectGets=0,uploadedBytes=0,downloadedBytes=0;
 let body,revision,puts,fullGets=0,probes=0,failNextPut=false;
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   if(url.pathname.startsWith('/backend/')) {
+    if(url.pathname.startsWith('/backend/sync_objects/')) {
+      if(req.method==='PUT') {
+        assert.equal(req.headers['if-match'],'null_etag');let text='';for await(const part of req)text+=part;
+        uploadedBytes+=Buffer.byteLength(text);const value=JSON.parse(text);assert.ok(largestString(value)<=1024*1024*10);
+        if(objects.has(url.pathname)){res.writeHead(412,{'Content-Type':'application/json'});res.end('null');return;}
+        assert.equal(value.isEncrypted,true);objects.set(url.pathname,value);res.writeHead(204);res.end();return;
+      }
+      objectGets++;const text=JSON.stringify(objects.get(url.pathname)||null);downloadedBytes+=Buffer.byteLength(text);
+      res.writeHead(200,{'Content-Type':'application/json'});res.end(text);return;
+    }
     if(url.pathname.endsWith('/iv.json')) {
       if(!req.headers.accept?.includes('text/event-stream')) {
         probes++;res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(body?.iv || null));return;
@@ -24,6 +35,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='PUT') {
       let text='';for await(const part of req)text+=part;
+      uploadedBytes+=Buffer.byteLength(text);
       if(largestString(JSON.parse(text))>10*1024*1024) {
         res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'Data size exceeds the maximum size of 10485760 bytes.'}));return;
       }
@@ -33,7 +45,8 @@ const server=http.createServer(async(req,res)=>{
       for(const stream of streams)stream.write('event: put\ndata: '+JSON.stringify({path:'/',data:body.iv})+'\n\n');
       assert.equal(url.searchParams.get('print'),'silent');res.writeHead(204);res.end();return;
     }
-    fullGets++;res.writeHead(200,{'Content-Type':'application/json',ETag:String(revision)});res.end(JSON.stringify(body));return;
+    fullGets++;const text=JSON.stringify(body);downloadedBytes+=Buffer.byteLength(text);
+    res.writeHead(200,{'Content-Type':'application/json',ETag:String(revision)});res.end(text);return;
   }
   if(url.pathname==='/seed'){res.writeHead(200,{'Content-Type':'text/html'});res.end('<title>Synthetic fixture</title>');return;}
   const filename=path.resolve(root,'.'+url.pathname);
@@ -46,6 +59,12 @@ async function open(browser,origin,entry,label,mobile=false) {
   const context=await browser.newContext({viewport:{width:mobile?390:1280,height:900},serviceWorkers:'block',
     ...(mobile?{userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'}:{})});
   await context.route('**/*',route=>new URL(route.request().url()).origin===origin ? route.continue() : route.fulfill({body:''}));
+  await context.addInitScript(({enabled,profile})=>{
+    window.SyncObjectTransportEnabled=enabled;
+    if(profile)Object.defineProperty(window,'createLocalSyncProtocol',{configurable:true,set(fn){
+      Object.defineProperty(window,'createLocalSyncProtocol',{configurable:true,writable:true,value:args=>{const p=fn(args);window.fixtureProtocol=p;return p;}});
+    }});
+  },{enabled:objectMode,profile:process.env.PROFILE_SYNC==='1'});
   const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin+'/seed');
   const data={...structuredClone(fixture),totalVacationDays:label==='pc'?15:18,
@@ -96,8 +115,8 @@ async function consistent(apps,expected) {
   const origin='http://127.0.0.1:'+server.address().port;
   const browser=await chromium.launch({headless:true,channel:'msedge'});
   try {
-    for(const entry of ['index.html','ToDoList.html']) {
-      body={...structuredClone(fixture),totalVacationDays:20};revision=1;puts=0;
+    for(const entry of (process.env.SYNC_ENTRY_ONLY?[process.env.SYNC_ENTRY_ONLY]:['index.html','ToDoList.html'])) {
+      body={...structuredClone(fixture),totalVacationDays:20};revision=1;puts=0;objects.clear();uploadedBytes=0;downloadedBytes=0;
       const pc=await open(browser,origin,entry,'pc');
       await pc.page.waitForFunction(()=>store.saveStatus==='confirmed');
       const mobile=await open(browser,origin,entry,'mobile',true);
@@ -110,8 +129,10 @@ async function consistent(apps,expected) {
       }
       const second=await open(browser,origin,entry,'second-pc');
       const apps=[pc,mobile,second];await consistent(apps,3);
-      assert.equal(body.v,3);assert.ok(largestString(body)<=1024*1024);
-      const encryptedBytes=Buffer.byteLength(JSON.stringify(body));assert.ok(encryptedBytes>23000000);
+      assert.equal(body.v,objectMode?4:3);assert.ok(largestString(body)<=1024*1024);
+      const encryptedBytes=Buffer.byteLength(JSON.stringify(body))+(objectMode?[...objects.values()].reduce((n,v)=>n+Buffer.byteLength(JSON.stringify(v)),0):0);
+      assert.ok(encryptedBytes>23000000);
+      if(objectMode)assert.ok(Buffer.byteLength(JSON.stringify(body))<150000);
       for(const app of apps) {
         assert.equal(await app.page.evaluate(()=>store.honeymoonData[9].income.total),100);
         assert.deepEqual(await app.page.evaluate(key=>({photo:store.photos.find(r=>r.id==='photos-pc').dataUrl.length,
@@ -123,10 +144,25 @@ async function consistent(apps,expected) {
         assert.ok(originals.find(x=>x.mainRaw)?.auxiliary.treasures);
       }
       // Live SSE delivery without a manual sync or polling tick.
+      await Promise.all(apps.map(({page})=>page.waitForFunction(()=>!cloudSync._syncPromise)));
+      if(process.env.PROFILE_SYNC==='1')await Promise.all(apps.map(({page})=>page.evaluate(()=>{
+        window.syncProfile={};
+        function wrap(obj,key,label){const fn=obj[key];obj[key]=function(...args){const start=performance.now();const done=()=>{const row=syncProfile[label]||={ms:0,count:0};row.ms+=performance.now()-start;row.count++;};
+          const value=fn.apply(this,args);if(value?.then)return value.finally(done);done();return value;};}
+        for(const key of ['automaticPlan','baseline','hashAsync'])wrap(fixtureProtocol,key,'protocol.'+key);
+        for(const key of ['commitSyncLocal','requestCloud','getAllVaultFiles'])wrap(cloudSync,key,'cloud.'+key);
+        for(const key of ['saveLocalOnly','commitLocal','buildLocalData'])wrap(store,key,'store.'+key);
+        for(const key of ['read','prepare'])wrap(cloudSync.objectTransport,key,'transport.'+key);
+      })));
+      const traffic={up:uploadedBytes,down:downloadedBytes};
       const start=Date.now();
       const added=await mobile.page.evaluate(()=>store.addTask({title:'Automatic live mobile schedule',type:'schedule'}).id);
       await pc.page.waitForFunction(id=>store.tasks.some(row=>row.id===id),added);
       const elapsed=Date.now()-start;
+      await Promise.all(apps.map(({page})=>page.waitForFunction(id=>store.tasks.some(row=>row.id===id) && store.saveStatus==='confirmed' && !cloudSync._syncPromise,added)));
+      const delta={upload:uploadedBytes-traffic.up,download:downloadedBytes-traffic.down};
+      if(process.env.PROFILE_SYNC==='1')console.log('PROFILE '+JSON.stringify(await Promise.all(apps.map(({page})=>page.evaluate(()=>syncProfile)))));
+      if(objectMode){assert.ok(delta.upload<150000,JSON.stringify(delta));assert.ok(delta.download<500000,JSON.stringify(delta));}
       failNextPut=true;
       await mobile.page.evaluate(()=>treasureVault.add('Retry treasure','Preserve original input'));
       await consistent(apps,4);assert.ok(puts>0);
@@ -138,15 +174,23 @@ async function consistent(apps,expected) {
       // Once converged, replays and return-to-tab checks must neither upload nor
       // download 23 MB again. A changed nonce above still delivered every edit.
       await Promise.all(apps.map(({page})=>page.waitForFunction(()=>store.saveStatus==='confirmed' && !cloudSync._syncPromise && !cloudSync._remoteNoticeTimer)));
-      const quiet={puts,fullGets,probes};
+      const quiet={puts,fullGets,probes,objectGets};
       for(const stream of streams)stream.write('event: put\ndata: '+JSON.stringify({path:'/',data:body.iv})+'\n\n');
       await Promise.all(apps.map(({page})=>page.evaluate(()=>cloudSync.fetchLatestFromCloud(false))));
       await new Promise(resolve=>setTimeout(resolve,2500));
       assert.equal(puts,quiet.puts,'idle devices must not ping-pong snapshots');
       assert.equal(fullGets,quiet.fullGets,'own/duplicate events and nonce checks must avoid full downloads');
       assert.equal(probes,quiet.probes+3);
+      assert.equal(objectGets,quiet.objectGets);
+      await pc.page.locator('#btn-settings-modal').click();
+      const download=pc.page.waitForEvent('download');await pc.page.locator('#btn-export-sync-diagnostics').click();
+      const chunks=[];for await(const chunk of await (await download).createReadStream())chunks.push(chunk);
+      const report=JSON.parse(Buffer.concat(chunks).toString());assert.equal(report.format,'todolist-sync-diagnostics');
+      assert.ok(report.events.length<=60);assert.equal(JSON.stringify(report).includes('fixture-pin'),false);
+      const mobileReport=await mobile.page.evaluate(()=>SyncDiagnostics.report());
+      assert.ok(mobileReport.events.some(e=>e.outcome==='failed'&&e.status===503));assert.ok(mobileReport.events.some(e=>e.outcome==='recovered'));
       for(const app of apps) {assert.deepEqual(app.errors,[]);await app.context.close();}
-      console.log('PASS '+entry+': 3 devices, '+encryptedBytes+' encrypted bytes, all collections, SSE '+elapsed+'ms, retry and restart; idle: 0 PUT, 0 full GET, 3 nonce checks');
+      console.log('PASS '+entry+': '+(objectMode?'v4 objects':'v3 legacy')+', 3 devices, '+encryptedBytes+' encrypted bytes, SSE '+elapsed+'ms, delta '+JSON.stringify(delta)+', retry and restart; idle: 0 PUT, 0 full GET, 3 nonce checks');
     }
   } finally {
     await browser.close();for(const stream of streams)stream.end();

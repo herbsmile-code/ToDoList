@@ -60,6 +60,7 @@ async function openApp(browser, entry, width, localFile = false, sharedServer = 
     return route.abort();
   });
   await context.addInitScript(({key, initialData}) => {
+    window.SyncObjectTransportEnabled=false; // Explicit legacy snapshot compatibility coverage.
     // Preserve writes across reload; only seed this isolated origin once.
     if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(initialData));
     localStorage.setItem('todolist_jy_active_rtdb_url', 'https://sync.example.invalid');

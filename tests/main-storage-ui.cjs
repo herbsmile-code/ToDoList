@@ -28,6 +28,7 @@ async function open(browser,entry,server,label) {
     return route.fulfill({body:''});
   });
   await context.addInitScript(({fixture,key,label})=>{
+    window.SyncObjectTransportEnabled=false; // Legacy snapshot compatibility suite; v4 uses object-sync-ui.
     if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify({...fixture,notes:[...fixture.notes,{id:label+'-only',content:label+' original'}]}));
     localStorage.setItem('todolist_jy_active_rtdb_url','https://sync.example.invalid');
     for(const name of ['projects_seeded_v3','aistudy_seeded_v1','subscriptions_seeded_v1'])localStorage.setItem('todolist_jy_'+name,'true');
