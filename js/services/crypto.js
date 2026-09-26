@@ -44,12 +44,13 @@
 
     static arrayBufferToBase64(buffer) {
       const bytes = new Uint8Array(buffer);
-      let binary = '';
-      const len = bytes.byteLength;
-      for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
+      const parts = [];
+      // A multiple of three avoids padding between parts and bounds temporary
+      // strings/call arguments while encoding multi-megabyte attachments.
+      for (let i = 0; i < bytes.length; i += 24576) {
+        parts.push(btoa(String.fromCharCode(...bytes.subarray(i,i + 24576))));
       }
-      return btoa(binary);
+      return parts.join('');
     }
 
     static base64ToArrayBuffer(base64) {
@@ -75,13 +76,24 @@
           encodedData
         );
 
-        return {
+        const payload = this.arrayBufferToBase64(cipherBuffer);
+        const envelope = {
           isEncrypted: true,
           v: 2,
           iv: this.arrayBufferToBase64(iv.buffer),
-          payload: this.arrayBufferToBase64(cipherBuffer),
+          payload,
           updatedAt: dataObj.updatedAt || Date.now()
         };
+        // RTDB limits each string to 10 MB. Keep the same authenticated cipher
+        // bytes, split only their transport representation, and PUT the entire
+        // envelope atomically under the existing ETag. No record is truncated.
+        if (payload.length > 8 * 1024 * 1024) {
+          envelope.v = 3;
+          envelope.payloadLength = payload.length;
+          envelope.payload = [];
+          for (let i = 0; i < payload.length; i += 1024 * 1024) envelope.payload.push(payload.slice(i,i + 1024 * 1024));
+        }
+        return envelope;
       } catch (err) {
         console.error('E2EE Encryption error:', err);
         return {
@@ -95,14 +107,29 @@
       if (!cloudData || typeof cloudData !== 'object') return null;
 
       // 1. If data is NOT encrypted (legacy plain format), return as is for auto-migration
-      if (!cloudData.isEncrypted || !cloudData.payload || !cloudData.iv) {
+      if (!cloudData.isEncrypted) {
         return cloudData;
       }
 
       try {
+        if (typeof cloudData.iv !== 'string' || !cloudData.iv) throw new Error('Incomplete encrypted data');
+        let payload = cloudData.payload;
+        if (cloudData.v === 3) {
+          if (!Array.isArray(payload) || payload.length < 2 || !Number.isSafeInteger(cloudData.payloadLength)) throw new Error('Invalid encrypted parts');
+          let length = 0;
+          for (let i = 0; i < payload.length; i++) {
+            const part = payload[i];
+            if (typeof part !== 'string' || !part.length || part.length > 1024 * 1024 ||
+                i < payload.length - 1 && part.length !== 1024 * 1024) throw new Error('Missing encrypted part');
+            length += part.length;
+          }
+          if (length !== cloudData.payloadLength) throw new Error('Incomplete encrypted parts');
+          payload = payload.join('');
+        }
+        if (typeof payload !== 'string' || !payload) throw new Error('Invalid encrypted payload');
         const key = await this.deriveKey(pin);
         const ivBuffer = this.base64ToArrayBuffer(cloudData.iv);
-        const cipherBuffer = this.base64ToArrayBuffer(cloudData.payload);
+        const cipherBuffer = this.base64ToArrayBuffer(payload);
 
         const decryptedBuffer = await window.crypto.subtle.decrypt(
           { name: 'AES-GCM', iv: new Uint8Array(ivBuffer) },

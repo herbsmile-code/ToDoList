@@ -7,7 +7,9 @@ const http=require('node:http');
 const {chromium}=require(process.env.AI_TEST_PLAYWRIGHT_PATH || 'playwright');
 const {fixture,key}=require('./sync-harness.cjs');
 const root=path.resolve(__dirname,'..');
-const streams=new Set();
+const streams=new Set(),repro=process.env.PAYLOAD_REPRO_BEFORE==='1';
+const oldCrypto=repro?require('node:child_process').execFileSync('git',['show','2d56cb7:js/services/crypto.js'],{encoding:'utf8'}):null;
+function largestString(value){return typeof value==='string'?Buffer.byteLength(value):value&&typeof value==='object'?Math.max(0,...Object.values(value).map(largestString)):0;}
 let body,revision,puts,failNextPut=false;
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
@@ -19,6 +21,9 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='PUT') {
       let text='';for await(const part of req)text+=part;
+      if(largestString(JSON.parse(text))>10*1024*1024) {
+        res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'Data size exceeds the maximum size of 10485760 bytes.'}));return;
+      }
       if(failNextPut) {failNextPut=false;res.writeHead(503,{'Content-Type':'application/json'});res.end('null');return;}
       if(req.headers['if-match']!==String(revision)) {res.writeHead(412,{'Content-Type':'application/json'});res.end('null');return;}
       body=JSON.parse(text);assert.equal(body.isEncrypted,true);revision++;puts++;
@@ -31,6 +36,7 @@ const server=http.createServer(async(req,res)=>{
   const filename=path.resolve(root,'.'+url.pathname);
   if(!filename.startsWith(root+path.sep) || !fs.existsSync(filename) || !fs.statSync(filename).isFile()) {res.writeHead(404);res.end();return;}
   res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'application/javascript','.css':'text/css'})[path.extname(filename)] || 'application/octet-stream'});
+  if(repro&&url.pathname==='/js/services/crypto.js'){res.end(oldCrypto);return;}
   fs.createReadStream(filename).pipe(res);
 });
 async function open(browser,origin,entry,label,mobile=false) {
@@ -65,7 +71,7 @@ async function open(browser,origin,entry,label,mobile=false) {
       request.onsuccess=()=>{
         const db=request.result,tx=db.transaction('vault_files','readwrite');
         tx.objectStore('vault_files').put({id:'file-'+label,name:label+'.bin',createdAt:1,
-          dataUrl:'data:application/octet-stream;base64,'+'A'.repeat(label==='pc'?700000:100)});
+          dataUrl:'data:application/octet-stream;base64,'+'A'.repeat(label==='pc'?700000:label==='mobile'?3500000:100)});
         tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);
       };
     });
@@ -76,7 +82,7 @@ async function open(browser,origin,entry,label,mobile=false) {
 async function consistent(apps,expected) {
   await Promise.all(apps.map(({page})=>page.waitForFunction(expected=>{
     const fields=['tasks','notes','aiStudyNotes','healthNotes','hobbyNotes','wishlist','photos','sites','vacations','projects','subscriptions','ledgerFiles'];
-    return store.saveStatus==='confirmed' && !store.localSync.pending.length &&
+    return window.store?.saveStatus==='confirmed' && !store.localSync.pending.length &&
       fields.every(f=>['pc','mobile','second-pc'].every(label=>store[f].filter(row=>row.id===f+'-'+label).length===1)) &&
       store.treasures.length===expected && store.ledgerBankStatements.length===3 && store.ledgerCategoryRules.length===3;
   },expected,{timeout:30000})));
@@ -91,8 +97,16 @@ async function consistent(apps,expected) {
       const pc=await open(browser,origin,entry,'pc');
       await pc.page.waitForFunction(()=>store.saveStatus==='confirmed');
       const mobile=await open(browser,origin,entry,'mobile',true);
+      if(repro) {
+        await mobile.page.waitForFunction(()=>cloudSync.lastSyncFailure?.kind==='size-limit');
+        assert.equal(await mobile.page.evaluate(()=>store.notes.some(r=>r.id==='notes-mobile')),true);
+        assert.equal(await mobile.page.evaluate(()=>cloudSync.lastSyncFailure.status),400);
+        assert.equal(body.v,2);await mobile.context.close();await pc.context.close();
+        console.log('REPRO '+entry+': legacy single ciphertext is rejected with HTTP 400 after device union; local original retained');continue;
+      }
       const second=await open(browser,origin,entry,'second-pc');
       const apps=[pc,mobile,second];await consistent(apps,3);
+      assert.equal(body.v,3);assert.ok(largestString(body)<=1024*1024);
       for(const app of apps) {
         assert.equal(await app.page.evaluate(()=>store.honeymoonData[9].income.total),100);
         assert.deepEqual(await app.page.evaluate(key=>({photo:store.photos.find(r=>r.id==='photos-pc').dataUrl.length,

@@ -15,12 +15,15 @@
 - IndexedDB 열기·원문 보관·파일 읽기가 응답하지 않을 때 15초 뒤 실패를 표시하고 재시도한다. 완료되지 않은 보관을 성공으로 간주하지 않는다.
 - 파일 쓰기·삭제도 15초 뒤 미완료 트랜잭션을 중단하고 동기화 쓰기 잠금을 해제한다. 단순 중단(`abort`)도 실패로 처리한다. 화면 이벤트 연결이 실패해도 검증된 중앙 동기화는 시작하며, 진행 중인 단계와 재시도를 표시한다.
 - 큰 전체 자료의 송수신에는 60초 제한을 두고, 조건부 PUT은 `print=silent`로 성공 시 204 응답만 받는다. 업로드한 암호문 전체를 응답에서 다시 받는 통신을 없앤다. [Firebase REST 공식 문서](https://firebase.google.com/docs/database/rest/save-data#improving_write_performance)에 따른 응답 최적화이며, 조건부 쓰기·원문 보존·미전송 확인은 유지한다.
+- [Firebase 단일 문자열 10MB 제한](https://firebase.google.com/docs/database/usage/limits)에 맞춰 큰 암호문은 1MiB 문자열 조각으로 나눠 v3 봉투에 담는다. 키 도출·AES-GCM·암호문 내용은 바뀌지 않고 봉투 전체를 같은 경로에 조건부 저장한다. 작은 봉투는 기존 v2 형식을 유지한다. 조각을 개별 업로드하거나 일부만 복호화하지 않는다. 구버전 앱은 큰 새 봉투를 복호화하지 못하므로 두 기기에서 새 코드를 로드해야 한다.
+- HTTP 오류의 상세 원문은 노출하지 않고 크기 제한·요청 옵션·접근 권한·자료 형식으로 분류한다. 응답 옵션이 거절된 400은 같은 암호문과 ETag로 기본 PUT을 한 번 재시도한다. 조건을 제거하거나 실패한 데이터를 성공 처리하지 않는다.
 
 ## 검증
 
 - `node --test tests/*.test.cjs`: 저장 실패 복구 회귀 검사를 포함한다.
 - `tests/full-sync-ui.cjs`: 두 HTML에서 가상 PC 2대와 모바일 1대, 실제 IndexedDB·암호화·로컬 SSE 서버로 자동 병합, 큰 파일 전송, 일시 실패 재시도, 삭제 후 재시작 검증.
 - `tests/sync-progress.test.cjs`: 화면 초기화 오류가 있어도 동기화 시작, 지연 중 단계 표시, 전송 중 추가 편집의 재시도, 빈 204 응답으로 저장 확인. `full-sync-ui.cjs`는 PC가 460만 자의 기존 첨부를 가진 상태에서 자동 시작한다.
+- `tests/crypto-payload.test.cjs`: 작은 v2 및 큰 v3 암호문의 전체 원문 왕복, 조각 누락·변형·잘못된 PIN·구버전 해석 거부. `full-sync-ui.cjs`는 모바일의 별도 첨부 350만 자까지 합치며 합성 서버에 실제 Firebase 문자열 제한을 적용한다. `PAYLOAD_REPRO_BEFORE=1`은 기존 암호화 코드로 한도 초과 HTTP 400과 로컬 원문 보존을 재현한다.
 - `tests/automatic-sync-ui.cjs`: PC·모바일·로컬 HTML, 수정본 보관, 저장 실패, 재실행, 원문 내보내기.
 - `tests/sync-storage-recovery.test.cjs`: 일시적인 저장 실패 후 자동 재전송과 대용량 복구 원문 보관 실패 시 원본 유지. 브라우저 검사는 실제 localStorage 용량을 채우고 IndexedDB 보관 원문의 크기까지 확인한다.
 - `tests/main-storage-ui.cjs`: 합성 첨부 540만 자로 기존 방식의 실제 `QuotaExceededError`를 재현하고, 새 방식의 양방향 메모 일치·첨부 전체 보존·오프라인 재실행·구버전 쓰기 차단·첨부 누락 시 보호를 두 HTML에서 확인한다. `STORAGE_REPRO_BEFORE=1`은 새 어댑터를 제외한 재현 모드다.

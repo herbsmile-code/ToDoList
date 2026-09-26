@@ -15,7 +15,7 @@
 - 단일 `store`를 데이터의 기준으로 유지한다. 기능별 저장소나 별도 Firebase 업로드·암호화·타이머를 만들지 않는다.
 
 ## 2. 저장과 클라우드 보호
-- 기존 키 `todolist_jy_data_v39`, `todolist_jy_streak_v39`와 메모 객체·암호화 형식을 유지한다. 변경은 별도 설계·승인이 필요하다.
+- 기존 키 `todolist_jy_data_v39`, `todolist_jy_streak_v39`와 메모 객체·AES-GCM/PBKDF2 암호화 방식을 유지한다. 8MiB 이하 암호문은 기존 v2 문자열을 쓰고, 더 큰 암호문은 v3의 1MiB 문자열 배열 `payload`와 전체 길이 `payloadLength`로 전송한다. 내용은 동일한 암호문이며 전체를 기존 ETag 조건으로 한 번에 저장한다. 분할 누락·변형·순서 변경은 복호화 실패로 처리한다. 구버전 읽기 실패를 빈 데이터로 취급하거나 다시 업로드하지 않는다.
 - `js/main-storage.js`는 중앙 Store의 저장 어댑터다. 큰 `data:` 첨부는 내용 해시를 키로 `todolist_jy_payloads/blobs`에 확인 저장하고 기존 주 저장 키에는 참조를 둔다. Store·업로드·원문 내보내기는 항상 복원된 원문을 사용한다. 참조 상태의 실제 localStorage에는 구버전 쓰기를 막는 `localSync.version: 0` 표식을 두며, 새 어댑터가 원래 메타데이터를 복원한다. 첨부 원문을 읽거나 검증하지 못하면 빈 첨부로 시작하거나 업로드하지 않는다.
 - `notes`, `aiStudyNotes`, `honeymoonData`, `subscriptions`, `deletedItemIds`, `updatedAt`, `syncRevision`을 중앙 저장 흐름에서 함께 관리한다.
 - `loadLocalOnly()`의 읽기·파싱 실패는 저장·업로드를 차단한다. 정상적으로 읽은 메모를 메모리에 반영하지 않아 빈 값으로 덮어쓰는 회귀를 검사한다.
@@ -64,6 +64,7 @@
 | 기기 저장 실패 복구·복구 사본 용량 | `sync-storage-recovery.test.cjs`, `automatic-sync-ui.cjs` (실패 후 자동 재전송, 실제 저장 용량 초과, IndexedDB 원문 보존, 재시작·내보내기) |
 | 큰 첨부와 저장소 대기 | `main-storage-ui.cjs`, `sync-idb-timeout.test.cjs` (실제 540만 자 첨부의 용량 오류 재현, 양방향 메모 일치, 오프라인 재실행, 구버전 쓰기 차단, 원문 누락·시간 초과 보호) |
 | 동기화 시작·진행·전송 확인 | `sync-progress.test.cjs`, `full-sync-ui.cjs` (화면 초기화 오류와 동기화 분리, 진행 단계, 재시도, 204 응답, 큰 기존 로컬 첨부로 자동 시작) |
+| 암호문 크기·HTTP 400 | `crypto-payload.test.cjs`, `full-sync-ui.cjs`, `sync-progress.test.cjs` (단일 문자열 10MB 제한, v2/v3 왕복, 누락·변형 거부, 거절 사유 분류, 동일 ETag를 유지하는 요청 옵션 복구) |
 | 메모 이전 | `memo-transfer.test.cjs`, `memo-transfer-ui.cjs` |
 | AI 노트 수신·표시 | `ai-sync.test.cjs`, `ai-sync-ui.cjs` |
 | AI 화면 분리·실제 HTML 로딩·입력 보존 | `ai-study-ui.cjs` (두 HTML, PC/모바일, `file://`, 가상 기기 간 AI 노트 동기화·편집), `ui-performance.cjs` |

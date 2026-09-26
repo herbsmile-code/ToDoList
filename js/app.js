@@ -677,7 +677,14 @@
       try {
         const response = await fetch(url, {...requestOptions, signal:controller.signal});
         const body = response.status === 204 ? null : await response.json();
-        return {ok:response.ok,status:response.status,headers:response.headers,json:async () => body};
+        // Classify only known server reasons. Raw error messages may include a
+        // path or submitted value, so they must never become user-facing logs.
+        const message = typeof body?.error === 'string' ? body.error : '';
+        const errorKind = /too (large|big|long)|size exceeds|maximum size|WRITE_TOO_BIG/i.test(message) ? 'size-limit' :
+          /query parameter|print=silent|unsupported.*print/i.test(message) ? 'request-option' :
+          /permission|denied|unauthoriz/i.test(message) ? 'permission' :
+          /invalid.*(json|data)|parse/i.test(message) ? 'invalid-data' : 'unknown';
+        return {ok:response.ok,status:response.status,errorKind,headers:response.headers,json:async () => body};
       }
       finally { clearTimeout(timer); }
     }
@@ -938,7 +945,7 @@
         this.setSyncStage('download');
         const response = await this.requestCloud(url, { headers: { 'X-Firebase-ETag': 'true' }, timeoutMs:60000 });
         this._lastRemoteCheckAt = Date.now();
-        if (!response.ok) throw new Error('Cloud GET failed: ' + response.status);
+        if (!response.ok) throw Object.assign(new Error('Cloud GET failed: ' + response.status),{httpStatus:response.status,kind:response.errorKind});
         const etag = response.headers.get('ETag');
         if (!etag) throw new Error('Cloud ETag missing');
         const encrypted = await response.json();
@@ -1049,14 +1056,27 @@
           }
           // Keep the conditional write; ask only for its acknowledgement instead
           // of receiving the entire multi-megabyte encrypted payload again.
-          const put = await this.requestCloud(url + '?print=silent', { method:'PUT', headers:{'Content-Type':'application/json','if-match':etag},
-            body:JSON.stringify(encryptedBody), timeoutMs:60000 });
+          const options = {method:'PUT',headers:{'Content-Type':'application/json','if-match':etag},
+            body:JSON.stringify(encryptedBody),timeoutMs:60000};
+          this._lastUploadBytes = options.body.length; // Encrypted envelope is ASCII.
+          const plain = this._plainPutTarget === target;
+          let put = await this.requestCloud(url + (plain ? '' : '?print=silent'),options);
+          if (put.status === 400 && !plain && put.errorKind !== 'size-limit') {
+            // Some rejected request options can be removed without changing the
+            // data or its ETag condition. Retry once, never as an unconditional PUT.
+            this._plainPutTarget = target;
+            if (store._lastLocalRaw !== capturedRaw || store.localLoadFailed || store.localWriteFailed || store.writerBlocked ||
+                !vaultUnchanged() || LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) {
+              store.setSaveStatus('pending');return false;
+            }
+            put = await this.requestCloud(url,options);
+          }
           if (put.status === 412) {
             this._syncAgain = true;
             store.setSaveStatus('pending');
             return false; // Another device saved first: re-read and merge automatically.
           }
-          if (!put.ok) throw new Error('Cloud PUT failed: ' + put.status);
+          if (!put.ok) throw Object.assign(new Error('Cloud PUT failed: ' + put.status),{httpStatus:put.status,kind:put.errorKind});
         }
         // A GET matching our contents also confirms a previously lost PUT response.
         // An older response must never clear a newer edit's outbox.
@@ -1118,6 +1138,7 @@
         this.lastSyncedUpdatedAt = store.lastUpdatedAt;
         this.lastSyncedRevision = store.syncRevision;
         this.failures = 0; this.retryAfter = 0;
+        this.lastSyncFailure = null;
         store._localSaveFailures = 0;
         if (result.waitingForDesktop) {
           store.setSaveStatus('pending','다른 기록은 동기화했습니다. 가계부는 원본이 있는 PC 웹에서 접속하면 자동으로 맞춰집니다.');
@@ -1137,7 +1158,14 @@
           decrypt:'서버 데이터의 암호를 확인하지 못했습니다',merge:'기존 항목 형식을 확인하지 못했습니다',
           upload:'서버 저장 응답을 확인하지 못했습니다',files:'첨부파일 원문을 읽지 못했습니다',
           'local-save':'기기 저장을 확인하지 못했습니다'}[this._syncStage] || '처리를 완료하지 못했습니다';
-        const httpStatus = /^Cloud (?:GET|PUT) failed: (\d{3})$/.exec(e?.message || '')?.[1];
+        const httpStatus = e?.httpStatus || /^Cloud (?:GET|PUT) failed: (\d{3})$/.exec(e?.message || '')?.[1];
+        const kind = e?.kind || (e?.name === 'AbortError' ? 'timeout' : 'unknown');
+        this.lastSyncFailure = {stage:this._syncStage,status:Number(httpStatus)||0,kind,at:Date.now(),
+          uploadBytes:this._syncStage === 'upload' ? this._lastUploadBytes || 0 : 0};
+        if (kind === 'size-limit') reason = '서버가 전송 자료의 크기 제한으로 저장을 거절했습니다';
+        else if (kind === 'request-option') reason = '서버가 전송 요청 옵션을 거절했습니다';
+        else if (kind === 'permission') reason = '서버가 데이터 접근 권한을 거절했습니다';
+        else if (kind === 'invalid-data') reason = '서버가 전송 자료 형식을 거절했습니다';
         if (e?.name === 'AbortError') reason += ' (서버 응답 제한시간 초과)';
         else if (httpStatus) reason += ' (서버 응답 ' + httpStatus + ')';
         else if (e?.name === 'TypeError' && ['download','upload'].includes(this._syncStage)) reason += ' (네트워크 연결 오류)';
