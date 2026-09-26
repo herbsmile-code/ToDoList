@@ -18,6 +18,10 @@
 
 Firebase의 조건부 저장은 [공식 REST 문서](https://firebase.google.com/docs/database/rest/save-data#section-conditional-requests), 빈 위치에만 생성하는 `null_etag`는 [REST API 참조](https://firebase.google.com/docs/reference/rest/database)에 따른다.
 
+### 요청 옵션 호환 수정
+
+최초 v4 배포에서 기존 최신 목록 전송에만 있던 HTTP 400 응답 옵션 복구 처리가 기록·첨부·기존 암호문 백업 경로에 빠졌다. 운영 서버는 v3에 머물고 새 객체는 0건인 상태에서 양쪽 기기가 실패를 보고했다. 응답 옵션 거절 모형에서 수정 전 실패를 재현하고, 모든 조건부 쓰기를 중앙 `conditionalPut()`으로 통합했다. 400이면 크기 제한을 제외하고 `print=silent`만 제거해 한 번 재시도한다. 암호문·ETag는 유지하며, 새 입력·계정 변경 시 오래된 재시도는 완료 처리하지 않는다. 동기화 실패의 상세 문구는 3초 자동 숨김 대상에서 제외했다. 실제 오류 응답 본문은 기기 연결 부재로 직접 확보하지 못했으므로, 운영 증상의 해결은 배포 후 두 기기 및 서버 상태로 추가 확인한다.
+
 ## 원문과 구버전
 
 - 최초 형식 전환 전에 기존 서버의 암호문 전체를 별도 불변 객체로 보관하고, 암호화된 최신 목록의 `legacySnapshot`이 그 위치와 해시를 가리킨다. 기존 기기 원문·충돌 원문 보관도 유지한다. Git 복구 지점과 개인 데이터 백업은 별개다.
@@ -29,8 +33,9 @@ Firebase의 조건부 저장은 [공식 REST 문서](https://firebase.google.com
 
 ## 검증
 
-- `node --test tests/*.test.cjs`: 기존 회귀와 진단·객체 전송 검사를 포함한 343개 검사를 통과했다.
+- `node --test tests/*.test.cjs`: 기존 회귀와 진단·객체 전송 검사를 포함한 347개 검사를 통과했다.
 - `node tests/object-sync-ui.cjs`: 실제 두 HTML, PC 2대/모바일, IndexedDB, AES-GCM, HTTP/SSE로 23MB 이상 자료의 전체 항목·첨부 일치, 일정 추가, 503 재시도, 삭제, 재실행, 무변경 상태의 반복 전송 없음, 진단 파일 다운로드를 검사한다.
+- `SYNC_REJECT_PRINT=1`을 설정한 같은 브라우저 검사에서는 응답 옵션 거절 400 → 동일 조건의 일반 PUT 200 응답 → 원문 일치·재실행까지 검증한다.
 - `node tests/automatic-sync-ui.cjs`: v4의 PC 가계부 우선, 양쪽 원문 보관, 메모/건강 첨부, 실제 저장 용량 부족, 복구 파일 내보내기, 두 HTML과 `file://`를 검사한다.
 - `node tests/full-sync-ui.cjs`: 명시적으로 v3를 유지한 구형 스냅샷 호환 검사다. 기능별 과거 UI 서버 모형도 이 호환 경로를 사용한다. v4를 받은 뒤 v3로 되돌리는 옵션은 아니다.
 - 객체 저장 실패, 최신 목록 저장 실패·응답 유실, 전송 중 새 입력, 동시 수정 412, 객체 누락·변형, 구버전 중단 후 업데이트·미전송 재전송을 검사한다.

@@ -58,8 +58,8 @@
       const encrypted=await security.encrypt({format:'todolist-sync-object-v1',value},ctx.pin);
       if(!encrypted?.isEncrypted)throw fail('Object encryption failed');
       check(ctx);
-      const response=await request(objectUrl(ctx,id)+'?print=silent',{method:'PUT',headers:{'Content-Type':'application/json','if-match':'null_etag'},
-        body:JSON.stringify(encrypted),timeoutMs:60000});
+      const response=await request(objectUrl(ctx,id),{method:'PUT',headers:{'Content-Type':'application/json','if-match':'null_etag'},
+        body:JSON.stringify(encrypted),timeoutMs:60000,current:ctx.current});
       if(response.status===412) {
         // Another device or a lost response may have created it. Verify every
         // existing byte before publishing a reference; never overwrite it.
@@ -101,8 +101,8 @@
       if(!encrypted?.isEncrypted)throw fail('Legacy backup encryption failed');
       const digest=await p.hashAsync(encrypted),id=await objectId(ctx,'legacy:'+digest);
       check(ctx);
-      const response=await request(objectUrl(ctx,id)+'?print=silent',{method:'PUT',headers:{'Content-Type':'application/json','if-match':'null_etag'},
-        body:JSON.stringify(encrypted),timeoutMs:60000});
+      const response=await request(objectUrl(ctx,id),{method:'PUT',headers:{'Content-Type':'application/json','if-match':'null_etag'},
+        body:JSON.stringify(encrypted),timeoutMs:60000,current:ctx.current});
       if(response.status===412) {
         const existing=await request(objectUrl(ctx,id),{timeoutMs:60000});
         if(!existing.ok || await p.hashAsync(await existing.json())!==digest)throw fail('Legacy backup mismatch');

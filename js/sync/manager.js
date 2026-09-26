@@ -35,7 +35,7 @@
       this._vaultChangeVersion = 0;
       this._vaultWritesInFlight = 0;
       this.objectTransport = window.createSyncObjectTransport?.({protocol:LocalSyncProtocol,crypto:E2EESecurityEngine,
-        request:(url,options)=>this.requestCloud(url,options)});
+        request:(url,options)=>options?.method==='PUT' ? this.conditionalPut(url,options) : this.requestCloud(url,options)});
     }
 
     init() {
@@ -254,6 +254,26 @@
 
     objectContext(pin,current) {
       return {base:this.activeUrl,space:this.getStorageKey(),pin,target:LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]),current};
+    }
+
+    async conditionalPut(url, options) {
+      const {current,...requestOptions}=options;
+      if(requestOptions.method!=='PUT' || !requestOptions.headers?.['if-match'])throw new Error('Conditional PUT required');
+      const target=LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]);
+      const check=()=>{
+        if(current && !current() || LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()])!==target)
+          throw Object.assign(new Error('Local state changed'),{syncStale:true});
+      };
+      check();
+      const plain=this._plainPutTarget===target;
+      let response=await this.requestCloud(url+(plain?'':'?print=silent'),requestOptions);
+      if(response.status===400 && !plain && response.errorKind!=='size-limit') {
+        // Every write uses the same compatibility path: retain encrypted bytes
+        // and the ETag condition, removing only the response-format option.
+        this._plainPutTarget=target;check();
+        response=await this.requestCloud(url,requestOptions);
+      }
+      return response;
     }
 
     async pushTasksToCloud(immediate = false) {
@@ -666,18 +686,8 @@
             body:JSON.stringify(encryptedBody),timeoutMs:60000};
           this._lastUploadBytes = options.body.length; // Encrypted envelope is ASCII.
           this._uploadNonce = {target,iv:encryptedBody.iv};
-          const plain = this._plainPutTarget === target;
-          let put = await this.requestCloud(url + (plain ? '' : '?print=silent'),options);
-          if (put.status === 400 && !plain && put.errorKind !== 'size-limit') {
-            // Some rejected request options can be removed without changing the
-            // data or its ETag condition. Retry once, never as an unconditional PUT.
-            this._plainPutTarget = target;
-            if (getStore()._lastLocalRaw !== capturedRaw || getStore().localLoadFailed || getStore().localWriteFailed || getStore().writerBlocked ||
-                !vaultUnchanged() || LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) {
-              getStore().setSaveStatus('pending');return false;
-            }
-            put = await this.requestCloud(url,options);
-          }
+          const put = await this.conditionalPut(url,{...options,current:()=>getStore()._lastLocalRaw===capturedRaw &&
+            !getStore().localLoadFailed && !getStore().localWriteFailed && !getStore().writerBlocked && vaultUnchanged()});
           if (put.status === 412) {
             window.SyncDiagnostics?.record({outcome:'deferred',stage:'upload',status:412,attempt:retryAttempt,
               durationMs:Date.now()-startedAt,uploadBytes:this._lastUploadBytes});

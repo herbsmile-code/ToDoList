@@ -8,6 +8,7 @@ const {chromium}=require(process.env.AI_TEST_PLAYWRIGHT_PATH || 'playwright');
 const {fixture,key}=require('./sync-harness.cjs');
 const root=path.resolve(__dirname,'..');
 const streams=new Set(),repro=process.env.PAYLOAD_REPRO_BEFORE==='1',objectMode=process.env.SYNC_OBJECTS_TEST==='1';
+const rejectPrint=process.env.SYNC_REJECT_PRINT==='1';let rejectedOptions=0;
 const oldCrypto=repro?require('node:child_process').execFileSync('git',['show','2d56cb7:js/services/crypto.js'],{encoding:'utf8'}):null;
 function largestString(value){return typeof value==='string'?Buffer.byteLength(value):value&&typeof value==='object'?Math.max(0,...Object.values(value).map(largestString)):0;}
 const objects=new Map();let objectGets=0,uploadedBytes=0,downloadedBytes=0;
@@ -19,8 +20,11 @@ const server=http.createServer(async(req,res)=>{
       if(req.method==='PUT') {
         assert.equal(req.headers['if-match'],'null_etag');let text='';for await(const part of req)text+=part;
         uploadedBytes+=Buffer.byteLength(text);const value=JSON.parse(text);assert.ok(largestString(value)<=1024*1024*10);
+        if(rejectPrint && url.searchParams.has('print')) {rejectedOptions++;res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'Unsupported query parameter print'}));return;}
         if(objects.has(url.pathname)){res.writeHead(412,{'Content-Type':'application/json'});res.end('null');return;}
-        assert.equal(value.isEncrypted,true);objects.set(url.pathname,value);res.writeHead(204);res.end();return;
+        assert.equal(value.isEncrypted,true);objects.set(url.pathname,value);
+        if(url.searchParams.has('print')){res.writeHead(204);res.end();}
+        else {downloadedBytes+=Buffer.byteLength(text);res.writeHead(200,{'Content-Type':'application/json'});res.end(text);}return;
       }
       objectGets++;const text=JSON.stringify(objects.get(url.pathname)||null);downloadedBytes+=Buffer.byteLength(text);
       res.writeHead(200,{'Content-Type':'application/json'});res.end(text);return;
@@ -36,6 +40,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='PUT') {
       let text='';for await(const part of req)text+=part;
       uploadedBytes+=Buffer.byteLength(text);
+      if(rejectPrint && url.searchParams.has('print')) {rejectedOptions++;res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'Unsupported query parameter print'}));return;}
       if(largestString(JSON.parse(text))>10*1024*1024) {
         res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'Data size exceeds the maximum size of 10485760 bytes.'}));return;
       }
@@ -43,7 +48,8 @@ const server=http.createServer(async(req,res)=>{
       if(req.headers['if-match']!==String(revision)) {res.writeHead(412,{'Content-Type':'application/json'});res.end('null');return;}
       body=JSON.parse(text);assert.equal(body.isEncrypted,true);revision++;puts++;
       for(const stream of streams)stream.write('event: put\ndata: '+JSON.stringify({path:'/',data:body.iv})+'\n\n');
-      assert.equal(url.searchParams.get('print'),'silent');res.writeHead(204);res.end();return;
+      if(url.searchParams.has('print')){res.writeHead(204);res.end();}
+      else {downloadedBytes+=Buffer.byteLength(text);res.writeHead(200,{'Content-Type':'application/json'});res.end(text);}return;
     }
     fullGets++;const text=JSON.stringify(body);downloadedBytes+=Buffer.byteLength(text);
     res.writeHead(200,{'Content-Type':'application/json',ETag:String(revision)});res.end(text);return;
@@ -116,7 +122,7 @@ async function consistent(apps,expected) {
   const browser=await chromium.launch({headless:true,channel:'msedge'});
   try {
     for(const entry of (process.env.SYNC_ENTRY_ONLY?[process.env.SYNC_ENTRY_ONLY]:['index.html','ToDoList.html'])) {
-      body={...structuredClone(fixture),totalVacationDays:20};revision=1;puts=0;objects.clear();uploadedBytes=0;downloadedBytes=0;
+      body={...structuredClone(fixture),totalVacationDays:20};revision=1;puts=0;objects.clear();uploadedBytes=0;downloadedBytes=0;rejectedOptions=0;
       const pc=await open(browser,origin,entry,'pc');
       await pc.page.waitForFunction(()=>store.saveStatus==='confirmed');
       const mobile=await open(browser,origin,entry,'mobile',true);
@@ -190,6 +196,7 @@ async function consistent(apps,expected) {
       const mobileReport=await mobile.page.evaluate(()=>SyncDiagnostics.report());
       assert.ok(mobileReport.events.some(e=>e.outcome==='failed'&&e.status===503));assert.ok(mobileReport.events.some(e=>e.outcome==='recovered'));
       for(const app of apps) {assert.deepEqual(app.errors,[]);await app.context.close();}
+      if(rejectPrint)assert.ok(rejectedOptions>0,'must actually exercise HTTP 400 option rejection');
       console.log('PASS '+entry+': '+(objectMode?'v4 objects':'v3 legacy')+', 3 devices, '+encryptedBytes+' encrypted bytes, SSE '+elapsed+'ms, delta '+JSON.stringify(delta)+', retry and restart; idle: 0 PUT, 0 full GET, 3 nonce checks');
     }
   } finally {

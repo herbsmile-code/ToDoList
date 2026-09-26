@@ -17,8 +17,12 @@ const {chromium} = require(process.env.AI_TEST_PLAYWRIGHT_PATH || 'playwright');
     assert.equal(await page.locator('#manual-sync-state').isVisible(),true);
     await notice.evaluate(el=>{el.textContent='충돌 안내';el.setAttribute('data-save-status','conflict');});
     assert.equal(await notice.isVisible(),false); // Same polling result must not flash again.
+    await notice.evaluate(el=>{el.dataset.saveStatus='syncFailed';el.textContent='서버 저장 응답을 확인하지 못했습니다 (서버 응답 400)';});
+    assert.equal(await notice.isVisible(),true);
+    await page.waitForTimeout(3300);
+    assert.equal(await notice.isVisible(),true); // Failure details stay readable until the status changes.
     await notice.evaluate(el=>{el.dataset.syncNotice='false';el.dataset.saveStatus='failed';el.textContent='로컬 저장 실패';});
     assert.equal(await notice.isVisible(),true); // Storage safety errors remain visible.
-    console.log('PASS: mobile notice at top, dismissed after 3s, repeated status stays hidden, header and local failure remain visible');
+    console.log('PASS: ordinary notices dismiss, sync failure details and local failures remain visible');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -36,7 +36,8 @@ function backend(data=fixture) {
     };
     cloud.getAllVaultFiles=async()=>clone(h.vault);
     cloud.saveVaultFiles=async(files,strict,guard)=>{const done=cloud.beginVaultWrite();try{if(guard&&!guard())throw Error('Stale files');h.vault=clone(files);}finally{done();}};
-    if(objects)cloud.objectTransport=c.createSyncObjectTransport({protocol:c.protocol,crypto:c.E2EESecurityEngine,request:(...args)=>cloud.requestCloud(...args)});
+    if(objects)cloud.objectTransport=c.createSyncObjectTransport({protocol:c.protocol,crypto:c.E2EESecurityEngine,
+      request:(url,options)=>options?.method==='PUT'?cloud.conditionalPut(url,options):cloud.requestCloud(url,options)});
     return h;
   };
   return s;

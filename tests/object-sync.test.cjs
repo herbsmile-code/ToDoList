@@ -1,5 +1,60 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {backend,sync,manifest,fixture,clone}=require('./object-sync-harness.cjs');
+
+for(const onlyBackup of [false,true])test('HTTP 400 response-option rejection recovers '+(onlyBackup?'legacy backup':'records, attachments and head')+' with unchanged conditions',async()=>{
+  const data=clone(fixture);data.notes[0].fileUrl='data:application/pdf;base64,'+'C'.repeat(40000);
+  const s=backend(data),a=s.attach(data);
+  s.body=await a.context.E2EESecurityEngine.encrypt(data,'fixture-pin');
+  const legacy=JSON.stringify(s.body),fetch=a.context.fetch,rejected=new Map();let retried=0;
+  a.context.fetch=async(url,options={})=>{
+    if(options.method==='PUT') {
+      const key=new URL(url).pathname;
+      if(new URL(url).searchParams.has('print') && (!onlyBackup || options.body===legacy)) {
+        rejected.set(key,{body:options.body,condition:options.headers['if-match']});
+        return {ok:false,status:400,headers:{get:()=>null},json:async()=>({error:'Unsupported query parameter print'})};
+      }
+      if(rejected.has(key)) {
+        const first=rejected.get(key);assert.equal(options.body,first.body);assert.equal(options.headers['if-match'],first.condition);
+        assert.equal(new URL(url).search,'');retried++;rejected.delete(key);
+      }
+    }
+    return fetch(url,options);
+  };
+  a.store.addNote('Edit awaiting upload');
+  assert.equal(await sync(a),true);assert.ok(retried>0);assert.equal(s.body.v,4);assert.equal(a.store.localSync.pending.length,0);
+  const b=s.attach({...clone(fixture),notes:[]});assert.equal(await sync(b),true);
+  assert.equal(b.store.notes.find(n=>n.id===data.notes[0].id).fileUrl,data.notes[0].fileUrl);
+  assert.ok(b.store.notes.some(n=>n.content==='Edit awaiting upload'));
+});
+
+test('an edit during a rejected object request prevents a stale fallback acknowledgement',async()=>{
+  const s=backend(),a=s.attach(),fetch=a.context.fetch;let rejected=false;
+  a.context.fetch=async(url,options={})=>{
+    if(!rejected && options.method==='PUT' && url.includes('/sync_objects/')) {
+      rejected=true;a.store.addNote('Changed during rejection');
+      return {ok:false,status:400,headers:{get:()=>null},json:async()=>({error:'Unsupported query parameter print'})};
+    }
+    return fetch(url,options);
+  };
+  a.store.addNote('Before rejection');assert.equal(await sync(a),false);assert.notEqual(s.body.v,4);
+  assert.ok(a.store.localSync.pending.length);assert.equal(await sync(a),true);
+  const b=s.attach();assert.equal(await sync(b),true);
+  for(const text of ['Before rejection','Changed during rejection'])assert.ok(b.store.notes.some(n=>n.content===text));
+});
+
+test('object size rejection retains originals without retrying an unchanged oversized body',async()=>{
+  const s=backend(),a=s.attach(),fetch=a.context.fetch;let plainAttempts=0;
+  a.context.fetch=async(url,options={})=>{
+    if(options.method==='PUT' && url.includes('/sync_objects/')) {
+      if(!new URL(url).searchParams.has('print'))plainAttempts++;
+      return {ok:false,status:400,headers:{get:()=>null},json:async()=>({error:'Data size exceeds the maximum size'})};
+    }
+    return fetch(url,options);
+  };
+  a.store.addNote('Keep rejected original');assert.equal(await sync(a),false);assert.equal(plainAttempts,0);
+  assert.notEqual(s.body.v,4);assert.ok(a.store.localSync.pending.length);
+  assert.equal(a.context.cloudSync.lastSyncFailure.kind,'size-limit');
+});
 test('legacy snapshot upgrades atomically and a new device receives every record and attachment',async()=>{
   const data=clone(fixture);data.notes[0].fileUrl='data:application/pdf;base64,'+'A'.repeat(100000);
   const file={id:'vault-original',dataUrl:'data:application/pdf;base64,'+'B'.repeat(120000)};
