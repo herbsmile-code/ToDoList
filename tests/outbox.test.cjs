@@ -436,7 +436,7 @@ test('manual: PUT failure keeps local body and exact pending records, restart an
   assert.equal(await h.context.cloudSync.requestManualSync(),false);
   assert.deepEqual(h.requests.slice(start).map(r=>r.options.method||'GET'),['GET','PUT']);
   assert.equal(elements['manual-sync-state'].textContent,'동기화 실패');
-  assert.equal(toasts.at(-1).message,'동기화 실패 · 이 기기에는 안전하게 저장되어 있습니다');
+  assert.match(toasts.at(-1).message,/서버 저장 응답을 확인하지 못했습니다/);
   assert.deepEqual(saved(h).localSync.pending,pending);assert.deepEqual(s.data,before);
   const reboot=restart(h,s);
   assert.equal(reboot.store.notes.find(n=>n.id===d.id).content,'Newest D');
@@ -461,9 +461,10 @@ test('manual: local quota failure blocks GET/PUT and never claims the device cop
   assert.ok(toasts.every(t=>!t.message.includes('안전하게') && t.type!=='success'));
 });
 
-test('manual: existing local write failure keeps draft and blocks upload', async () => {
+test('manual: continuing local write failure keeps draft and blocks upload', async () => {
   const h=harness(JSON.stringify(fixture));h.store.localWriteFailed=true;
   const {toasts}=mountSyncControls(h),raw=h.values.get(key);
+  h.context.localStorage.setItem=()=>{throw Error('Synthetic quota');};
   assert.equal(await h.context.cloudSync.requestManualSync(),false);
   assert.equal(h.requests.length,0);assert.equal(h.values.get(key),raw);
   assert.equal(toasts.at(-1).type,'warning');assert.equal(h.store.saveStatus,'failed');
@@ -613,7 +614,7 @@ test('idle polling: a held GET keeps completed status, but a failed GET is shown
   assert.equal(elements['btn-manual-sync'].attributes['aria-busy'],'false');
   s.failGET=true;release.resolve();assert.equal(await work,false);
   assert.equal(elements['manual-sync-state'].textContent,'동기화 실패');
-  assert.match(elements['local-save-status'].textContent,/이 기기에는 안전하게 저장/);
+  assert.match(elements['local-save-status'].textContent,/서버 데이터를 받지 못했습니다/);
   h.context.fetch=fetch;s.failGET=false;
   assert.equal(await sync(h),true);
   assert.equal(elements['manual-sync-state'].textContent,'동기화 완료');

@@ -65,6 +65,7 @@ function harness(raw, { code = source, failRead = false, extras = {} } = {}) {
     bindEvents() { context.bound = true; },
     bindBankAnalyzerEvents() { context.bankBound = true; }
   };
+  context.mainStorage = context.localStorage;
   context.window = context;
   vm.createContext(context);
   vm.runInContext(constants, context);

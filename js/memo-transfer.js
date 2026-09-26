@@ -106,7 +106,7 @@
     if (await (await handle.getFile()).text() !== text) throw new Error('백업 파일을 다시 읽어 확인하지 못했습니다. 이전을 중단했습니다.');
   }
 
-  function bind({store,cloud,p,key}) {
+  function bind({store,cloud,p,key,storage=localStorage}) {
     const byId = id => document.getElementById(id);
     const exportButton = byId('btn-memo-file-export'), input = byId('memo-transfer-input');
     const applyButton = byId('btn-memo-file-apply'), status = byId('memo-transfer-status');
@@ -122,12 +122,12 @@
     exportButton.addEventListener('click', async () => {
       try {
         // Read exactly the existing key. Export performs no Store or cloud writes.
-        const raw = localStorage.getItem(key);
+        const raw = storage.getItem(key);
         const target = cloud.spaceId && cloud.pin ? p.hash([cloud.activeUrl,cloud.getStorageKey()]) : null;
         const bundle = exportFile(raw,p,target);
         const handle = await picker('todolist-local-memos-' + Date.now() + '.json');
         await writeVerified(handle,JSON.stringify(bundle,null,2));
-        if (localStorage.getItem(key) !== raw) {
+        if (storage.getItem(key) !== raw) {
           tell('백업 파일은 저장했지만 그 사이 데이터가 변경되었습니다. 최신 내용을 포함하도록 ① 백업을 다시 저장해 주세요.');
           return;
         }

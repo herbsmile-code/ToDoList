@@ -28,6 +28,7 @@ const section = html.match(/<section aria-labelledby="memo-transfer-heading"[\s\
       window.UI={renderTasks(){},renderSidebar(){},showToast(){}};
       window.normalizeArray=v=>Array.isArray(v)?v:[];
       window.E2EESecurityEngine={encrypt:async data=>({isEncrypted:true,iv:'fake',payload:JSON.stringify(data)}),decrypt:async data=>data.isEncrypted?JSON.parse(data.payload):data};
+      window.SyncOriginals={preserve:async()=>true,getAll:async()=>[]};
       window.fetch=async (url,options={})=>{
         const s=window.testState,put=options.method==='PUT';
         const status=put && s.failPUT?503:200;
@@ -43,7 +44,7 @@ const section = html.match(/<section aria-labelledby="memo-transfer-heading"[\s\
     },{fixture,key});
     await page.addScriptTag({content:read('js/utils/constants.js')});
     await page.addScriptTag({content:read('js/memo-transfer.js')});
-    await page.addScriptTag({content:'(()=>{'+app.slice(app.indexOf('  const LocalSyncProtocol'),app.indexOf('  // IndexedDB Vault Storage Engine'))+
+    await page.addScriptTag({content:'(()=>{const mainStorage=localStorage;'+app.slice(app.indexOf('  const LocalSyncProtocol'),app.indexOf('  // IndexedDB Vault Storage Engine'))+
       '\nconst cloudSync=new CloudSyncManager();window.cloudSync=cloudSync;'+
       app.slice(app.indexOf('  const INITIAL_HONEYMOON_DATA'),app.indexOf('  // 6. UI View Engine'))+
       '\nstore.writerBlocked=false;store.writerLockHeld=true;cloudSync.getAllVaultFiles=async()=>[];'+

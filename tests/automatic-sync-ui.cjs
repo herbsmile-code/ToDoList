@@ -82,6 +82,28 @@ const sync=page=>page.evaluate(()=>{cloudSync.retryAfter=0;return cloudSync.fetc
       await mobile.page.evaluate(()=>{fixtureFailSave=true;});
       assert.equal(await sync(mobile.page),false);assert.equal(server.puts,puts);
       assert.equal(await mobile.page.evaluate(key=>localStorage.getItem(key),key),raw);
+      assert.match(await mobile.page.locator('#local-save-status').textContent(),/저장 공간이 부족/);
+      await mobile.page.evaluate(()=>{fixtureFailSave=false;});
+      await mobile.page.waitForFunction(()=>store.saveStatus==='confirmed',{},{timeout:12000});
+      assert.equal(await mobile.page.evaluate(()=>store.localWriteFailed),false);
+      // Large recovery bodies use actual IndexedDB. Exhaust actual localStorage
+      // capacity and verify that compaction frees space without deleting originals.
+      await mobile.page.evaluate(()=>{
+        const meta=JSON.parse(JSON.stringify(store.localSync));
+        meta.recovery.push({id:'auto-large-original',key:'["vaultFiles","fixture-large"]',reason:'vault-original',
+          local:{vaultFiles:[{id:'fixture-large',dataUrl:'data:;base64,'+'R'.repeat(1200000)}]},remote:{vaultFiles:[]}});
+        if(!store.commitLocal(store._committedData,meta))throw Error('Synthetic setup did not fit');
+        let padding='';
+        try {while(true){padding+='P'.repeat(32000);localStorage.setItem('fixture-capacity-padding',padding);}}
+        catch(error){if(error.name!=='QuotaExceededError')throw error;}
+      });
+      assert.equal(await sync(mobile.page),true);
+      const archive=await mobile.page.evaluate(async()=>{
+        const ref=store.localSync.recovery.find(r=>r.id==='auto-large-original');
+        const row=(await SyncOriginals.getAll()).find(r=>r.id===ref.archiveId);
+        return {reference:!!ref.archiveId,bodyLength:row.recovery.local.vaultFiles[0].dataUrl.length};
+      });
+      assert.equal(archive.reference,true);assert.ok(archive.bodyLength>1200000);
       await mobile.page.reload();await mobile.page.waitForFunction(()=>window.store?.writerLockHeld && window.UI);
       await mobile.page.evaluate(()=>{cloudSync.spaceId='fixture-user';cloudSync.pin='fixture-pin';cloudSync.pushTasksToCloud=()=>false;});
       assert.equal(await sync(mobile.page),true);assert.equal(await mobile.page.evaluate(()=>store.localSyncInvalid),false);
