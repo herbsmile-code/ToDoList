@@ -135,6 +135,18 @@ async function consistent(apps,expected) {
       }
       const second=await open(browser,origin,entry,'second-pc');
       const apps=[pc,mobile,second];await consistent(apps,3);
+      if(process.env.SYNC_HEALTH_UPLOAD_TEST==='1') {
+        const fileUrl='data:application/pdf;base64,'+Buffer.alloc(4.5*1024*1024,65).toString('base64');
+        assert.ok(await pc.page.evaluate(fileUrl=>store.saveHealthNoteWithAttachment('healthNotes-pc',{
+          fileUrl,fileName:'synthetic-health.pdf',fileType:'application/pdf',fileSize:4.5*1024*1024,status:'completed'
+        }),fileUrl));
+        await Promise.all(apps.map(({page})=>page.waitForFunction(fileUrl=>store.saveStatus==='confirmed' &&
+          store.healthNotes.find(n=>n.id==='healthNotes-pc')?.fileUrl===fileUrl,fileUrl,{timeout:30000})));
+        for(const app of apps)assert.equal(await app.page.evaluate(()=>store.healthNotes.find(n=>n.id==='healthNotes-pc').status),'completed');
+        await mobile.page.reload();
+        await mobile.page.waitForFunction(fileUrl=>window.store?.healthNotes.find(n=>n.id==='healthNotes-pc')?.fileUrl===fileUrl,fileUrl);
+        console.log('PASS '+entry+': new 4.5 MiB health file and progress status, encrypted v4 three-device receive and mobile restart');
+      }
       assert.equal(body.v,objectMode?4:3);assert.ok(largestString(body)<=1024*1024);
       const encryptedBytes=Buffer.byteLength(JSON.stringify(body))+(objectMode?[...objects.values()].reduce((n,v)=>n+Buffer.byteLength(JSON.stringify(v)),0):0);
       assert.ok(encryptedBytes>23000000);

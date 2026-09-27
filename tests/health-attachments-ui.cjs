@@ -36,12 +36,13 @@ async function checkNative(app,width) {
   await open(page);await page.locator('#btn-health-clear-file').click();await page.evaluate(()=>fixtureState.failSave=true);await submitNote(page);
   assert.equal((await note(page)).fileUrl,replacement);assert.equal(await page.locator('#health-note-modal').isVisible(),true);
   await page.evaluate(()=>fixtureState.failSave=false);await submitNote(page);assert.equal((await note(page)).fileUrl,'');
-  // Real browser quota, not the injected failure flag: 6 MiB encoded data exceeds localStorage.
+  // Large files use the existing verified file store; whole-snapshot quota no longer blocks uploads.
   await open(page);await page.locator('#health-input-folder').selectOption('checkup');
-  const before=await raw(page);await choose(page,'large.pdf',Buffer.alloc(6*1024*1024,65));
+  await choose(page,'large.pdf',Buffer.alloc(6*1024*1024,65));
   await page.waitForFunction(()=>document.getElementById('health-file-data-name').value==='large.pdf');await submitNote(page);
-  assert.equal(await page.locator('#health-note-modal').isVisible(),true);assert.equal(await raw(page),before);
-  assert.equal(await page.locator('#health-file-data-name').inputValue(),'large.pdf');await closeNote(page);
+  assert.equal(await page.locator('#health-note-modal').isVisible(),false);
+  assert.equal((await note(page)).fileName,'large.pdf');assert.ok((await raw(page)).length<100000);
+  await open(page);await page.locator('#btn-health-clear-file').click();await submitNote(page);
   // A remote edit arriving while this form is open cannot be overwritten by its older draft.
   await open(page);await page.locator('#health-input-content').fill('Unsubmitted local draft');
   await page.evaluate(()=>store.updateHealthNote('hnote-one',{content:'Received remote content',fileUrl:'data:application/pdf;base64,UkVNT1RF',fileName:'remote.pdf'}));
@@ -111,6 +112,6 @@ async function checkSync(browser,entry) {
       try{await navigate(fileApp.page,390);await open(fileApp.page);assert.equal(await fileValue(fileApp.page),dataUrl);await closeNote(fileApp.page);assert.deepEqual(fileApp.errors,[]);}
       finally{await fileApp.context.close();}
     }
-    console.log('PASS: health attachments; native byte-for-byte download, replacement/removal/cancel/restart, actual quota failure, stale form guard, delayed reads, unsupported links, legacy preservation, encrypted two-device transfer; both HTML, PC/mobile/file.');
+    console.log('PASS: health attachments; native byte-for-byte download, replacement/removal/cancel/restart, large-file persistence, injected quota failure, stale form guard, delayed reads, unsupported links, legacy preservation, encrypted two-device transfer; both HTML, PC/mobile/file.');
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

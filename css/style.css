@@ -8365,3 +8365,29 @@ body::after {
     gap: 0.75rem;
   }
 }
+
+/* Health progress is edited in the form; badges are read-only. */
+.health-status-badge { display:inline-flex; flex-shrink:0; padding:3px 9px; border-radius:999px; font-size:.75rem; font-weight:700; }
+.health-status-badge.is-progress { color:#8a5400; background:#fff1c2; }
+.health-status-badge.is-completed { color:#116149; background:#d8f6e9; }
+[data-theme="dark"] .health-status-badge.is-progress { color:#ffe2a5; background:#634819; }
+[data-theme="dark"] .health-status-badge.is-completed { color:#b7f5de; background:#184c3c; }
+
+/* Ordering controls live above each list, and are available on touch/keyboard. */
+.list-order-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:8px 0 12px; font-size:.82rem; color:var(--text-muted); }
+.list-order-toolbar[hidden] { display:none; }
+.list-order-toolbar label { display:flex; align-items:center; gap:8px; font-weight:700; }
+.list-order-toolbar select { color:var(--text-main); background:var(--bg-card, var(--bg-main)); border:1px solid var(--border-color,#ddd); border-radius:8px; padding:7px; }
+.list-order-hint { font-size:.75rem; }
+.list-order-tools { display:flex; align-items:center; gap:4px; margin:0 0 8px; }
+.list-order-tab { display:flex; flex-direction:column; flex-shrink:0; }
+.list-order-tab > .list-order-tools { justify-content:center; margin:6px 0 0; }
+.list-order-tools button { min-width:32px; min-height:32px; border:1px solid var(--border-color,#ddd); border-radius:6px; color:var(--text-main); background:var(--bg-card,transparent); cursor:pointer; }
+.list-order-tools button:disabled { opacity:.3; cursor:default; }
+.list-order-tools [data-order-handle] { cursor:grab; touch-action:none; font-size:20px; }
+.list-order-tools button:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+.task-card > .list-order-tools { flex-direction:column; flex-shrink:0; align-self:center; margin:0 8px 0 0; }
+.list-order-dragging { opacity:.5; }
+.list-order-before { box-shadow:0 -4px 0 var(--primary)!important; }
+.list-order-after { box-shadow:0 4px 0 var(--primary)!important; }
+@media(max-width:600px) { .list-order-tools button { min-width:40px; min-height:40px; } .list-order-hint { flex-basis:100%; } }

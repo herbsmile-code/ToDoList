@@ -17,6 +17,7 @@
       const hospitalInput = document.getElementById('health-input-hospital');
       const costInput = document.getElementById('health-input-cost');
       const contentInput = document.getElementById('health-input-content');
+      const statusInput = document.getElementById('health-input-status');
       const folders = (store.healthFolders || DEFAULT_HEALTH_FOLDERS).filter(f => f.id !== 'all');
       if (folderSelect) folderSelect.innerHTML = folders.map(f => `
           <option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>
@@ -41,6 +42,7 @@
         if (hospitalInput) hospitalInput.value = note.hospital || '';
         if (costInput) costInput.value = note.cost || '';
         if (contentInput) contentInput.value = note.content || '';
+        if (statusInput) statusInput.value = note.status === 'completed' ? 'completed' : 'in-progress';
       } else {
         if (titleEl) titleEl.textContent = '🏥 건강 메모 작성 💖';
         if (editIdEl) editIdEl.value = '';
@@ -145,7 +147,6 @@
       const folders = store.healthFolders || DEFAULT_HEALTH_FOLDERS;
       const activeFolder = folders.some(f => f.id === store.activeHealthFolder) ? store.activeHealthFolder : 'all';
       const allNotes = store.healthNotes || [];
-      const nonAllFolders = folders.filter(f => f.id !== 'all');
 
       // 1. Render Folder Tabs (with edit pencil icon for editable folders)
       if (tabsBar) {
@@ -188,59 +189,24 @@
         notesCountBadge.textContent = `총 ${filtered.length}건`;
       }
 
-      // 2.5. Batch Action Toolbar (선택된 메모 이동 / 삭제)
-      const selectedIds = Array.from(store.selectedHealthNotes || []).filter(id => filtered.some(n => n.id === id));
-      const isAllSelected = filtered.length > 0 && selectedIds.length === filtered.length;
-
-      let batchBarHTML = '';
-      if (filtered.length > 0) {
-        const folderOptionsHTML = nonAllFolders.map(f => `<option value="${f.id}">${f.icon || '📁'} ${escapeHTML(f.name)}</option>`).join('');
-        batchBarHTML = `
-          <div class="note-batch-toolbar ${selectedIds.length > 0 ? 'is-active' : ''}">
-            <div class="batch-left">
-              <label class="batch-check-label" title="전체 선택/해제">
-                <input type="checkbox" id="health-check-all" class="batch-checkbox-all" ${isAllSelected ? 'checked' : ''}>
-                <span>${selectedIds.length > 0 ? `선택됨 <strong>${selectedIds.length}</strong>개` : '전체 선택'}</span>
-              </label>
-            </div>
-            <div class="batch-right" style="${selectedIds.length > 0 ? 'display: flex;' : 'display: none;'}">
-              <span class="batch-action-hint">선택 항목 이동:</span>
-              <select id="health-batch-target-folder" class="batch-select-dropdown">
-                <option value="">📁 이동할 폴더 선택...</option>
-                ${folderOptionsHTML}
-              </select>
-              <button type="button" class="btn btn-sm btn-primary" data-action="batch-move-health-notes" title="선택한 메모들을 선택한 폴더로 이동합니다">
-                <span>이동 ✨</span>
-              </button>
-              <button type="button" class="btn btn-sm" style="background: rgba(255, 77, 77, 0.12); color: #ff4d4d; border: 1px solid rgba(255,77,77,0.25);" data-action="batch-delete-health-notes" title="선택한 메모들을 삭제합니다">
-                <span>일괄 삭제 🗑️</span>
-              </button>
-            </div>
-          </div>
-        `;
-      }
-
       // 3. Render Large Notes Grid
       if (filtered.length === 0) {
         gridContainer.innerHTML = '';
         if (emptyState) emptyState.style.display = 'flex';
       } else {
         if (emptyState) emptyState.style.display = 'none';
-        const cardsHTML = filtered.map(note => {
+        const cardsHTML = window.ListOrder.sort('healthNotes', filtered).map(note => {
           const noteFolder = folders.find(f => f.id === note.folder) || { name: '일반/기타', icon: '💊' };
           const attachmentUrl = window.safeHealthAttachmentUrl(note.fileUrl);
           const dateFormatted = note.date ? note.date.replace(/-/g, '.') : '';
-          const isChecked = store.selectedHealthNotes && store.selectedHealthNotes.has(note.id);
+          const completed = note.status === 'completed';
 
           return `
-            <div class="health-note-card ${isChecked ? 'is-selected' : ''}" data-health-note-id="${note.id}">
+            <div class="health-note-card" data-health-note-id="${note.id}">
               <div class="health-note-header">
                 <div class="health-note-top-row">
                   <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <label class="note-card-checkbox-label" title="메모 선택" onclick="event.stopPropagation();">
-                      <input type="checkbox" class="health-item-checkbox" data-id="${note.id}" ${isChecked ? 'checked' : ''}>
-                      <span class="custom-card-check"></span>
-                    </label>
+                    <span class="health-status-badge ${completed ? 'is-completed' : 'is-progress'}">${completed ? '진행완료' : '진행중'}</span>
                     <span class="health-folder-badge">
                       <span>${noteFolder.icon || '🩺'}</span>
                       <span>${escapeHTML(noteFolder.name)}</span>
@@ -289,7 +255,7 @@
           `;
         }).join('');
 
-        gridContainer.innerHTML = batchBarHTML + cardsHTML;
+        gridContainer.innerHTML = cardsHTML;
       }
 
       this.renderSidebar();

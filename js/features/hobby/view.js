@@ -230,7 +230,7 @@
         if (emptyState) emptyState.style.display = 'flex';
       } else {
         if (emptyState) emptyState.style.display = 'none';
-        const cardsHTML = filtered.map(note => {
+        const cardsHTML = window.ListOrder.sort('hobbyNotes', filtered).map(note => {
           const noteFolder = folders.find(f => f.id === note.folder) || { name: '기타취미', icon: '✨' };
           const dateFormatted = note.date ? note.date.replace(/-/g, '.') : '';
           const isChecked = store.selectedHobbyNotes && store.selectedHobbyNotes.has(note.id);

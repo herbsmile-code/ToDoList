@@ -296,7 +296,7 @@ class TreasureVaultManager {
     const paginationContainer = document.getElementById('tr-pagination-container');
     if (!grid) return;
 
-    const items = this.getFiltered();
+    const items = window.ListOrder.sort('treasures', this.getFiltered());
     const totalItems = items.length;
     const totalPages = Math.ceil(totalItems / this.pageSize) || 1;
 
@@ -335,7 +335,7 @@ class TreasureVaultManager {
           <div class="tr-item-card" data-id="${item.id}" draggable="true">
             <div class="tr-item-header">
               <div style="display: flex; align-items: center;">
-                <span class="tr-drag-handle" title="드래그하여 순서 변경">⋮⋮</span>
+
                 <span class="tr-badge-tag">${catLabels[item.category] || '💎 지식'}</span>
               </div>
               <button type="button" class="tr-btn-delete" data-action="delete-tr" data-id="${item.id}" title="보물 삭제">🗑️</button>
@@ -383,6 +383,8 @@ class TreasureVaultManager {
       }
     }
 
+    if(window.store && window.UI) window.ListOrder.mount({field:'treasures',rootId:'tr-grid-container',selector:'.tr-item-card',idAttribute:'data-id',
+      render:()=>{this.treasures=window.store.treasures.slice();this.render();}},window.store,window.UI);
     this.renderStorageGauge();
   }
 
@@ -667,80 +669,8 @@ class TreasureVaultManager {
       });
     }
 
-    // Treasure Cards Drag & Drop Reordering
-    const grid = document.getElementById('tr-grid-container');
-    if (grid) {
-      let draggedId = null;
+    // Ordering uses the shared confirmed Store commit.
 
-      grid.addEventListener('dragstart', (e) => {
-        const card = e.target.closest('.tr-item-card');
-        if (!card) return;
-        draggedId = card.dataset.id;
-        card.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', draggedId);
-      });
-
-      grid.addEventListener('dragend', (e) => {
-        const card = e.target.closest('.tr-item-card');
-        if (card) card.classList.remove('dragging');
-        document.querySelectorAll('.tr-item-card').forEach(el => {
-          el.classList.remove('drag-over-top', 'drag-over-bottom');
-        });
-      });
-
-      grid.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const targetCard = e.target.closest('.tr-item-card');
-        if (!targetCard || targetCard.dataset.id === draggedId) return;
-
-        const rect = targetCard.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-        document.querySelectorAll('.tr-item-card').forEach(el => {
-          el.classList.remove('drag-over-top', 'drag-over-bottom');
-        });
-        if (e.clientY < midY) {
-          targetCard.classList.add('drag-over-top');
-        } else {
-          targetCard.classList.add('drag-over-bottom');
-        }
-      });
-
-      grid.addEventListener('dragleave', (e) => {
-        const targetCard = e.target.closest('.tr-item-card');
-        if (targetCard) {
-          targetCard.classList.remove('drag-over-top', 'drag-over-bottom');
-        }
-      });
-
-      grid.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const targetCard = e.target.closest('.tr-item-card');
-        if (!targetCard || !draggedId) return;
-        const targetId = targetCard.dataset.id;
-        if (targetId === draggedId) return;
-
-        const fromIdx = this.treasures.findIndex(t => t.id === draggedId);
-        const toIdx = this.treasures.findIndex(t => t.id === targetId);
-        if (fromIdx !== -1 && toIdx !== -1) {
-          const [moved] = this.treasures.splice(fromIdx, 1);
-          const rect = targetCard.getBoundingClientRect();
-          const midY = rect.top + rect.height / 2;
-          const insertIdx = (e.clientY < midY) ? toIdx : toIdx + 1;
-          this.treasures.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, moved);
-          if (!this.save()) return;
-          this.render();
-          if (window.UI && window.UI.showToast) {
-            window.UI.showToast('보물 지식 순서가 변경되었어요! ✨', 'info');
-          }
-        }
-        draggedId = null;
-        document.querySelectorAll('.tr-item-card').forEach(el => {
-          el.classList.remove('drag-over-top', 'drag-over-bottom');
-        });
-      });
-    }
   }
 }
 

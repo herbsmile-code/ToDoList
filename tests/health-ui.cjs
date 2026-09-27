@@ -126,14 +126,14 @@ async function capture(page, name, selector) {
     width:Math.round(el.getBoundingClientRect().width), height:Math.round(el.getBoundingClientRect().height)}));
   if (baseline) assert.deepEqual(snapshots[name], baseline[name], name + ': changed from pre-refactor UI');
 }
-const saved=page=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);
+const saved=page=>page.evaluate(key=>JSON.parse(MainStorage.getItem(key)),key);
 const card=(page,id='hnote-one')=>page.locator('.health-note-card[data-health-note-id="'+id+'"]');
 const folder=(page,id)=>page.locator('.health-folder-tab[data-health-folder-id="'+id+'"]');
 const focused=page=>page.waitForFunction(()=>document.activeElement.id==='health-input-title');
 const closeNote=page=>page.locator('#health-note-modal [data-close-health-modal]').first().click();
 const closeFolder=page=>page.locator('#health-folder-modal [data-close-health-folder-modal]').first().click();
 const editFolder=(page,id='folder-test')=>folder(page,id).locator('[data-action="open-edit-health-folder"]').click();
-const submitNote=page=>page.locator('#health-note-form button[type="submit"]').click();
+const submitNote=async page=>{await page.locator('#health-note-form button[type="submit"]').click();await page.waitForFunction(()=>document.getElementById('health-note-form').dataset.saving!=='true');};
 const submitFolder=page=>page.locator('#health-folder-form button[type="submit"]').click();
 const viewState=page=>page.evaluate(key=>({raw:localStorage.getItem(key),writes:fixtureState.writes,
   notes:JSON.stringify(store.healthNotes),folders:JSON.stringify(store.healthFolders)}),key);
@@ -154,8 +154,8 @@ async function checkViews(app,entry,width) {
     await page.locator('#btn-open-add-health-folder').click();await capture(page,prefix+'-folder-new','#health-folder-modal');await closeFolder(page);
     await folder(page,'general').click();assert.equal(await page.locator('#health-empty-state').isVisible(),true);
     await capture(page,prefix+'-empty','#health-view-container');await folder(page,'all').click();
-    await card(page).locator('.health-item-checkbox').check();await capture(page,prefix+'-selected','#health-view-container');
-    await card(page).locator('.health-item-checkbox').uncheck();
+    assert.equal(await page.locator('.health-item-checkbox,#health-check-all').count(),0);
+    assert.equal(await card(page).locator('.health-status-badge').textContent(),'진행중');
   }
   await page.evaluate(()=>{fixtureState.opens=0;const original=UI.openHealthNoteModal;UI.openHealthNoteModal=function(...args){fixtureState.opens++;return original.apply(this,args);};});
   for(let i=0;i<3;i++){await card(page).locator('[data-action="edit-health-note"]').click();await focused(page);await closeNote(page);}
@@ -164,7 +164,7 @@ async function checkViews(app,entry,width) {
 async function checkFailures(app) {
   const {page}=app;
   await page.evaluate(()=>{fixtureState.toasts=[];const original=UI.showToast;UI.showToast=function(...args){fixtureState.toasts.push(args[0]);return original.apply(this,args);};});
-  for(const mode of ['new','edit','folder-new','folder-edit','folder-delete','delete','batch-move','batch-delete','quick-move']) {
+  for(const mode of ['new','edit','folder-new','folder-edit','folder-delete','delete','quick-move']) {
     if(mode==='new'){await page.locator('#btn-open-add-health-note').click();await focused(page);}
     if(mode==='edit'){await card(page).locator('[data-action="edit-health-note"]').click();await focused(page);}
     if(mode==='folder-new')await page.locator('#btn-open-add-health-folder').click();
@@ -198,25 +198,19 @@ async function checkEdits(app,width) {
   await page.locator('#health-input-title').fill('Created note');await page.locator('#health-input-content').fill('Created content');await submitNote(page);
   const created=(await saved(page)).healthNotes.find(n=>n.title==='Created note');assert.equal(created.folder,newFolder.id);
   await card(page,created.id).locator('[data-action="edit-health-note"]').click();await focused(page);
-  await page.locator('#health-input-content').fill('Edited content');await submitNote(page);
+  await page.locator('#health-input-content').fill('Edited content');
+  await page.locator('#health-input-status').selectOption('completed');await submitNote(page);
+  assert.equal((await saved(page)).healthNotes.find(n=>n.id===created.id).status,'completed');
+  assert.equal(await card(page,created.id).locator('.health-status-badge').textContent(),'진행완료');
   await card(page,created.id).locator('[data-action="copy-health-note"]').click();
   assert.ok((await page.evaluate(()=>fixtureState.copied)).some(t=>t.includes('Edited content')));
   await editFolder(page,newFolder.id);await page.locator('#health-input-folder-name').fill('Renamed folder');await submitFolder(page);
   await editFolder(page,newFolder.id);await page.locator('#btn-delete-health-folder').click();
   assert.equal((await saved(page)).healthNotes.find(n=>n.id===created.id).folder,'general');
   assert.ok((await saved(page)).deletedItemIds.includes('health-folder:'+newFolder.id));
-  // Selections from a different tab must not be acted on invisibly.
-  await folder(page,'all').click();await card(page,'hnote-two').locator('.health-item-checkbox').check();
-  await folder(page,'folder-test').click();assert.deepEqual(await page.evaluate(()=>[...store.selectedHealthNotes]),[]);
-  await page.evaluate(()=>{store.selectedHealthNotes.add('hnote-two');UI.renderHealth();});
-  await card(page).locator('.health-item-checkbox').check();
-  await page.locator('#health-batch-target-folder').selectOption('general');await page.locator('[data-action="batch-move-health-notes"]').click();
-  assert.equal((await saved(page)).healthNotes.find(n=>n.id==='hnote-two').folder,'obgyn');
-  assert.equal((await saved(page)).healthNotes.find(n=>n.id==='hnote-one').folder,'general');
-  await folder(page,'all').click();await card(page,'hnote-two').locator('.health-item-checkbox').check();
-  await folder(page,'general').click();assert.deepEqual(await page.evaluate(()=>[...store.selectedHealthNotes]),[]);
-  await page.evaluate(()=>{store.selectedHealthNotes.add('hnote-two');UI.renderHealth();});
-  await page.locator('#health-check-all').check();await page.locator('[data-action="batch-delete-health-notes"]').click();
+  await folder(page,'all').click();
+  await card(page,created.id).locator('[data-action="delete-health-note"]').click();
+  await card(page,'hnote-one').locator('[data-action="delete-health-note"]').click();
   assert.deepEqual((await saved(page)).healthNotes.map(n=>n.id),['hnote-two']);
   await folder(page,'obgyn').click();await page.evaluate(()=>window.prompt=()=> '2');await card(page,'hnote-two').locator('[data-action="quick-move-health-note"]').click();
   assert.equal((await saved(page)).healthNotes[0].folder,'general');
@@ -245,8 +239,8 @@ async function checkSync(browser,entry) {
   try {
     await sync(a.page);await sync(b.page);await navigate(a.page,1280);await navigate(b.page,390);
     await card(a.page).locator('[data-action="edit-health-note"]').click();await focused(a.page);
-    await a.page.locator('#health-input-content').fill('Remote original');await submitNote(a.page);await sync(a.page);await sync(b.page);
-    assert.match(await card(b.page).textContent(),/Remote original/);
+    await a.page.locator('#health-input-content').fill('Remote original');await a.page.locator('#health-input-status').selectOption('completed');await submitNote(a.page);await sync(a.page);await sync(b.page);
+    assert.match(await card(b.page).textContent(),/Remote original/);assert.equal(await card(b.page).locator('.health-status-badge').textContent(),'진행완료');
     await editFolder(b.page);await b.page.locator('#btn-delete-health-folder').click();await sync(b.page);await sync(a.page);
     assert.equal(await folder(a.page,'folder-test').count(),0);assert.match(await card(a.page).textContent(),/일반\/기타/);
     await card(a.page).locator('[data-action="delete-health-note"]').click();await sync(a.page);await sync(b.page);assert.equal(await card(b.page).count(),0);
@@ -270,7 +264,7 @@ async function main() {
       if(!viewsOnly){await checkLegacy(browser,entry);await checkSync(browser,entry);}
     }
     if(baselinePath&&!baseline){fs.mkdirSync(path.dirname(baselinePath),{recursive:true});fs.writeFileSync(baselinePath,JSON.stringify(snapshots,null,2));}
-    console.log('PASS: health '+(viewsOnly?'view characterization':'views, failed-save drafts/selection, CRUD/restart, scoped batch actions, legacy folders, encrypted two-device sync')+
+    console.log('PASS: health '+(viewsOnly?'view characterization':'views, failed-save drafts, progress badges, individual CRUD/restart, legacy folders, encrypted two-device sync')+
       '; both HTML entries, PC/mobile, light/dark, file://; '+Object.keys(snapshots).length+' snapshots'+(baseline?'; baseline unchanged':''));
   }finally{await browser.close();}
 }

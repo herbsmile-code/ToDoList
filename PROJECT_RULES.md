@@ -12,6 +12,7 @@
 - 취미활동 목록·기록/폴더 모달은 `js/features/hobby/view.js`가 제공하며, 두 HTML에서 `app.js`보다 먼저 읽는다. CRUD·클릭·폼·선택 이벤트는 기존 Store/UI에 남긴다. 폴더 모달의 실제 기본 폴더 보호 정책을 유지한다.
 - 건강관리 목록·기록/폴더 모달은 `js/features/health/view.js`, 편집 중 첨부파일은 `js/features/health/attachments.js`가 담당한다. 두 HTML에서 첨부 컨트롤러 → 화면 팩토리 → `app.js` 순서로 읽는다. 공통 이벤트와 CRUD는 기존 Store/UI에 남기며 첨부 컨트롤러는 저장·통신하지 않는다.
 - `window.UI`, `window.store`, HTML 인라인 이벤트 호환성을 유지한다. `app.js` 전체 분리·모듈화는 별도 승인 후 단계적으로 진행한다.
+- 목록 정렬·드래그·터치·키보드 제어는 `js/list-order.js`가 제공하며 두 HTML에서 `app.js`보다 먼저 읽는다. 최신순은 최초 등록일 기준의 복사본만 정렬하고, 직접 정렬은 `reorderVisibleList()`가 기존 중앙 저장 경로로 배열 순서만 저장한다. 화면에 없는 기록의 위치와 항목 본문·수정 시각을 보존하며, 저장 실패나 드래그 중 자료 변경은 순서 저장을 취소한다. 정렬 방식은 기기별 `todolist_jy_list_order_<field>` 화면 설정이고 저장된 자료 순서는 기존 동기화 정책을 따른다. 파일보관함은 최신 등록순을 유지하며 별도 파일 동기화 경로에 수동 정렬을 추가하지 않는다.
 - 단일 `store`를 데이터의 기준으로 유지한다. 기능별 저장소나 별도 Firebase 업로드·암호화·타이머를 만들지 않는다.
 - 공통 병합·미전송 규칙은 `js/sync/protocol.js`, 중앙 전송·재시도·수신은 `js/sync/manager.js`에 있다. `app.js`는 기존 Store/UI/Vault를 getter로 연결한다. 전송 표현 변경은 `js/sync/object-transport.js`, 내용 없는 기기별 진단 기록은 `js/sync/diagnostics.js`에서 처리한다. 두 HTML에서 의존 모듈을 `app.js`보다 먼저 읽는다.
 
@@ -44,7 +45,7 @@
 - 사이트/폴더 변경은 단일 Store의 `commitSiteChanges()`에서 기존 중앙 저장 흐름을 통해 확인한 뒤 메모리에 반영한다. 폴더 삭제·내부 사이트 이동·삭제 기록을 한 후보로 저장한다. 폴더 삭제 기록은 기존 `deletedItemIds`에 `site-folder:<id>`로 기록해 `work` 등 다른 기능과 공유하는 ID를 삭제하지 않는다. `all`과 이동 대상 `portal`은 삭제하지 않는다. 오래된 사이트/폴더 행의 재유입은 원문을 충돌 기록에 보존하며 자동 복원하지 않는다.
 - 연차 변경은 `commitVacationChanges()`에서 기존 중앙 저장·미전송 경로를 확인한 뒤 반영한다. 총 발생일 0은 유효하며 `setTotalVacationDays()`의 실패는 `null`로 구분한다. 삭제한 연차의 오래된 원격 원문도 충돌로 보존한다. 초기화용 할 일·건강/취미/파일보관함 폴더의 임시 보정이 파싱한 사용자 원본을 변경하거나 다른 기능 저장에 섞이지 않게 한다.
 - 취미 변경은 `commitHobbyChanges()`에서 기존 중앙 저장·미전송 경로를 확인한 뒤 반영한다. 폴더 삭제·내부 기록 이동·`hobby-folder:<id>` 표식을 함께 저장하고, 삭제된 취미 기록/폴더의 오래된 원문은 충돌로 보존한다. 일괄 작업은 현재 보이는 선택 항목만 처리하며, 실패 시 입력과 선택을 유지한다. 빈 폴더 목록은 조회 중 다시 채우지 않고, 새 이동 대상은 저장 직전 유효성을 검사한다.
-- 건강 변경은 `commitHealthChanges()`에서 기존 중앙 저장 확인 후 반영한다. 폴더 삭제·첨부를 포함한 기록 이동·`health-folder:<id>` 표식을 함께 저장하고 `all`/`general`을 보호한다. 일괄 대상은 현재 보이는 선택으로 제한하며, 편집 중 같은 기록이 바뀌면 오래된 입력의 제출을 막는다. 첨부 읽기 실패/진행 중에는 저장하지 않고, 교체·제거는 저장 전까지 입력 상태로 유지한다. 취소·오래된 읽기 완료가 기존 원문을 덮어쓰지 않게 한다. 15MB 선택 상한은 저장 보장 용량이 아니며, 다운로드 주소 검증 실패도 기존 원문 삭제 사유가 아니다.
+- 건강 변경은 `commitHealthChanges()`에서 기존 중앙 저장 확인 후 반영한다. 폴더 삭제·첨부를 포함한 기록 이동·`health-folder:<id>` 표식을 함께 저장하고 `all`/`general`을 보호한다. 목록의 선택 체크박스·일괄 작업은 표시하지 않고 개별 이동·삭제를 유지한다. 작성/편집에서 `status`를 `in-progress`/`completed`로 선택하며 목록에는 읽기 전용 상태를 표시한다. 상태 없는 기존 기록은 진행중으로 표시하되 조회만으로 저장하지 않는다. 편집 중 같은 기록이 바뀌면 오래된 입력의 제출을 막는다. 건강 폼은 `saveHealthNoteWithAttachment()`에서 기존 `MainStorage.prepare()`의 원문 저장 완료 후 `commitHealthChanges()`를 호출한다. 대기 중 중복 제출·취소·파일 재선택·기록 변경을 검증한다. 첨부 읽기 실패/진행 중에는 저장하지 않고, 교체·제거는 저장 전까지 입력 상태로 유지한다. 취소·오래된 읽기 완료가 기존 원문을 덮어쓰지 않게 한다. 15MB 선택 상한은 저장 보장 용량이 아니며, 다운로드 주소 검증 실패도 기존 원문 삭제 사유가 아니다.
 - Vault의 파일 메타데이터와 IndexedDB 원문은 함께 검토한다. 메타데이터 수신을 첨부파일 수신 성공으로 간주하지 않는다.
 - Vault 업로드는 파일 크기를 이유로 `dataUrl`을 제거하지 않는다. 현재 암호화 스냅샷 방식의 전송·저장 한도 오류는 원문과 미전송 변경을 보존하며, 성공으로 표시하지 않는다.
 - `file://` 로컬 HTML, GitHub Pages, 다른 기기의 브라우저 저장소는 같다고 가정하지 않는다. 동일 계정 로그인만으로 최신 데이터 동기화가 끝났다고 보고하지 않는다.
@@ -79,7 +80,8 @@
 | 사이트 저장·폴더 삭제·화면 분리 | `sites-safety.test.cjs`, `sites-ui.cjs` (실제 두 HTML, PC/모바일/`file://`, 저장 실패·재실행·가상 기기 간 사이트/폴더 동기화) |
 | 연차 저장·계산·화면 분리 | `vacation-safety.test.cjs`, `vacation-ui.cjs` (0일·반차·휴가, 실패 입력·원문 보존, 관련 없는 기존 자료 보존, 달력·챗봇·기간 필터, 두 HTML/PC/모바일/`file://`/가상 기기 간 동기화) |
 | 취미 저장·폴더·일괄 작업·화면 분리 | `hobby-safety.test.cjs`, `hobby-ui.cjs` (실패 입력/선택 보존, 보이지 않는 기록의 처리 방지, 폴더 삭제와 이동, 과거 자료·충돌·재실행, 두 HTML/PC/모바일/`file://`/가상 기기 간 동기화) |
-| 건강 저장·첨부·코드 분리 | `health-safety.test.cjs`, `health-attachments.test.cjs`, `health-ui.cjs`, `health-attachments-ui.cjs` (첨부 원문·입력 보존, 읽기 경합, 실제 용량 초과·다운로드, 편집 중 수신, 과거 자료·충돌·재실행, 두 HTML/PC/모바일/`file://`/가상 기기 간 암호화 전송) |
+| 건강 저장·첨부·코드 분리 | `health-safety.test.cjs`, `health-attachments.test.cjs`, `health-ui.cjs`, `health-attachments-ui.cjs`, `health-upload-safety.test.cjs`, `health-upload-ui.cjs`, `health-object-sync-ui.cjs` (기존 v4 암호화 3기기 수신·모바일 재실행, 신규 대용량 첨부·취소/변경 경합·상태 저장·첨부 원문·입력 보존, 읽기 경합, 실제 용량 초과·다운로드, 편집 중 수신, 과거 자료·충돌·재실행, 두 HTML/PC/모바일/`file://`/가상 기기 간 암호화 전송) |
+| 등록일 정렬·직접 정렬 | `list-order.test.cjs`, `list-order-ui.cjs` (조회 중 저장 없음, 필터/숨겨진 항목 보존, PC 드래그·모바일 터치·키보드, 저장 실패·재실행·동시 변경, 기존 순서 동기화) |
 | 가계부 금액·충돌·모바일 | `ledger-safety.test.cjs`, `ledger-conflict-sync.test.cjs`, `ledger-view-ui.cjs` |
 | 안내·성능 | `sync-notice-ui.cjs`, `ui-performance.cjs`, `sync-performance.cjs` |
 | 개발기록 모듈·실제 HTML 로딩·웹/모바일 메뉴 연결 | `devlog-ui.cjs` (두 진입 HTML, `file://`, 독립 브라우저 간 가상 메모 동기화) |

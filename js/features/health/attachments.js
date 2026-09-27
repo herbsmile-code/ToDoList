@@ -103,6 +103,11 @@
           }
         };
       },
+      checkpoint() {
+        const active = session, token = generation, draft = session?.draft;
+        return () => !!active && session === active && generation === token &&
+          session.draft === draft && !session.reading && !session.error;
+      },
       changes() {
         if (!session) return null;
         if (session.reading || session.error) {

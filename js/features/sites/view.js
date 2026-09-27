@@ -71,7 +71,7 @@
         if (emptyEl) emptyEl.style.display = 'flex';
       } else {
         if (emptyEl) emptyEl.style.display = 'none';
-        grid.innerHTML = filteredSites.map(site => {
+        grid.innerHTML = window.ListOrder.sort('sites', filteredSites).map(site => {
           let hostname = '';
           try {
             hostname = new URL(site.url).hostname;

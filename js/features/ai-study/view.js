@@ -31,7 +31,7 @@
       const activeCat = store.activeAiStudyCategory || 'all';
       const categories = DEFAULT_AI_STUDY_CATEGORIES;
       const allNotes = store.aiStudyNotes || [];
-      const filteredNotes = store.getFilteredAiStudyNotes();
+      const filteredNotes = window.ListOrder.sort('aiStudyNotes', store.getFilteredAiStudyNotes());
 
       // 1. Render Category Tabs
       if (tabsBar) {
@@ -85,10 +85,10 @@
                   ${catObj.icon} ${escapeHTML(catObj.name)}
                 </span>
                 <span class="aistudy-date">📅 ${dateStr}</span>
-                ${note.pinned ? `<span class="aistudy-pin-badge" title="상단 고정됨">📌 고정</span>` : ''}
+                ${note.pinned ? `<span class="aistudy-pin-badge" title="중요 표시됨">📌 중요</span>` : ''}
               </div>
               <div class="aistudy-card-actions">
-                <button type="button" class="aistudy-action-btn ${note.pinned ? 'active' : ''}" data-action="toggle-pin-aistudy" data-id="${note.id}" title="${note.pinned ? '고정 해제' : '상단 고정'}">
+                <button type="button" class="aistudy-action-btn ${note.pinned ? 'active' : ''}" data-action="toggle-pin-aistudy" data-id="${note.id}" title="${note.pinned ? '고정 해제' : '중요 표시'}">
                   📌
                 </button>
                 <button type="button" class="aistudy-action-btn" data-action="edit-aistudy" data-id="${note.id}" title="수정">

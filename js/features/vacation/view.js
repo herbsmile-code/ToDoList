@@ -98,8 +98,8 @@
         typeFilterLabel = ' [전체 기간 휴가]';
       }
 
-      // 6. 사용날짜(date) 최신순 자동 정렬 (등록일과 무관하게 사용날짜 순으로 정렬)
-      filtered.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      // 6. Display order does not mutate the stored records.
+      filtered = window.ListOrder.sort('vacations', filtered);
 
       // Update Month Summary Banner (예: 8월 총 연차 2.0개 사용 / 휴가 1개 사용)
       const sumPeriodTitleEl = document.getElementById('vac-summary-period-title');

@@ -293,7 +293,7 @@
       this.menuNameHistory = [];
       this.sidebarMenuOrder = ['personal', 'work', 'divider-1', 'project', 'hobby', 'health', 'vacation', 'divider-vacation', 'photos', 'notes', 'divider-2', 'ledger', 'wishlist', 'sites', 'divider-3', 'aistudy', 'devlog', 'vault'];
       this.searchQuery = '';
-      this.sortBy = 'dueDate';
+      this.sortBy = window.ListOrder?.mode('tasks') === 'manual' ? 'manual' : 'createdAt';
       this.viewMode = localStorage.getItem('todolist_jy_view') || 'list';
       this.streak = { count: 3, lastDate: TODAY_STR };
       
@@ -826,6 +826,30 @@
       } catch (e) { this.recordLocalSaveFailure(e); return false; }
     }
 
+    reorderVisibleList(field, visibleIds, movedId, targetId, after, expectedRaw) {
+      const allowed = ['tasks','notes','photos','wishlist','sites','aiStudyNotes','healthNotes',
+        'hobbyNotes','vacations','subscriptions','ledgerFiles','treasures','projects'];
+      if (!allowed.includes(field) || this.localLoadFailed || this.localSyncInvalid || this.writerBlocked ||
+          expectedRaw !== this._lastLocalRaw || !Array.isArray(this[field]) || !Array.isArray(visibleIds)) return false;
+      const selected = new Set(visibleIds), rows = this[field], byId = new Map(rows.map(row => [row.id,row]));
+      if (selected.size !== visibleIds.length || !selected.has(movedId) || !selected.has(targetId) ||
+          movedId === targetId || visibleIds.some(id => !byId.has(id))) return false;
+      const ordered = visibleIds.filter(id => id !== movedId);
+      ordered.splice(ordered.indexOf(targetId) + (after ? 1 : 0), 0, movedId);
+      let index = 0;
+      const reordered = rows.map(row => selected.has(row.id) ? byId.get(ordered[index++]) : row);
+      if (reordered.every((row,i) => row === rows[i])) return true;
+      try {
+        const data = {...this.buildLocalData(), [field]:reordered};
+        data.updatedAt = Math.max(Date.now(), (this.lastUpdatedAt || 0) + 1);
+        data.syncRevision = (this.syncRevision || 0) + 1;
+        const meta = LocalSyncProtocol.track(this._committedData || {}, data, this.localSync);
+        if (!meta.targetFingerprint && cloudSync.spaceId && cloudSync.pin) meta.targetFingerprint = LocalSyncProtocol.hash([cloudSync.activeUrl,cloudSync.getStorageKey()]);
+        if (!this.commitLocal(data,meta)) return false;
+        this.setSaveStatus('pending');cloudSync.pushTasksToCloud();return true;
+      } catch(error) { this.recordLocalSaveFailure(error);return false; }
+    }
+
     commitMemo(collection, item, immediate = false) {
       if (this.localLoadFailed || this.localSyncInvalid || this.writerBlocked) { this.setSaveStatus('conflict'); return null; }
       const before = this[collection];
@@ -1096,8 +1120,7 @@
         reason: (data.reason || '').trim(),
         createdAt: Date.now()
       };
-      const vacations = [newVacation, ...this.vacations]
-        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      const vacations = [newVacation, ...this.vacations];
       return this.commitVacationChanges({vacations}) ? newVacation : null;
     }
 
@@ -1113,8 +1136,7 @@
       const updated = {...vac, type, amount, updatedAt:Date.now()};
       if (data.date) updated.date = data.date;
       if (data.reason !== undefined) updated.reason = (data.reason || '').trim();
-      const vacations = this.vacations.map(v => v.id === id ? updated : v)
-        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      const vacations = this.vacations.map(v => v.id === id ? updated : v);
       return this.commitVacationChanges({vacations}) ? updated : null;
     }
 
@@ -1303,6 +1325,18 @@
       return this.getVisibleHealthNotes().filter(n => this.selectedHealthNotes?.has(n.id)).map(n => n.id);
     }
 
+    async saveHealthNoteWithAttachment(id, updates, stillCurrent = () => true) {
+      if (!this.canEditHealth()) return null;
+      const original = id ? this.getHealthNoteFingerprint(id) : null;
+      try {
+        // Reuse the existing verified file store before the ordinary health commit.
+        // No cloud request or in-memory record change occurs during preparation.
+        if (window.MainStorage) await window.MainStorage.prepare(updates);
+        if (!stillCurrent() || (id && this.getHealthNoteFingerprint(id) !== original)) return null;
+        return id ? this.updateHealthNote(id, updates) : this.addHealthNote(updates);
+      } catch (error) { this.recordLocalSaveFailure(error); return null; }
+    }
+
     addHealthNote(data) {
       if (!this.canEditHealth()) return null;
       const folder = data.folder || 'general';
@@ -1320,10 +1354,10 @@
         fileType: data.fileType || '',
         fileUrl: data.fileUrl || '',
         fileMemo: (data.fileMemo || '').trim(),
+        status: data.status === 'completed' ? 'completed' : 'in-progress',
         createdAt: Date.now()
       };
-      const healthNotes = [newNote, ...this.healthNotes]
-        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      const healthNotes = [newNote, ...this.healthNotes];
       return this.commitHealthChanges({healthNotes}) ? newNote : null;
     }
 
@@ -1335,8 +1369,7 @@
       // new destination must still exist at the moment of saving.
       if (Object.hasOwn(updates, 'folder') && updates.folder !== note.folder && !this.isHealthDestination(updates.folder)) return null;
       const updated = {...note, ...updates, id:note.id, updatedAt:Date.now()};
-      const healthNotes = this.healthNotes.map(n => n.id === id ? updated : n)
-        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      const healthNotes = this.healthNotes.map(n => n.id === id ? updated : n);
       return this.commitHealthChanges({healthNotes}) ? updated : null;
     }
 
@@ -1438,8 +1471,7 @@
         content: (data.content || '').trim(),
         createdAt: Date.now()
       };
-      const hobbyNotes = [newNote, ...this.hobbyNotes]
-        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      const hobbyNotes = [newNote, ...this.hobbyNotes];
       return this.commitHobbyChanges({hobbyNotes}) ? newNote : null;
     }
 
@@ -1451,8 +1483,7 @@
       // new destination must still exist at the moment of saving.
       if (Object.hasOwn(updates, 'folder') && updates.folder !== note.folder && !this.isHobbyDestination(updates.folder)) return null;
       const updated = {...note, ...updates, id:note.id, updatedAt:Date.now()};
-      const hobbyNotes = this.hobbyNotes.map(n => n.id === id ? updated : n)
-        .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt - a.createdAt));
+      const hobbyNotes = this.hobbyNotes.map(n => n.id === id ? updated : n);
       return this.commitHobbyChanges({hobbyNotes}) ? updated : null;
     }
 
@@ -1616,9 +1647,6 @@
         }
 
         return true;
-      }).sort((a, b) => {
-        if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
-        return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
       });
     }
 
@@ -2027,6 +2055,8 @@
             return task.category === this.activeFilter;
         }
       }).sort((a, b) => {
+        if (this.sortBy === 'manual') return 0;
+        if (this.sortBy === 'createdAt') return window.ListOrder.compareRegistered(a,b);
         if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
         if (this.activeFilter !== 'completed' && a.status !== b.status) {
           if (a.status === 'completed') return 1;
@@ -3190,7 +3220,7 @@
       const countEl = document.getElementById('photos-count-total');
       if (!grid) return;
 
-      const photos = store.photos || [];
+      const photos = window.ListOrder.sort('photos', store.photos);
       const total = photos.length;
       if (countEl) countEl.textContent = total;
 
@@ -3296,7 +3326,7 @@
       } else {
         if (emptyState) emptyState.style.display = 'none';
 
-        grid.innerHTML = store.notes.map(note => {
+        grid.innerHTML = window.ListOrder.sort('notes', store.notes).map(note => {
           const cDate = new Date(note.createdAt);
           const dateStr = `${cDate.getMonth() + 1}.${cDate.getDate()} ${String(cDate.getHours()).padStart(2, '0')}:${String(cDate.getMinutes()).padStart(2, '0')}`;
           const colorClass = `color-${note.color || 'pink'}`;
@@ -3613,7 +3643,7 @@
           if (emptyState) emptyState.style.display = 'flex';
         } else {
           if (emptyState) emptyState.style.display = 'none';
-          filesGrid.innerHTML = store.ledgerFiles.map(file => {
+          filesGrid.innerHTML = window.ListOrder.sort('ledgerFiles', store.ledgerFiles).map(file => {
             const dateStr = new Date(file.createdAt).toLocaleDateString('ko-KR', {
               month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
@@ -3670,7 +3700,7 @@
       // Render Subscriptions Grid
       const grid = document.getElementById('subscriptions-grid');
       const emptyState = document.getElementById('subscriptions-empty-state');
-      const subs = store.subscriptions || [];
+      const subs = window.ListOrder.sort('subscriptions', store.subscriptions);
 
       if (!grid) return;
 
@@ -3885,7 +3915,7 @@
           bucket: { label: '🎯 하고 싶은 것', class: 'bucket' }
         };
 
-        grid.innerHTML = filtered.map(wish => {
+        grid.innerHTML = window.ListOrder.sort('wishlist', filtered).map(wish => {
           const catInfo = catMap[wish.category] || catMap.shop;
           const createdDateStr = wish.createdAt ? new Date(wish.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric' }).replace(/\. /g, '.').replace(/\.$/, '') : '';
           const completedDateStr = (wish.completed && wish.completedAt) ? new Date(wish.completedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric' }).replace(/\. /g, '.').replace(/\.$/, '') : '';
@@ -4575,7 +4605,7 @@
       const emptyState = document.getElementById('project-empty-state');
       if (!tabsContainer || !detailContainer) return;
 
-      const projects = store.projects || [];
+      const projects = window.ListOrder.sort('projects',store.projects);
       if (projects.length === 0) {
         tabsContainer.innerHTML = '';
         detailContainer.innerHTML = '';
@@ -5299,6 +5329,7 @@
   };
 
   // Expose to global window for immediate and resilient access
+  window.ListOrder.install(UI, store);
   window.UI = UI;
   window.openCloudModal = () => UI.openCloudModal();
   window.closeCloudModal = () => UI.closeCloudModal();
@@ -8572,6 +8603,9 @@
     if (sortSelect) {
       sortSelect.value = store.sortBy;
       sortSelect.addEventListener('change', (e) => {
+        if (!window.ListOrder.setMode('tasks', e.target.value === 'manual' ? 'manual' : 'latest')) {
+          e.target.value = store.sortBy;UI.showToast('정렬 설정을 저장하지 못했습니다.','danger');return;
+        }
         store.sortBy = e.target.value;
         UI.renderTasks();
       });
@@ -10809,8 +10843,9 @@
     // Health Note & Folder Form Submissions
     const healthNoteForm = document.getElementById('health-note-form');
     if (healthNoteForm) {
-      healthNoteForm.addEventListener('submit', (e) => {
+      healthNoteForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (healthNoteForm.dataset.saving === 'true') return;
         const id = document.getElementById('health-note-edit-id')?.value;
         const folder = document.getElementById('health-input-folder')?.value || '';
         if (!folder && !id) { UI.showToast('먼저 건강 폴더를 추가해 주세요. 작성한 내용은 유지됩니다.', 'info'); return; }
@@ -10826,18 +10861,32 @@
           UI.showToast('이 기록이 다른 곳에서 변경되었습니다. 입력 내용은 유지됩니다. 최신 기록을 확인한 뒤 다시 편집해 주세요.', 'danger');
           return;
         }
-        const updates = {date, title, hospital, cost, content, ...attachmentChanges};
+        const status = document.getElementById('health-input-status')?.value === 'completed' ? 'completed' : 'in-progress';
+        const updates = {date, title, hospital, cost, content, status, ...attachmentChanges};
         if (folder) updates.folder = folder;
-        if (id) {
-          if (!store.updateHealthNote(id, updates)) return;
-          UI.showToast('건강 메모가 수정되었어요 🩺✨', 'info');
-        } else {
-          if (!store.addHealthNote({...updates, folder})) return;
-          sounds.playComplete();
-          UI.showToast('새 건강 메모가 등록되었어요 🏥💖', 'success');
+        const checkpoint = UI.healthAttachments.checkpoint();
+        const formState = () => JSON.stringify(Array.from(healthNoteForm.querySelectorAll('input,select,textarea'), el => el.value));
+        const submitted = formState();
+        const current = () => checkpoint() && formState() === submitted &&
+          (!id || store.getHealthNoteFingerprint(id) === UI._healthNoteEditSnapshot);
+        const submit = healthNoteForm.querySelector('[type="submit"]');
+        const label = submit?.textContent;
+        healthNoteForm.dataset.saving = 'true';
+        if (submit) { submit.disabled = true; submit.textContent = '첨부 및 기록 저장 중…'; }
+        try {
+          const result = await store.saveHealthNoteWithAttachment(id, updates, current);
+          if (!result) {
+            if (checkpoint()) UI.showToast(store.localSaveError?.message || '저장 중 입력 또는 기록이 변경되었습니다. 내용을 확인한 뒤 다시 저장해 주세요.', 'danger');
+            return;
+          }
+          if (id) UI.showToast('건강 메모가 수정되었어요 🩺✨', 'info');
+          else { sounds.playComplete(); UI.showToast('새 건강 메모가 등록되었어요 🏥💖', 'success'); }
+          UI.closeHealthNoteModal();
+          UI.renderHealth();
+        } finally {
+          delete healthNoteForm.dataset.saving;
+          if (submit) { submit.disabled = false; submit.textContent = label; }
         }
-        UI.closeHealthNoteModal();
-        UI.renderHealth();
       });
     }
 
@@ -11264,77 +11313,7 @@
     }
 
     // Polaroid Drag & Drop Reordering Event Handling
-    const photosGrid = document.getElementById('photos-grid-container');
-    if (photosGrid) {
-      let draggedPhotoId = null;
-
-      photosGrid.addEventListener('dragstart', (e) => {
-        const card = e.target.closest('.polaroid-card');
-        if (!card) return;
-        draggedPhotoId = card.dataset.photoId;
-        card.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', draggedPhotoId);
-      });
-
-      photosGrid.addEventListener('dragend', (e) => {
-        const card = e.target.closest('.polaroid-card');
-        if (card) card.classList.remove('dragging');
-        document.querySelectorAll('.polaroid-card').forEach(el => {
-          el.classList.remove('drag-over-left', 'drag-over-right');
-        });
-      });
-
-      photosGrid.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const targetCard = e.target.closest('.polaroid-card');
-        if (!targetCard || targetCard.dataset.photoId === draggedPhotoId) return;
-
-        const rect = targetCard.getBoundingClientRect();
-        const midX = rect.left + rect.width / 2;
-        document.querySelectorAll('.polaroid-card').forEach(el => {
-          el.classList.remove('drag-over-left', 'drag-over-right');
-        });
-        if (e.clientX < midX) {
-          targetCard.classList.add('drag-over-left');
-        } else {
-          targetCard.classList.add('drag-over-right');
-        }
-      });
-
-      photosGrid.addEventListener('dragleave', (e) => {
-        const targetCard = e.target.closest('.polaroid-card');
-        if (targetCard) {
-          targetCard.classList.remove('drag-over-left', 'drag-over-right');
-        }
-      });
-
-      photosGrid.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const targetCard = e.target.closest('.polaroid-card');
-        if (!targetCard || !draggedPhotoId) return;
-        const targetPhotoId = targetCard.dataset.photoId;
-        if (targetPhotoId === draggedPhotoId) return;
-
-        const fromIdx = store.photos.findIndex(p => p.id === draggedPhotoId);
-        const toIdx = store.photos.findIndex(p => p.id === targetPhotoId);
-        if (fromIdx !== -1 && toIdx !== -1) {
-          const [moved] = store.photos.splice(fromIdx, 1);
-          const rect = targetCard.getBoundingClientRect();
-          const midX = rect.left + rect.width / 2;
-          const insertIdx = (e.clientX < midX) ? toIdx : toIdx + 1;
-          store.photos.splice(insertIdx > fromIdx ? insertIdx - 1 : insertIdx, 0, moved);
-          store.save();
-          UI.renderPhotos();
-          UI.showToast('사진 순서가 변경되었어요! 🖼️✨', 'info');
-        }
-        draggedPhotoId = null;
-        document.querySelectorAll('.polaroid-card').forEach(el => {
-          el.classList.remove('drag-over-left', 'drag-over-right');
-        });
-      });
-    }
+    // Photo ordering is handled by ListOrder, with confirmed Store writes.
 
     // Edit Quick Note Form Submit
     const editNoteForm = document.getElementById('edit-note-form');

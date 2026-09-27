@@ -78,7 +78,9 @@ function ai(code) {
   for(const name of ['renderTasks','renderSidebar','renderPhotos','renderNotes','renderWishlist','renderLedger',
     'renderSubscriptions','renderCalendarMonth','renderCalendarWeek','renderVacation','renderSites','renderAiStudy'])h.context.UI[name]=()=>calls.push(name);
   h.context.cloudSync.renderAllViews();assert.deepEqual(calls,['renderTasks','renderSidebar']);
-  const oldAI=ai(before),newAI=ai(source);assert.equal(oldAI.html,newAI.html);
+  const oldAI=ai(before),newAI=ai(source);
+  // Pin is now an importance label; chronological ordering no longer promotes it.
+  assert.equal(oldAI.html.replaceAll('상단 고정','중요 표시').replaceAll('📌 고정','📌 중요'),newAI.html);
   console.log(JSON.stringify({fixture:'200 AI notes, 9000-character snippets',
     beforeMedianMs:oldAI.medianMs,afterMedianMs:newAI.medianMs,
     sidebarReadsFor10Requests:{before:oldSidebar.reads,after:newSidebar.reads},
