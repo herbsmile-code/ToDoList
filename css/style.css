@@ -5085,6 +5085,43 @@ body::after {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.vacation-item-content {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.vacation-item-details {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.65rem;
+  min-width: 0;
+}
+
+.vacation-item-date {
+  font-weight: 800;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.vacation-item-reason {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.vacation-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
 }
 
 .vacation-type-badge.full {
@@ -8391,3 +8428,187 @@ body::after {
 .list-order-before { box-shadow:0 -4px 0 var(--primary)!important; }
 .list-order-after { box-shadow:0 4px 0 var(--primary)!important; }
 @media(max-width:600px) { .list-order-tools button { min-width:40px; min-height:40px; } .list-order-hint { flex-basis:100%; } }
+
+/* Long user text must shrink with its layout and wrap instead of being clipped. */
+.content-area,
+.content-area > div,
+.site-title-box,
+.site-title-box > div,
+.health-note-card,
+.hobby-note-card,
+.aistudy-card,
+.wish-card {
+  min-width: 0;
+}
+
+.content-area,
+.modal-card {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 992px) {
+  .dashboard-header > *,
+  .modal-header > *,
+  .form-row > *,
+  .toolbar > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .dashboard-header > div:not(.view-heading),
+  .photos-header-row,
+  .site-card-header,
+  .site-card-footer,
+  .health-note-top-row,
+  .hobby-note-top-row,
+  .health-note-footer,
+  .hobby-note-footer,
+  .aistudy-card-header,
+  .note-composer-bottom,
+  .note-actions-bar,
+  .modal-footer {
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .site-card-header > :last-child,
+  .health-note-top-row > :last-child,
+  .hobby-note-top-row > :last-child,
+  .aistudy-card-actions {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .site-title-box {
+    flex-basis: 100%;
+    align-items: flex-start;
+  }
+
+  .health-note-top-row > :first-child,
+  .hobby-note-top-row > :first-child {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .aistudy-card-title,
+  .aistudy-summary-text,
+  .sub-card-name,
+  .sub-card-memo {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    -webkit-line-clamp: unset;
+    max-height: none;
+  }
+
+  .health-note-submeta > *,
+  .hobby-note-submeta > *,
+  .badge,
+  .site-url-link {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .modal-title {
+    word-break: normal;
+  }
+
+  .modal-close-btn,
+  .task-action-btn {
+    flex-shrink: 0;
+  }
+
+  .vacation-hero-card {
+    padding: 1rem;
+  }
+
+  .vacation-hero-card > :first-child,
+  .vacation-progress-container > :first-child,
+  .vacation-history-filters,
+  #vacation-month-summary-bar > div {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .vacation-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.65rem;
+  }
+
+  .vacation-stat-box {
+    min-width: 0;
+    padding: 0.85rem 0.65rem;
+  }
+
+  .vacation-stat-title {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .vacation-stat-num {
+    font-size: 1.65rem;
+  }
+
+  .vacation-progress-container {
+    padding: 0.85rem;
+  }
+
+  #vacation-history-count {
+    flex-basis: 100%;
+    margin-left: 0 !important;
+  }
+
+  #vacation-month-summary-bar > div {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  .vacation-item-card {
+    flex-wrap: wrap;
+    padding: 1rem;
+    gap: 0.65rem;
+  }
+
+  .vacation-item-content {
+    flex: 1 1 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+
+  .vacation-item-details {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    gap: 0.35rem;
+  }
+
+  .vacation-item-actions {
+    margin-left: auto;
+  }
+
+  .vacation-item-card > .list-order-tools {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .notes-grid,
+  .sites-grid,
+  .health-notes-grid,
+  .hobby-notes-grid,
+  .aistudy-grid,
+  .subscriptions-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .photos-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .photos-header-row {
+    flex-wrap: wrap;
+  }
+}

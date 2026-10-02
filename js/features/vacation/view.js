@@ -160,16 +160,14 @@
 
           return `
             <div class="vacation-item-card" data-vacation-id="${v.id}">
-              <div style="display: flex; align-items: center; gap: 0.85rem; flex: 1;">
+              <div class="vacation-item-content">
                 <span class="vacation-type-badge ${badgeClass}">${badgeLabel}</span>
-                <div>
-                  <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
-                    <span>${dateStr}</span>
-                    ${v.reason ? `<span style="font-weight: 500; font-size: 0.85rem; color: var(--text-muted);">| ${escapeHTML(v.reason)}</span>` : ''}
-                  </div>
+                <div class="vacation-item-details">
+                  <span class="vacation-item-date">${dateStr}</span>
+                  ${v.reason ? `<span class="vacation-item-reason">${escapeHTML(v.reason)}</span>` : ''}
                 </div>
               </div>
-              <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <div class="vacation-item-actions">
                 <button type="button" class="task-action-btn edit-btn" data-action="edit-vacation" data-vacation-id="${v.id}" title="연차 기록 수정">
                   ✏️
                 </button>

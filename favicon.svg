@@ -1,38 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Todolist JY — 오늘의 체크 노트</title>
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ff9a9e" />
-      <stop offset="50%" stop-color="#fecfef" />
-      <stop offset="100%" stop-color="#a18cd1" />
+    <clipPath id="tile"><rect width="512" height="512" rx="112"/></clipPath>
+    <linearGradient id="background" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffc6bd"/>
+      <stop offset=".5" stop-color="#f88da8"/>
+      <stop offset="1" stop-color="#c68bd5"/>
     </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="16" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
+    <linearGradient id="paper" x1="155" y1="124" x2="357" y2="384" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffefb"/>
+      <stop offset="1" stop-color="#fff1f5"/>
+    </linearGradient>
+    <linearGradient id="check" x1="218" y1="224" x2="308" y2="293" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ef6a94"/>
+      <stop offset="1" stop-color="#b578c6"/>
+    </linearGradient>
   </defs>
-  
-  <!-- App Background (Squircle) -->
-  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
-  
-  <!-- Subtle Inner Ring -->
-  <rect x="24" y="24" width="464" height="464" rx="108" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="4" />
-  
-  <!-- Sparkles -->
-  <g fill="#ffffff" opacity="0.9">
-    <!-- Top Right Sparkle -->
-    <path d="M 380,110 Q 380,140 410,140 Q 380,140 380,170 Q 380,140 350,140 Q 380,140 380,110 Z" />
-    <!-- Top Left Sparkle -->
-    <path d="M 130,130 Q 130,150 150,150 Q 130,150 130,170 Q 130,150 110,150 Q 130,150 130,130 Z" transform="scale(0.8) translate(30, 30)" />
-    <!-- Bottom Right Sparkle -->
-    <path d="M 390,360 Q 390,375 405,375 Q 390,375 390,390 Q 390,375 375,375 Q 390,375 390,360 Z" />
+  <g clip-path="url(#tile)">
+    <rect id="app-background" width="512" height="512" rx="112" fill="url(#background)"/>
+    <circle cx="106" cy="78" r="145" fill="#fff" opacity=".12"/>
+    <circle cx="477" cy="460" r="174" fill="#b787d4" opacity=".14"/>
   </g>
-  
-  <!-- Center Main Heart & Checkmark Symbol -->
-  <g transform="translate(256, 260) scale(1.05)" filter="url(#glow)">
-    <!-- Big Heart -->
-    <path d="M 0,-40 C -80,-140 -200,-30 -140,80 C -90,170 0,220 0,220 C 0,220 90,170 140,80 C 200,-30 80,-140 0,-40 Z" fill="#ffffff" opacity="0.96" />
-    
-    <!-- Checklist Icon inside Heart -->
-    <path d="M -50,60 L -15,95 L 60,15" fill="none" stroke="#ff6b8b" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+  <g transform="rotate(-8 256 256)">
+    <rect x="147" y="142" width="228" height="270" rx="40" fill="#98518d" opacity=".16"/>
+    <rect x="139" y="128" width="228" height="266" rx="38" fill="#f6cfdf"/>
+    <rect x="139" y="118" width="228" height="266" rx="38" fill="url(#paper)"/>
+    <path d="M178 132V369" stroke="#f4d9e3" stroke-width="3"/>
+    <path d="M203 112V139M255 112V139M307 112V139" stroke="#9a6ea8" stroke-width="13" stroke-linecap="round"/>
+    <circle cx="270" cy="244" r="61" fill="#fce4ec"/>
+    <path d="m239 244 22 23 40-46" fill="none" stroke="url(#check)" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M211 334H315" stroke="#e7c4d6" stroke-width="12" stroke-linecap="round"/>
   </g>
+  <path d="M368 119c0 20 10 30 30 30-20 0-30 10-30 30 0-20-10-30-30-30 20 0 30-10 30-30Z" fill="#fff7db"/>
+  <circle cx="117" cy="335" r="9" fill="#fff6e9" opacity=".95"/>
 </svg>
