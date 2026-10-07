@@ -1822,15 +1822,21 @@
   <div id="cloud-modal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card" style="max-width: 460px;">
       <div class="modal-header">
-        <h3 class="modal-title">🛡️ AES-256 E2EE 종단간 암호화 실시간 동기화</h3>
+        <h3 class="modal-title">🔒 개인 클라우드 동기화</h3>
         <button class="modal-close-btn" data-close-modal>✕</button>
       </div>
       <div style="display: flex; flex-direction: column; gap: 1rem; font-size: 0.9rem;">
         <div style="background: rgba(255, 107, 139, 0.08); border: 1px solid rgba(255, 107, 139, 0.2); padding: 0.85rem 1rem; border-radius: var(--radius-md);">
-          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">✨ Zero-Knowledge AES-256 종단간 암호화 (E2EE)</div>
+          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.2rem;">🔒 본인 계정으로 연결하는 개인 다이어리</div>
           <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
-            클라우드 서버에는 모든 메모와 데이터가 외계어(AES-256 암호문)로 저장되어 아무도 읽을 수 없으며, 오직 비밀번호를 입력한 내 브라우저에서만 안전하게 해독됩니다!
+            Google 로그인으로 서버 접근 권한을 확인하고, 기존 비밀번호로 암호화된 자료를 엽니다. 처음 연결하는 기기에서도 기존 아이디와 비밀번호를 그대로 사용하세요.
           </p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <p id="google-auth-status" role="status" style="font-size: 0.82rem; overflow-wrap: anywhere;">데이터 동기화를 위해 본인 Google 계정으로 로그인해 주세요.</p>
+          <button type="button" id="btn-google-signin" class="btn btn-primary">Google 계정으로 로그인</button>
+          <button type="button" id="btn-google-signout" class="btn" hidden>Google 계정 로그아웃</button>
         </div>
 
         <!-- Sync Active Banner -->
@@ -1847,12 +1853,12 @@
         <!-- 2-Step Security Sync Form -->
         <form id="sync-2step-form" style="display: flex; flex-direction: column; gap: 0.75rem;" autocomplete="off">
           <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="sync-input-space-id" style="font-size: 0.82rem;">1단계: 나만의 동기화 아이디 / 닉네임 *</label>
+            <label class="form-label" for="sync-input-space-id" style="font-size: 0.82rem;">기존 동기화 아이디 *</label>
             <input type="text" id="sync-input-space-id" class="form-input" placeholder="나만의 아이디 입력" required autocomplete="off" style="padding: 0.65rem 0.85rem; font-size: 0.9rem;">
           </div>
 
           <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="sync-input-pin" style="font-size: 0.82rem;">2단계: E2EE 복호화 보안 비밀번호 *</label>
+            <label class="form-label" for="sync-input-pin" style="font-size: 0.82rem;">기존 암호화 비밀번호 *</label>
             <input type="password" id="sync-input-pin" class="form-input" placeholder="보안 비밀번호 입력" required autocomplete="new-password" style="padding: 0.65rem 0.85rem; font-size: 0.9rem;">
           </div>
 
@@ -1861,7 +1867,7 @@
           </button>
           
           <div style="text-align: center; margin-top: 0.35rem; font-size: 0.76rem; color: var(--text-dim);">
-            * 스마트폰과 회사 PC에 동일한 아이디와 비밀번호를 입력하면 즉시 연결됩니다.
+            * 스마트폰과 회사 PC에서 같은 Google 계정과 기존 아이디·비밀번호로 연결하세요.
           </div>
         </form>
       </div>
@@ -2993,6 +2999,7 @@
   <script src="js/utils/constants.js?v=20260927_v17"></script>
   <script src="js/utils/helpers.js?v=20260912_v152"></script>
   <script src="js/services/crypto.js?v=20260927_payload1"></script>
+  <script src="js/services/firebase-auth.js?v=20261007_auth1"></script>
   <script src="js/memo-transfer.js?v=20260927_storage1"></script>
   <script src="js/features/devlog/view.js?v=20260918_mod2_devlog1"></script>
   <script src="js/features/ai-study/view.js?v=20260927_improvements1"></script>
@@ -3006,9 +3013,9 @@
   <script src="js/sync/diagnostics.js?v=20260927_diag1"></script>
   <script src="js/sync/protocol.js?v=20260927_objects1"></script>
   <script src="js/sync/object-transport.js?v=20260927_objects2"></script>
-  <script src="js/sync/manager.js?v=20260927_objects2"></script>
+  <script src="js/sync/manager.js?v=20261007_auth1"></script>
   <script src="js/list-order.js?v=20260927_order1"></script>
-  <script src="js/app.js?v=20260927_improvements1"></script>
+  <script src="js/app.js?v=20261007_auth1"></script>
   <script src="js/treasure.js?v=20260927_improvements1"></script>
 </body>
 </html>

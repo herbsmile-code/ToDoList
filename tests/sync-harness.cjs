@@ -46,6 +46,8 @@ function harness(raw, { code = source, failRead = false, extras = {} } = {}) {
   }
   const context = {
     Date: FixedDate, TextEncoder, AbortController,
+    CloudFirebaseAuth: {getUser:()=>({uid:'fixture-owner'}),getVersion:()=>0,
+      authenticatedUrl:async url=>url,subscribe(){},ready:async()=>({uid:'fixture-owner'})},
     console: { error: (...args) => errors.push(args), warn() {} },
     localStorage: {
       getItem(k) { if (failRead && k === key) throw Error('Read denied'); return values.get(k) ?? null; },

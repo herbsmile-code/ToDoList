@@ -35,10 +35,10 @@ function nonceDevice() {
   };
   return {s,h,cloud:h.context.cloudSync,nonce:()=>nonce,advance:()=>{nonce=next();s.rev++;}};
 }
-function listen(h) {
+async function listen(h) {
   const events={};
   h.context.EventSource=class {addEventListener(name,fn){events[name]=fn;}close(){}};
-  h.context.cloudSync.startRemoteListener();return events;
+  await h.context.cloudSync.startRemoteListener();return events;
 }
 const notice=iv=>({data:JSON.stringify({path:'/',data:iv})});
 
@@ -64,7 +64,7 @@ test('a changed nonce receives a foreign edit and periodic validation still read
 });
 
 test('own PUT echoes and repeated SSE values do not trigger another full synchronization',async()=>{
-  const {h,cloud,nonce}=nonceDevice(),events=listen(h);
+  const {h,cloud,nonce}=nonceDevice(),events=await listen(h);
   h.onUpload=iv=>events.put(notice(iv));
   assert.equal(await sync(h),true);
   assert.equal(cloud._syncAgain,false);assert.equal(cloud._remoteNoticeTimer,null);
@@ -76,7 +76,7 @@ test('own PUT echoes and repeated SSE values do not trigger another full synchro
 });
 
 test('an own SSE echo is never treated as a PUT acknowledgement; lost responses retain the outbox',async()=>{
-  const {h,cloud,nonce}=nonceDevice(),events=listen(h);await sync(h);
+  const {h,cloud,nonce}=nonceDevice(),events=await listen(h);await sync(h);
   const added=h.store.addNote('Keep this after a lost response');
   h.onUpload=iv=>events.put(notice(iv));h.loseResponse=true;
   assert.equal(await sync(h),false);

@@ -1,0 +1,6 @@
+{
+  "rules": {
+    ".read": "auth != null && auth.uid === 'j2XKL3Vob7h4cjTtB3VLUaVzBg33' && auth.token.email_verified === true && auth.token.firebase.sign_in_provider === 'google.com'",
+    ".write": "auth != null && auth.uid === 'j2XKL3Vob7h4cjTtB3VLUaVzBg33' && auth.token.email_verified === true && auth.token.firebase.sign_in_provider === 'google.com'"
+  }
+}
