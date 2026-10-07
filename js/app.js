@@ -11334,7 +11334,27 @@
       });
     }
 
-    // 2-Step Cloud Sync Form Submit (Cloud-wide Master Verification)
+    document.getElementById('btn-google-signin')?.addEventListener('click', async () => {
+      const button = document.getElementById('btn-google-signin');
+      button.disabled = true;
+      try {
+        if (!window.CloudFirebaseAuth) throw new Error('로그인 기능을 불러오지 못했습니다. 페이지를 새로고침해 주세요.');
+        await window.CloudFirebaseAuth.signIn();
+        cloudSync.updateUIStatus();
+        cloudSync.renderAllViews();
+        UI.showToast('Google 계정에 로그인했습니다. 처음 연결하는 기기에서는 기존 아이디와 비밀번호를 입력해 주세요.', 'info');
+      } catch (error) { UI.showToast(error.message, 'warning'); }
+      finally { button.disabled = false; }
+    });
+    document.getElementById('btn-google-signout')?.addEventListener('click', async () => {
+      cloudSync.stopRemoteListener();
+      try { await window.CloudFirebaseAuth?.signOut(); }
+      catch { UI.showToast('Google 로그아웃을 확인하지 못했습니다. 다시 시도해 주세요.', 'warning'); }
+      cloudSync.updateUIStatus();
+      cloudSync.renderAllViews();
+    });
+
+    // Firebase identity is checked before the existing encryption password.
     const syncForm = document.getElementById('sync-2step-form');
     if (syncForm) {
       syncForm.addEventListener('submit', async (e) => {
@@ -11343,7 +11363,7 @@
         const origBtnText = submitBtn ? submitBtn.innerHTML : '';
         if (submitBtn) {
           submitBtn.disabled = true;
-          submitBtn.innerHTML = '⏳ 2단계 보안 계정 검증 중...';
+          submitBtn.innerHTML = '⏳ 계정 및 암호화 비밀번호 확인 중...';
         }
 
         try {
@@ -11389,11 +11409,16 @@
 
     const disconnectSyncBtn = document.getElementById('btn-disconnect-sync');
     if (disconnectSyncBtn) {
-      disconnectSyncBtn.addEventListener('click', () => {
+      disconnectSyncBtn.addEventListener('click', async () => {
+        cloudSync.stopRemoteListener();
+        if (cloudSync.syncTimer) clearInterval(cloudSync.syncTimer);
+        if (cloudSync.pushDebounceTimer) clearTimeout(cloudSync.pushDebounceTimer);
         localStorage.removeItem('todolist_jy_space_id');
         localStorage.removeItem('todolist_jy_pin');
         cloudSync.spaceId = '';
         cloudSync.pin = '';
+        try { await window.CloudFirebaseAuth?.signOut(); }
+        catch { UI.showToast('동기화는 중단했습니다. Google 로그아웃을 다시 확인해 주세요.', 'warning'); }
         const sInput = document.getElementById('sync-input-space-id');
         const pInput = document.getElementById('sync-input-pin');
         if (sInput) sInput.value = '';

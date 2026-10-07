@@ -41,10 +41,22 @@
     init() {
       if (this._initialized) return;
       this._initialized = true;
-      if (this.spaceId && this.pin) {
-        this.fetchLatestFromCloud(true);
-        this.startRealtimePolling();
-      }
+      const auth = window.CloudFirebaseAuth;
+      const resume = () => {
+        this.stopRemoteListener();
+        this._idleSyncCache = null;
+        this.updateUIStatus();
+        if (auth?.getUser() && this.spaceId && this.pin) {
+          this.retryAfter = 0;
+          this.fetchLatestFromCloud(true);
+          this.startRealtimePolling();
+        } else getStore().setSaveStatus('login', '동기화 필요 · Google 계정으로 로그인해 주세요. 기존 자료는 이 기기에 보관됩니다.');
+      };
+      auth?.subscribe(resume);
+      auth?.ready().then(resume).catch(() => {
+        this.updateUIStatus();
+        getStore().setSaveStatus('login', '동기화 필요 · Google 로그인 연결을 확인해 주세요. 기존 자료는 유지됩니다.');
+      });
       this.updateUIStatus();
     }
 
@@ -77,6 +89,9 @@
     }
 
     async verifyAndLogin(spaceId, pin) {
+      if (!window.CloudFirebaseAuth?.getUser()) {
+        return {success:false, message:'Google 계정으로 먼저 로그인해 주세요. 기존 아이디와 비밀번호는 그대로 사용합니다.'};
+      }
       if (!spaceId || !pin) {
         return { success: false, message: '아이디와 비밀번호를 모두 입력해 주세요 🌸' };
       }
@@ -99,13 +114,15 @@
       let cloudRegistered, authEtag;
       try {
         const res = await this.requestCloud(authUrl, {headers:{'X-Firebase-ETag':'true'}});
+        if (res.status === 401 || res.status === 403) return {success:false,
+          message:'이 Google 계정은 다이어리 접근 권한이 없습니다. 본인 계정으로 다시 로그인해 주세요.'};
         if (!res.ok) throw new Error('Account verification failed');
         cloudRegistered = await res.json();
         authEtag = res.headers.get('ETag');
         if (cloudRegistered !== null && (typeof cloudRegistered !== 'object' ||
             typeof cloudRegistered.pinHash !== 'string' || !cloudRegistered.pinHash)) throw new Error('Invalid account record');
       } catch (err) {
-        console.warn('Cloud Auth check warning:', err);
+        console.warn('Cloud account verification was not completed.');
         return {success:false, message:'계정 확인 서버에 연결하지 못했습니다. 기존 계정과 데이터를 유지합니다. 잠시 후 다시 로그인해 주세요.'};
       }
 
@@ -133,7 +150,7 @@
           });
           if (!registered.ok) throw new Error('Account registration not confirmed');
         } catch (e) {
-          console.warn('Failed to register initial pin on cloud:', e);
+          console.warn('Cloud account registration was not confirmed.');
           return {success:false, message:'계정 등록을 확인하지 못했습니다. 기존 데이터를 유지합니다. 다시 로그인해 주세요.'};
         }
       }
@@ -178,7 +195,20 @@
         'vacation-view-container', 'sites-view-container', 'aistudy-view-container', 'devlog-view-container'
       ].map(id => document.getElementById(id));
 
-      const isLogged = !!(this.spaceId && this.pin);
+      const auth = window.CloudFirebaseAuth;
+      const googleUser = auth?.getUser();
+      const googleStatus = document.getElementById('google-auth-status');
+      const googleButton = document.getElementById('btn-google-signin');
+      const googleSignout = document.getElementById('btn-google-signout');
+      if (googleStatus) googleStatus.textContent = googleUser
+        ? 'Google 계정 연결됨: ' + (googleUser.email || '로그인한 계정')
+        : '데이터 동기화를 위해 본인 Google 계정으로 로그인해 주세요.';
+      if (googleButton) googleButton.textContent = googleUser ? 'Google 계정 변경' : 'Google 계정으로 로그인';
+      if (googleSignout) {
+        googleSignout.hidden = !googleUser;
+        googleSignout.style.display = googleUser ? '' : 'none';
+      }
+      const isLogged = !!(this.spaceId && this.pin && googleUser);
 
       if (isLogged) {
         if (statusIcon) statusIcon.textContent = '🔒';
@@ -231,14 +261,25 @@
     }
 
     async requestCloud(url, options = {}) {
+      const auth = window.CloudFirebaseAuth;
+      if (!auth) throw Object.assign(new Error('Google 로그인이 필요합니다.'), {kind:'auth-required'});
+      const authVersion = auth.getVersion();
+      const authorizedUrl = await auth.authenticatedUrl(url);
+      if (authVersion !== auth.getVersion() || !auth.getUser()) {
+        throw Object.assign(new Error('로그인 계정이 변경되어 요청을 중단했습니다.'), {syncStale:true});
+      }
       const controller = new AbortController();
       const {timeoutMs = 15000, ...requestOptions} = options;
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const traffic=this._syncTraffic;
         if(traffic && typeof requestOptions.body==='string')traffic.uploadBytes+=requestOptions.body.length;
-        const response = await fetch(url, {...requestOptions, signal:controller.signal});
+        const response = await fetch(authorizedUrl, {...requestOptions, signal:controller.signal,
+          redirect:'error', referrerPolicy:'no-referrer'});
         const body = response.status === 204 ? null : await response.json();
+        if (authVersion !== auth.getVersion() || !auth.getUser()) {
+          throw Object.assign(new Error('로그인 계정이 변경되어 동기화를 중단했습니다.'), {syncStale:true});
+        }
         if(traffic && body!==null)traffic.downloadBytes+=JSON.stringify(body).length;
         // Classify only known server reasons. Raw error messages may include a
         // path or submitted value, so they must never become user-facing logs.
@@ -445,6 +486,8 @@
           throw new Error('가져오기는 GitHub 웹사이트에서 진행해 주세요. 로컬 원본은 변경하지 않습니다.');
         }
         if (!this.spaceId || !this.pin) throw new Error('웹사이트에서 기존 계정으로 로그인해 주세요.');
+        const auth = window.CloudFirebaseAuth, authVersion = auth?.getVersion();
+        if (!auth?.getUser()) throw new Error('Google 계정으로 먼저 로그인해 주세요.');
         const target = p.hash([this.activeUrl,this.getStorageKey()]);
         if ([parsed.bundle.targetFingerprint,parsed.data.localSync?.targetFingerprint,getStore().localSync?.targetFingerprint]
             .some(value => value && value !== target)) throw new Error('백업과 웹의 동기화 계정이 다릅니다. 이전을 중단했습니다.');
@@ -453,7 +496,8 @@
         const liveText = JSON.stringify(live), metaText = JSON.stringify(getStore().localSync);
         const vaultVersion = this._vaultChangeVersion;
         const check = () => {
-          if (getStore().localLoadFailed || getStore().localWriteFailed || getStore().localSyncInvalid || getStore().writerBlocked ||
+          if (!auth.getUser() || auth.getVersion() !== authVersion ||
+              getStore().localLoadFailed || getStore().localWriteFailed || getStore().localSyncInvalid || getStore().writerBlocked ||
               this._vaultWritesInFlight || this._vaultChangeVersion !== vaultVersion ||
               getStore()._lastLocalRaw !== raw || mainStorage.getItem(STORAGE_KEY) !== raw ||
               JSON.stringify(getStore().buildLocalData()) !== liveText || JSON.stringify(getStore().localSync) !== metaText ||
@@ -508,10 +552,18 @@
         getStore().setSaveStatus('login', '동기화 필요 · 클라우드에 로그인해 주세요.');
         return false;
       }
+      if (!window.CloudFirebaseAuth?.getUser()) {
+        getStore().setSaveStatus('login', '동기화 필요 · Google 계정으로 로그인해 주세요. 기존 자료는 유지됩니다.');
+        return false;
+      }
       if (this.retryAfter && Date.now() < this.retryAfter) return false;
       this.isPushing = true;
       this._showSyncProgress = forceWrite || getStore().saveStatus !== 'confirmed';
       const target = LocalSyncProtocol.hash([this.activeUrl, this.getStorageKey()]);
+      const sessionAuthVersion = window.CloudFirebaseAuth.getVersion();
+      const sessionCurrent = () => !!window.CloudFirebaseAuth.getUser() &&
+        window.CloudFirebaseAuth.getVersion() === sessionAuthVersion &&
+        LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) === target;
       const sessionPin = this.pin;
       const startedAt = Date.now(), retryAttempt = this.failures || 0;
       this._lastUploadBytes = 0;
@@ -534,7 +586,7 @@
         const objectContext=this.objectTransport ? this.objectContext(sessionPin,()=>getStore()._lastLocalRaw===capturedRaw &&
           !getStore().localLoadFailed && !getStore().localWriteFailed && !getStore().writerBlocked &&
           this._vaultChangeVersion===objectVaultVersion && !this._vaultWritesInFlight &&
-          LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()])===target) : null;
+          sessionCurrent()) : null;
         const cached = this._idleSyncCache;
         this.setSyncStage('download');
         if (!forceWrite && /^[A-Za-z0-9+/]{16}$/.test(cached?.iv || '') && this.canUseIdleCache(cached,target,capturedRaw)) {
@@ -545,7 +597,7 @@
           if (!probe.ok) throw Object.assign(new Error('Cloud check failed: ' + probe.status),{httpStatus:probe.status,kind:probe.errorKind});
           const nonce = await probe.json();
           this._lastRemoteCheckAt = Date.now();
-          if (!this.canUseIdleCache(cached,target,capturedRaw)) return false;
+          if (!sessionCurrent() || !this.canUseIdleCache(cached,target,capturedRaw)) return false;
           if (nonce === cached.iv) {
             if (!getStore().hasConfirmedLocalData()) {
               this._idleSyncCache = null;
@@ -565,7 +617,7 @@
         const encrypted = await response.json();
         if (encrypted?.isEncrypted && (!encrypted.iv || !encrypted.payload)) throw new Error('Incomplete encrypted response');
         if (getStore().localLoadFailed || getStore().localSyncInvalid || getStore().localWriteFailed || getStore().writerBlocked || getStore()._lastLocalRaw !== capturedRaw) return false;
-        if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
+        if (!sessionCurrent()) return false;
         const wire = JSON.stringify(encrypted);
         if (!forceWrite && this.canUseIdleCache(cached,target,capturedRaw) && cached.etag === etag && cached.wire === wire) {
           // Check durable bytes AND live Store values again after the network await.
@@ -589,7 +641,7 @@
           {...local,...(receivedVault?{vaultFiles:receivedVault}:{})}) : encrypted === null ? {} : await E2EESecurityEngine.decrypt(encrypted, sessionPin);
         if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid cloud object');
         if (getStore().localLoadFailed || getStore()._lastLocalRaw !== capturedRaw || getStore().localWriteFailed || getStore().writerBlocked ||
-            LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
+            !sessionCurrent()) return false;
         const remote = LocalSyncProtocol.select(decoded); // NEVER import remote.localSync.
         this.setSyncStage('originals');
         if (this._protectedRemoteTarget !== target) {
@@ -602,13 +654,13 @@
         this.setSyncStage('merge');
         await LocalSyncProtocol.primeHashes(local,remote);
         if(getStore()._lastLocalRaw!==capturedRaw || getStore().localLoadFailed || getStore().localWriteFailed || getStore().writerBlocked ||
-            LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()])!==target)return false;
+            !sessionCurrent())return false;
         const result = LocalSyncProtocol.automaticPlan(local, remote, meta, decoded);
         if (JSON.stringify(meta.recovery || []) !== JSON.stringify(result.recovery)) {
           // Preserve both originals durably BEFORE changing the active copy or
           // issuing a conditional upload. Failure leaves the outbox untouched.
           meta.recovery = result.recovery;
-          if (!await this.commitSyncLocal(captured,meta)) return false;
+          if (!await this.commitSyncLocal(captured,meta,sessionCurrent)) return false;
           meta.recovery = LocalSyncProtocol.clone(getStore().localSync.recovery || []);
           capturedRaw = getStore()._lastLocalRaw;
         }
@@ -619,7 +671,7 @@
         const vaultUnchanged = () => this._vaultChangeVersion === readVaultVersion && !this._vaultWritesInFlight;
         if (!vaultUnchanged()) { getStore().setSaveStatus('pending'); return false; }
         const localVault = receivedVault && receivedVaultVersion===readVaultVersion ? receivedVault : await this.getAllVaultFiles(true, true);
-        if (getStore()._lastLocalRaw !== capturedRaw || getStore().localLoadFailed || !vaultUnchanged()) return false;
+        if (getStore()._lastLocalRaw !== capturedRaw || getStore().localLoadFailed || !vaultUnchanged() || !sessionCurrent()) return false;
         const remoteVault = decoded.vaultFiles || [];
         if (!Array.isArray(remoteVault) || remoteVault.some(f=>!f || typeof f.id !== 'string') ||
             new Set(remoteVault.map(f=>f.id)).size !== remoteVault.length) throw new Error('Invalid vault records');
@@ -647,7 +699,7 @@
           archiveVault(f.id,localVault.find(local=>local.id===f.id),remoteVault.find(remote=>remote.id===f.id));
         }
         if (JSON.stringify(getStore().localSync.recovery || []) !== JSON.stringify(meta.recovery || [])) {
-          if (!await this.commitSyncLocal(captured,meta)) return false;
+          if (!await this.commitSyncLocal(captured,meta,sessionCurrent)) return false;
           meta.recovery = LocalSyncProtocol.clone(getStore().localSync.recovery || []);
           capturedRaw = getStore()._lastLocalRaw;
         }
@@ -664,7 +716,7 @@
           LocalSyncProtocol.hashAsync(local),LocalSyncProtocol.hashAsync(result.data)
         ]);
         if (getStore().localLoadFailed || getStore().localWriteFailed || getStore().writerBlocked || getStore()._lastLocalRaw !== capturedRaw ||
-            !vaultUnchanged() || LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) return false;
+            !vaultUnchanged() || !sessionCurrent()) return false;
         const useObjects = this.objectTransport && (encrypted?.v===4 || window.SyncObjectTransportEnabled!==false);
         const shouldWrite = remoteHash !== mergedHash || forceWrite || useObjects && encrypted?.v!==4;
         let confirmedIv = encrypted?.iv;
@@ -676,7 +728,7 @@
           if (!encryptedBody?.isEncrypted || !encryptedBody.payload || !encryptedBody.iv) throw new Error('Encryption failed; plaintext upload blocked');
           if (getStore().localLoadFailed || getStore()._lastLocalRaw !== capturedRaw || getStore().localWriteFailed || getStore().writerBlocked) return false;
           if (!vaultUnchanged()) { getStore().setSaveStatus('pending'); return false; }
-          if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) {
+          if (!sessionCurrent()) {
             getStore().setSaveStatus('conflict', '동기화 계정이 변경되어 전송을 중단했습니다. 기존 데이터를 유지합니다.');
             return false;
           }
@@ -687,7 +739,7 @@
           this._lastUploadBytes = options.body.length; // Encrypted envelope is ASCII.
           this._uploadNonce = {target,iv:encryptedBody.iv};
           const put = await this.conditionalPut(url,{...options,current:()=>getStore()._lastLocalRaw===capturedRaw &&
-            !getStore().localLoadFailed && !getStore().localWriteFailed && !getStore().writerBlocked && vaultUnchanged()});
+            !getStore().localLoadFailed && !getStore().localWriteFailed && !getStore().writerBlocked && vaultUnchanged() && sessionCurrent()});
           if (put.status === 412) {
             window.SyncDiagnostics?.record({outcome:'deferred',stage:'upload',status:412,attempt:retryAttempt,
               durationMs:Date.now()-startedAt,uploadBytes:this._lastUploadBytes});
@@ -702,7 +754,7 @@
         // An older response must never clear a newer edit's outbox.
         if (getStore().localLoadFailed || getStore().localWriteFailed) return false;
         if (!vaultUnchanged()) { getStore().setSaveStatus('pending'); return false; }
-        if (LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) !== target) {
+        if (!sessionCurrent()) {
           getStore().setSaveStatus('conflict', '동기화 계정이 변경되어 완료 처리를 중단했습니다. 미전송 기록을 유지합니다.');
           return false;
         }
@@ -716,7 +768,7 @@
             const sent = meta.pending.find(old => old.key === p.key);
             if (sent) p.base = LocalSyncProtocol.state(confirmedSlots,p.key);
           }
-          if (!await this.commitSyncLocal(getStore()._committedData,latestMeta)) return false;
+          if (!await this.commitSyncLocal(getStore()._committedData,latestMeta,sessionCurrent)) return false;
           getStore().setSaveStatus('pending', '동기화 필요 · 전송 중 추가된 변경이 있습니다. 최신 데이터는 이 기기에 저장되어 있습니다.');
           return false;
         }
@@ -743,14 +795,14 @@
         if (localVaultHash !== mergedVaultHash) {
           this.setSyncStage('files');
           await this.saveVaultFiles(mergedVault, true, () =>
-            this._vaultChangeVersion === readVaultVersion + 1 && this._vaultWritesInFlight === 1);
+            this._vaultChangeVersion === readVaultVersion + 1 && this._vaultWritesInFlight === 1 && sessionCurrent());
           if (getStore()._lastLocalRaw !== capturedRaw || getStore().localLoadFailed || getStore().writerBlocked) return false;
           if (this._vaultChangeVersion > readVaultVersion + 1 || this._vaultWritesInFlight) { getStore().setSaveStatus('pending'); return false; }
         }
         this.setSyncStage('local-save');
         const commitVaultVersion = this._vaultChangeVersion;
         if (!await this.commitSyncLocal(next, acknowledged, () => !this._vaultWritesInFlight && this._vaultChangeVersion === commitVaultVersion &&
-            LocalSyncProtocol.hash([this.activeUrl,this.getStorageKey()]) === target)) return false;
+            sessionCurrent())) return false;
         window.treasureVault?.refreshFromStore();
         // Cache only after server acknowledgement AND durable local commit. A
         // PUT supplies a nonce, never a guessed ETag. Full validation still runs
@@ -818,6 +870,7 @@
     }
 
     stopRemoteListener() {
+      this._streamGeneration = (this._streamGeneration || 0) + 1;
       this._remoteStream?.close();
       this._remoteStream = null;
       this._streamConnected = false;
@@ -825,17 +878,23 @@
       this._remoteNoticeTimer = null;
     }
 
-    startRemoteListener() {
-      if (!window.EventSource || !this.spaceId || !this.pin || document.hidden) return;
+    async startRemoteListener() {
+      const auth = window.CloudFirebaseAuth;
+      if (!window.EventSource || !this.spaceId || !this.pin || document.hidden || !auth?.getUser()) return;
       // Observe only the encryption nonce. Every encrypted commit changes it;
       // the large encrypted data is fetched once through the existing CAS flow.
       const url = this.activeUrl + '/spaces/' + this.getStorageKey() + '/iv.json';
       if (this._remoteStream && this._remoteStreamUrl === url) return;
       this.stopRemoteListener();
+      const generation = this._streamGeneration, authVersion = auth.getVersion();
       try {
-        const stream = new window.EventSource(url);
+        const authorizedUrl = await auth.authenticatedUrl(url);
+        if (generation !== this._streamGeneration || authVersion !== auth.getVersion() || document.hidden ||
+            url !== this.activeUrl + '/spaces/' + this.getStorageKey() + '/iv.json') return;
+        const stream = new window.EventSource(authorizedUrl);
         this._remoteStream = stream; this._remoteStreamUrl = url;
         const current = () => this._remoteStream === stream &&
+          authVersion === auth.getVersion() && !!auth.getUser() &&
           url === this.activeUrl + '/spaces/' + this.getStorageKey() + '/iv.json';
         const changed = event => {
           if (!current()) { stream.close(); return; }

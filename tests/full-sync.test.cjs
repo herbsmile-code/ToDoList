@@ -80,7 +80,7 @@ test('encrypted change listener watches only the nonce, coalesces notices and re
   const h=device(server(clone(fixture)),'desktop-web'),events={};let closed=false,url,checks=0;
   h.context.EventSource=class {constructor(value){url=value;}addEventListener(name,fn){events[name]=fn;}close(){closed=true;}};
   h.context.cloudSync.fetchLatestFromCloud=async()=>{checks++;};
-  h.context.cloudSync.startRemoteListener();assert.ok(url.endsWith('/iv.json'));
+  await h.context.cloudSync.startRemoteListener();assert.ok(url.endsWith('/iv.json'));
   events.put();await h.timers.at(-1)();assert.equal(checks,1);
   h.context.cloudSync.pin='new-fixture-pin';events.put();assert.equal(closed,true);assert.equal(checks,1);
 });
